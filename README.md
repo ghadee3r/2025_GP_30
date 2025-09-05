@@ -1,3 +1,10 @@
 # Rikaz
 ## Introduction
-**Rikaz** is a smart system that helps users maintain focus and reduce distractions during study or work sessions. By combining a mobile application with supportive tools, Rikaz provides timers, reminders, and insights that encourage effective time management and improved performance.
+**Rikaz** is a smart system designed to help users reduce distractions and improve productivity during focus sessions. The system integrates a mobile application with smart tools, including timers, reminders, and external devices, to enhance the overall study and work experience. 
+
+
+The goal is to provide an engaging environment that encourages focus, time management, and sustained performance.
+
+## Technology
+
+## Launching Instructions
