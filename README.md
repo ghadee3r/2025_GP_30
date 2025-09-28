@@ -1,13 +1,59 @@
-# Rikaz
-## Introduction
-**Rikaz** is a smart system designed to help users reduce distractions and improve productivity during focus sessions. The system integrates a mobile application with smart tools, including timers, reminders, and external devices, 
-creating an engaging environment that encourages concentration and effective time management, enhancing the overall study and work experience. 
+# Rikaz | رِكَاز  
 
-### Goals
-	•	Enhance productivity by supporting structured and consistent focus sessions.
-	•	Reduce the impact of distractions and encourage sustained attention.
-	•	Promote effective time management through guided session planning.
+## Introduction  
+**Rikaz** is a smart system designed to help students and professionals sustain focus and improve productivity during study or work sessions.  
+The system integrates a **mobile Android application** with supportive **hardware tools** (smart light, external LCD timer screen, and camera).  
 
-## Technology
+Rikaz assists users by:  
+- Providing **structured focus sessions** (custom and Pomodoro modes).  
+- Detecting distractions in real-time using **computer vision (OpenMV camera)**.  
+- Delivering **adaptive feedback** (light cues, audio notifications).  
+- Offering a **progress analysis dashboard** with daily, weekly, and monthly summaries.  
+- Synchronizing with **Google Calendar** for session scheduling.  
 
-## Launching Instructions
+Unlike traditional focus apps, Rikaz combines **AI-based distraction detection** with supportive hardware to create a productive and engaging environment.  
+
+---
+
+## Technology  
+Rikaz uses a combination of software and hardware tools:  
+
+**Software Stack**  
+- **React Native** – Mobile application framework (JavaScript).  
+- **TensorFlow / Roboflow** – Machine learning and computer vision.  
+- **Google Calendar API** – Session scheduling and reminders.  
+- **SQLite / Backend server** – Data storage and synchronization.  
+- **Arduino IDE + WLED** – Hardware programming and LED control.  
+- **GitHub** – Version control and collaboration.  
+- **Jira & Confluence** – Project management and documentation.  
+
+**Hardware Components**  
+- **ESP32 DevKitV1** – Microcontroller.  
+- **OpenMV4 H7 Plus** – AI-based distraction detection camera.  
+- **WS2812B Smart LED** – Adaptive lighting feedback.  
+- **LCD Timer Screen** – Displays remaining focus session time.  
+
+---
+
+## Launching Instructions  
+
+### Mobile Application  
+1. Clone the repository:  
+   ```bash
+   git clone https://github.com/ghadee3r/2025_GP_30.git
+   cd 2025_GP_30
+   ```
+
+2. Install dependencies:  
+   ```bash 
+   npm install
+   ```
+
+3. Run the application on Android:
+   ```bash
+   npx react-native run-android
+   ```
+
+(Ensure Android Studio and Android SDK are installed).
+
+
