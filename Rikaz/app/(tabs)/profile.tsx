@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, Image, TouchableOpacity, Switch, Alert, Platform } from 'react-native';
-import { useRouter } from 'expo-router';
-import { MaterialIcons } from '@expo/vector-icons';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { MaterialIcons } from '@expo/vector-icons';
+import { router, useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import { Alert, Image, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+const addPreset = () => {
+  router.push('/AddPreset'); // navigates to app/AddPreset.tsx (outside tabs)
+};
 
 const ProfileScreen = () => {
   const router = useRouter();
@@ -72,10 +75,14 @@ const ProfileScreen = () => {
             <Text style={[styles.sectionTitle, themeTextStyle]}>Rikaz Tools Presets</Text>
             <Text style={[styles.presetCount, themeTextStyle]}>{presets.length}/5</Text>
           </View>
-          <TouchableOpacity style={[styles.addPresetButton, themeCardStyle]}>
+          <TouchableOpacity
+            style={[styles.addPresetButton, themeCardStyle]}
+            onPress={addPreset}
+          >
             <Text style={[styles.addPresetText, themeTextStyle]}>+</Text>
             <Text style={[styles.addPresetText, themeTextStyle]}>Add New Preset</Text>
           </TouchableOpacity>
+
           {presets.map((preset) => (
             <View key={preset.id} style={[styles.presetCard, themeCardStyle]}>
               <View style={styles.presetDetails}>
