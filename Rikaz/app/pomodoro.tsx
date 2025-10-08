@@ -1,11 +1,17 @@
+import SliderComponent from '@react-native-community/slider';
+import type { Href } from 'expo-router';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, ScrollView,
-  TouchableOpacity, ActivityIndicator, Switch, Platform
+  ActivityIndicator,
+  Platform,
+  SafeAreaView, ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import type { Href } from 'expo-router';
-import SliderComponent from '@react-native-community/slider';
 
 const PomodoroScreen = () => {
   const router = useRouter();
@@ -20,7 +26,7 @@ const PomodoroScreen = () => {
 
   // زر Start ما يبدأ تايمر – بس يرجّع لنفس الصفحة
   const handleStartSessionPress = () => {
-    router.replace('/pomodoro' as Href); // غيّر المسار إذا ملفك في مجلد مختلف
+    router.replace('/Session' as Href); // غيّر المسار إذا ملفك في مجلد مختلف
   };
 
   return (
