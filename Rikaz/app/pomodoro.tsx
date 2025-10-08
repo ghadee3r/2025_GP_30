@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 // ملاحظة: هذا السطر مهم لتشغيل Slider
 import Slider from '@react-native-community/slider';
 
@@ -10,18 +10,26 @@ const PomodoroScreen = () => {
   const [duration, setDuration] = useState('25min');
   const [numberOfBlocks, setNumberOfBlocks] = useState(4);
 
-  const handleStartSessionPress = async () => {
-    setIsLoading(true);
-    try {
-      console.log(`Starting Pomodoro session with: ${duration} and ${numberOfBlocks} blocks.`);
-      // This is where you would call your API to start the Pomodoro session
-      console.log('Pomodoro session started successfully!');
-    } catch (error) {
-      console.error('Failed to start session:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  //updated
+const handleStartSessionPress = async () => {
+  setIsLoading(true);
+  try {
+    console.log(`Starting Pomodoro session with: ${duration} and ${numberOfBlocks} blocks.`);
+
+    // Navigate to Session.tsx page and send parameters
+    router.push({
+      pathname: '/Session',
+      params: { duration, numberOfBlocks }
+    });
+
+    console.log('Navigating to Session page...');
+  } catch (error) {
+    console.error('Failed to start session:', error);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
 
   // تعديل هذه الدالة
   const handleBackPress = () => {
