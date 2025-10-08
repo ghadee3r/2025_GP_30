@@ -10,7 +10,7 @@ import SliderComponent from '@react-native-community/slider';
 const PomodoroScreen = () => {
   const router = useRouter();
 
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading] = useState(false);
   const [duration, setDuration] = useState<'25min' | '50min'>('25min');
   const [numberOfBlocks, setNumberOfBlocks] = useState<number>(4);
   const [isConfigurationOpen, setIsConfigurationOpen] = useState(false);
@@ -18,16 +18,15 @@ const PomodoroScreen = () => {
   const [sensitivity, setSensitivity] = useState<0 | 0.5 | 1>(0.5);
   const [notificationStyle, setNotificationStyle] = useState<'Light' | 'Sound' | 'Both'>('Both');
 
-  // ✅ زر Start Session فقط يرجع لنفس الصفحة بدون تشغيل تايمر
+  // زر Start ما يبدأ تايمر – بس يرجّع لنفس الصفحة
   const handleStartSessionPress = () => {
-    router.replace('/pomodoro' as Href);
+    router.replace('/pomodoro' as Href); // غيّر المسار إذا ملفك في مجلد مختلف
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.mainContainer}>
         <ScrollView contentContainerStyle={styles.scrollViewContent}>
-
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.breadcrumb}>
@@ -99,16 +98,18 @@ const PomodoroScreen = () => {
                   <Text style={styles.configLabel}>Camera Detection</Text>
                   <Switch
                     trackColor={{ false: '#767577', true: '#81b0ff' }}
-                    thumbColor={Platform.OS === 'android'
-                      ? (isCameraDetectionEnabled ? '#000' : '#f4f3f4')
-                      : undefined}
+                    thumbColor={
+                      Platform.OS === 'android'
+                        ? (isCameraDetectionEnabled ? '#000' : '#f4f3f4')
+                        : undefined
+                    }
                     ios_backgroundColor="#3e3e3e"
                     onValueChange={setIsCameraDetectionEnabled}
                     value={isCameraDetectionEnabled}
                   />
                 </View>
 
-                {/* ✅ Triggers */}
+                {/* Triggers */}
                 <View style={styles.configItem}>
                   <Text style={styles.configLabel}>Triggers</Text>
                   <View style={styles.triggersContainer}>
