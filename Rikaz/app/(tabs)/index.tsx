@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, Image, TouchableOpacity, Modal, FlatList, ActivityIndicator, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
+import { MaterialIcons } from '@expo/vector-icons';
 
-const FocusScreen = () => {
+const HomeScreen = () => {
   const router = useRouter();
   const [isPresetsVisible, setIsPresetsVisible] = useState(false);
   const [selectedPreset, setSelectedPreset] = useState('Choose Preset');
   const [isLoading, setIsLoading] = useState(false);
   const [selectedMode, setSelectedMode] = useState('Pomodoro Mode'); 
-  const presets = ['Pomodoro', 'Deep Work', 'Light Focus', 'Break'];
+  const presets = ['Deep Work', 'Morning Focus', 'Study Session'];
 
   const handleConnectPress = async () => {
     setIsLoading(true);
@@ -44,14 +45,11 @@ const FocusScreen = () => {
     console.log('Add a new session pressed!');
   };
 
-  // دالة جديدة لإضافة إعداد مسبق
   const handleAddPreset = () => {
     console.log('Navigating to Add New Preset screen');
-    // هنا يمكنك إضافة منطق التوجيه إلى صفحة إضافة إعداد مسبق جديد
-    // router.push('/add-preset');
     setIsPresetsVisible(false);
   };
-
+  
   const getDaysInMonth = (year: number, month: number) => {
     return new Date(year, month, 0).getDate();
   };
@@ -115,7 +113,7 @@ const FocusScreen = () => {
               onPress={() => setIsPresetsVisible(true)}
             >
               <Text style={styles.dropdownText}>{selectedPreset}</Text>
-              <Text style={{fontSize: 18, color: '#888'}}>▼</Text>
+              <Text style={{fontSize: 18, color: '#9A9A9A'}}>▼</Text>
             </TouchableOpacity>
             
             {/* Mode Cards */}
@@ -151,8 +149,8 @@ const FocusScreen = () => {
             <View style={styles.calendarHeader}>
               <Text style={styles.calendarMonth}>January 2025</Text>
               <View style={styles.calendarNav}>
-                <Text>{"<"}</Text>
-                <Text>{">"}</Text>
+                <MaterialIcons name="chevron-left" size={24} color="#9A9A9A" />
+                <MaterialIcons name="chevron-right" size={24} color="#9A9A9A" />
               </View>
             </View>
             <View style={styles.daysContainer}>
@@ -177,7 +175,7 @@ const FocusScreen = () => {
             <View style={styles.sectionTitleContainer}>
               <Text style={styles.sectionTitle}>Upcoming Sessions</Text>
               <TouchableOpacity onPress={handleAddSessionPress}>
-                  <Text style={styles.plusIcon}>+</Text>
+                <MaterialIcons name="add" size={24} color="#1E1E1E" />
               </TouchableOpacity>
             </View>
             <View style={[styles.upcomingSessionCard, styles.shadowStyle]}>
@@ -230,7 +228,7 @@ const FocusScreen = () => {
                 </TouchableOpacity>
               )}
             />
-            {/* الزر الجديد */}
+            {/* The new "Add New Preset" button */}
             <TouchableOpacity onPress={handleAddPreset}>
               <Text style={styles.addPresetLink}>+ Add New Preset</Text>
             </TouchableOpacity>
@@ -244,7 +242,7 @@ const FocusScreen = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F6F4F1',
   },
   mainContainer: {
     flex: 1,
@@ -273,13 +271,13 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 14,
-    color: '#888',
+    color: '#9A9A9A',
   },
   profileImageContainer: {
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: '#D7D2CA',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -289,16 +287,17 @@ const styles = StyleSheet.create({
     borderRadius: 24,
   },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 15,
-    marginHorizontal: 20,
-    padding: 20,
-    marginBottom: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    marginHorizontal: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E6E2DC',
   },
   cardTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 10,
   },
   cardContent: {
     flexDirection: 'row',
@@ -308,40 +307,40 @@ const styles = StyleSheet.create({
   cardDescription: {
     flex: 1,
     fontSize: 14,
-    color: '#666',
+    color: '#7A7A7A',
   },
   connectButton: {
-    backgroundColor: '#000',
+    backgroundColor: '#000000',
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 10,
   },
   connectButtonText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontWeight: 'bold',
   },
   section: {
-    marginHorizontal: 20,
-    marginBottom: 20,
+    marginHorizontal: 16,
+    marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 10,
   },
   dropdown: {
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     borderRadius: 10,
     padding: 15,
     marginBottom: 15,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderColor: '#ccc',
+    borderColor: '#E6E2DC',
     borderWidth: 1,
   },
   dropdownText: {
-    color: '#000',
+    color: '#1E1E1E',
   },
   modeContainer: {
     flexDirection: 'row',
@@ -350,35 +349,38 @@ const styles = StyleSheet.create({
   },
   modeCard: {
     flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 15,
-    padding: 15,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 14,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E6E2DC',
   },
   modeCardSelected: {
-    backgroundColor: '#e0e0e0', 
+    borderColor: '#000000',
+    borderWidth: 2,
   },
   modeTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
     marginBottom: 5,
     textAlign: 'center',
   },
   modeDescription: {
-    fontSize: 12,
+    fontSize: 11,
     textAlign: 'center',
-    color: '#666',
+    color: '#7A7A7A',
   },
   setSessionButton: {
-    backgroundColor: '#000',
+    backgroundColor: '#000000',
     paddingVertical: 15,
     borderRadius: 15,
     justifyContent: 'center',
     alignItems: 'center',
   },
   setSessionButtonText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 16,
   },
@@ -405,7 +407,7 @@ const styles = StyleSheet.create({
   dayText: {
     flex: 1,
     textAlign: 'center',
-    color: '#888',
+    color: '#9A9A9A',
   },
   datesContainer: {
     flexDirection: 'row',
@@ -424,10 +426,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   selectedDate: {
-    backgroundColor: '#000',
+    backgroundColor: '#000000',
   },
   selectedDateText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontWeight: 'bold',
   },
   sectionTitleContainer: {
@@ -438,28 +440,30 @@ const styles = StyleSheet.create({
   plusIcon: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#000',
+    color: '#1E1E1E',
   },
   upcomingSessionCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 15,
-    padding: 15,
-    marginBottom: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E6E2DC',
   },
   upcomingSessionTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
   },
   upcomingSessionDetails: {
     fontSize: 12,
-    color: '#888',
+    color: '#7A7A7A',
   },
   editButtonText: {
-    color: '#000',
-    fontWeight: 'bold',
+    color: '#1E1E1E',
+    fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,
@@ -468,33 +472,41 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalView: {
-    backgroundColor: 'white',
-    borderRadius: 10,
+    backgroundColor: '#F6F4F1',
+    borderRadius: 14,
     width: '80%',
     maxHeight: '50%',
     padding: 20,
   },
   presetItem: {
     paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#EEE9E2',
   },
   presetText: {
     fontSize: 16,
+    color: '#1E1E1E',
   },
   shadowStyle: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 3,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 5,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   addPresetLink: {
-    color: 'blue',
+    color: '#007AFF', // Standard iOS blue
     fontSize: 16,
     textAlign: 'center',
     marginTop: 15,
+    fontWeight: '600',
   },
 });
-
-export default FocusScreen;
+///
+export default HomeScreen;
