@@ -4,7 +4,6 @@ import { StatusBar } from "expo-status-bar";
 import React, { useState } from "react";
 
 export default function RootLayout() {
-  // This will later be replaced with your real authentication logic (e.g. Firebase)
   const [user, setUser] = useState<boolean>(false);
 
   return (
@@ -17,6 +16,15 @@ export default function RootLayout() {
           // Once logged in, show the tab navigator
           <Stack.Screen name="(tabs)" />
         )}
+
+        {/* Add Session screen here */}
+        <Stack.Screen
+          name="Session"
+          options={{
+            gestureEnabled: false,
+            headerShown: false, // keep your fullscreen session look
+          }}
+        />
       </Stack>
 
       <StatusBar style="dark" />
