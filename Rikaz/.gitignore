@@ -1,7 +1,4 @@
 # Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-# Project-specific local configuration files
-.env
-.env.*
 
 # Common Node/Build Files
 node_modules
