@@ -1,9 +1,7 @@
 import SliderComponent from '@react-native-community/slider';
-import type { Href } from 'expo-router';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
   Platform,
   SafeAreaView, ScrollView,
   StyleSheet,
@@ -25,9 +23,18 @@ const PomodoroScreen = () => {
   const [notificationStyle, setNotificationStyle] = useState<'Light' | 'Sound' | 'Both'>('Both');
 
   // زر Start ما يبدأ تايمر – بس يرجّع لنفس الصفحة
-  const handleStartSessionPress = () => {
-    router.replace('/Session' as Href); // غيّر المسار إذا ملفك في مجلد مختلف
-  };
+const handleStartPomodoroPress = () => {
+  router.push({
+    pathname: '/Session',
+    params: {
+      sessionType: 'pomodoro',
+      duration: duration.toString(),
+      numberOfBlocks: numberOfBlocks.toString(),
+    },
+  });
+};
+
+
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -191,14 +198,12 @@ const PomodoroScreen = () => {
         {/* Start Session Button */}
         <View style={styles.bottomButtonContainer}>
           <TouchableOpacity
-            style={styles.startSessionButton}
-            onPress={handleStartSessionPress}
-            disabled={isLoading}
-          >
-            {isLoading
-              ? <ActivityIndicator color="#fff" />
-              : <Text style={styles.startSessionButtonText}>Start Session</Text>}
-          </TouchableOpacity>
+  style={styles.startSessionButton}
+  onPress={handleStartPomodoroPress} // fixed
+>
+  <Text style={styles.startSessionButtonText}>Start Session</Text>
+</TouchableOpacity>
+
         </View>
       </View>
     </SafeAreaView>
