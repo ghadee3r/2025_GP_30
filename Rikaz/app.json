@@ -2,17 +2,20 @@
   "expo": {
     "name": "Rikaz",
     "slug": "Rikaz",
+    "owner": "rikazqp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/RikazLogo.png",
     "scheme": "rikaz",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "platforms": ["ios", "android", "web"],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.rikaz.app"
     },
     "android": {
-      "package": "com.rikaz.app", 
+      "package": "com.rikaz.app",
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/images/RikazLogo.png",
@@ -44,6 +47,18 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a62e3c96-60d6-4067-baf8-bc72f893972f"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/a62e3c96-60d6-4067-baf8-bc72f893972f"
     }
   }
 }
