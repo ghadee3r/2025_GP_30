@@ -1,16 +1,18 @@
 import * as Google from "expo-auth-session/providers/google";
+import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import React, { useEffect, useState } from "react";
 import {
     Alert,
     Image,
+    Pressable,
+    StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
 } from "react-native";
 
-// must stay at the top, outside the component
 WebBrowser.maybeCompleteAuthSession();
 
 export default function Signup() {
@@ -19,14 +21,14 @@ export default function Signup() {
   const [password, setPassword] = useState("");
   const [loginStarted, setLoginStarted] = useState(false);
 
-  // ✅ 1️⃣  Add this line – your fixed redirect URI
+  // hard-coded hosted redirect (replace with rikaz://redirect if using dev build)
   const redirectUri = "https://auth.expo.dev/@rikazqp/Rikaz";
   console.log("Redirect URI:", redirectUri);
 
-  // ✅ 2️⃣  Use it inside your useAuthRequest
   const [request, response, promptAsync] = Google.useAuthRequest({
-    clientId: "464258371961-cdgkhagr0scfcgg85vpospljqeuu12hb.apps.googleusercontent.com", // from Google Cloud Console
-    redirectUri, // <— use your hardcoded hosted URI here
+    clientId:
+      "464258371961-cdgkhagr0scfcgg85vpospljqeuu12hb.apps.googleusercontent.com",
+    redirectUri,
     scopes: ["https://www.googleapis.com/auth/calendar.events"],
   });
 
@@ -64,61 +66,135 @@ export default function Signup() {
   };
 
   return (
-    <View className="flex-1 justify-center bg-white px-6">
-      <Text className="text-3xl font-bold text-center text-gray-800 mb-8">
-        Create Account
-      </Text>
+    <View style={styles.container}>
+      <Text style={styles.title}>Create Account</Text>
 
       <TextInput
         placeholder="Full Name"
         value={name}
         onChangeText={setName}
-        className="border border-gray-300 rounded-lg px-4 py-3 mb-4 text-base"
+        style={styles.input}
       />
-
       <TextInput
         placeholder="Email"
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
         autoCapitalize="none"
-        className="border border-gray-300 rounded-lg px-4 py-3 mb-4 text-base"
+        style={styles.input}
       />
-
       <TextInput
         placeholder="Password"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
-        className="border border-gray-300 rounded-lg px-4 py-3 mb-6 text-base"
+        style={styles.input}
       />
 
-      <TouchableOpacity
-        onPress={handleSignup}
-        className="bg-indigo-600 py-3 rounded-lg mb-5"
-      >
-        <Text className="text-center text-white text-lg font-semibold">
-          Sign Up
-        </Text>
+      <TouchableOpacity onPress={handleSignup} style={styles.signupButton}>
+        <Text style={styles.signupText}>Sign Up</Text>
       </TouchableOpacity>
 
-      <Text className="text-center text-gray-500 mb-4">or</Text>
+      <Text style={styles.orText}>or</Text>
 
       <TouchableOpacity
         disabled={!request}
         onPress={handleGoogleConnect}
-        className="flex-row justify-center items-center border border-gray-300 py-3 rounded-lg"
+        style={styles.googleButton}
       >
         <Image
           source={{
             uri: "https://developers.google.com/identity/images/g-logo.png",
           }}
-          style={{ width: 22, height: 22, marginRight: 8 }}
+          style={styles.googleIcon}
         />
-        <Text className="font-medium text-gray-700 text-base">
-          Connect Google Calendar
-        </Text>
+        <Text style={styles.googleText}>Connect Google Calendar</Text>
       </TouchableOpacity>
+
+      {/* moved the Pressable inside the return */}
+      <Pressable
+        onPress={() => router.replace("/(tabs)")}
+        style={({ pressed }) => [
+          styles.continueButton,
+          pressed && styles.buttonPressed,
+        ]}
+      >
+        <Text style={styles.continueText}>
+          Continue without account (till now)
+        </Text>
+      </Pressable>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    paddingHorizontal: 24,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "bold",
+    textAlign: "center",
+    color: "#222",
+    marginBottom: 24,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    marginBottom: 12,
+  },
+  signupButton: {
+    backgroundColor: "#4f46e5",
+    borderRadius: 8,
+    paddingVertical: 14,
+    marginBottom: 16,
+  },
+  signupText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  orText: {
+    textAlign: "center",
+    color: "#666",
+    marginVertical: 10,
+  },
+  googleButton: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    paddingVertical: 12,
+  },
+  googleIcon: {
+    width: 22,
+    height: 22,
+    marginRight: 8,
+  },
+  googleText: {
+    fontSize: 15,
+    color: "#333",
+  },
+  continueButton: {
+    marginTop: 20,
+    alignSelf: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  continueText: {
+    color: "#4f46e5",
+    fontSize: 15,
+  },
+  buttonPressed: {
+    opacity: 0.5,
+  },
+});
