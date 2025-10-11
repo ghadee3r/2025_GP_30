@@ -19,8 +19,9 @@ from "react-native";
 WebBrowser.maybeCompleteAuthSession();
 
 // --- CONFIGURATION ---
-// IMPORTANT: This IP must match the local IP of the computer running your Node.js server.
-const API_BASE_URL = 'http://192.168.2.149:8000/api'; 
+import { API_SERVER_IP, API_PORT } from '@env'; 
+
+const API_BASE_URL = `http://${API_SERVER_IP}:${API_PORT}/api`; 
 
 // --- Client-side Hashing Utility ---
 const simpleHash = (str: string) => {
