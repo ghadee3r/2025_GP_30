@@ -1,18 +1,17 @@
+import SliderComponent from '@react-native-community/slider';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
+  ActivityIndicator,
+  Platform,
   SafeAreaView,
   ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
+  StyleSheet,
   Switch,
-  Platform,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import type { Href } from 'expo-router';
-import SliderComponent from '@react-native-community/slider';
 
 const CustomScreen = () => {
   const router = useRouter();
@@ -33,13 +32,16 @@ const CustomScreen = () => {
     setNotificationStyle('Both');
   };
 
-  const handleStartSessionPress = () => {
-    // ما نعرض أي معلومات، نعيد فتح صفحة الكست نفسها (ونصفّر الحقول)
-    setIsLoading(true);
-    resetForm();
-    router.replace('/custom' as Href); // لو ملفك داخل تبويب غيّرها إلى '/(tabs)/custom'
-    setIsLoading(false);
-  };
+const handleStartSessionPress = () => {
+  router.push({
+    pathname: '/Session',
+    params: {
+      sessionType: 'custom',
+      duration: sessionDuration.toString(),
+    },
+  });
+};
+
 
   return (
     <SafeAreaView style={styles.safeArea}>
