@@ -1,4 +1,6 @@
 // db.js (PostgreSQL Connection Pool Setup)
+require('dotenv').config(); 
+
 const { Pool } = require('pg');
 
 const pool = new Pool({

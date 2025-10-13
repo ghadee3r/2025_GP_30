@@ -19,9 +19,8 @@ from "react-native";
 WebBrowser.maybeCompleteAuthSession();
 
 // --- CONFIGURATION ---
-import { API_SERVER_IP, API_PORT } from '@env'; 
-
-const API_BASE_URL = `http://${API_SERVER_IP}:${API_PORT}/api`; 
+// IMPORTANT: This IP must match the local IP of the computer running your Node.js server.
+const API_BASE_URL = 'http://192.168.2.149:8000/api'; 
 
 // --- Client-side Hashing Utility ---
 const simpleHash = (str: string) => {
@@ -55,7 +54,6 @@ export default function Signup() {
         if (!loginStarted || !response) return;
 
         if (response?.type === "success" && response.authentication) {
-             console.log("✅ Google connected!");
              Alert.alert("Google Connected", "Calendar access granted!");
              setLoginStarted(false);
         } else if (response?.type === "error") {
@@ -100,7 +98,6 @@ export default function Signup() {
             console.error('API Error during signup:', error);
             const errorMessage = (error instanceof Error) ? error.message : 'Could not connect to the server for registration.';
             Alert.alert('Registration Error', errorMessage);
-
         } finally {
             setIsSubmitting(false); 
         }
@@ -121,7 +118,7 @@ export default function Signup() {
                 value={name}
                 onChangeText={setName}
                 style={styles.input}
-                editable={!isSubmitting}
+                editable={!isSubmitting} // Disable editing while submitting
             />
             <TextInput
                 placeholder="Email"
@@ -144,7 +141,7 @@ export default function Signup() {
             <TouchableOpacity 
                 onPress={handleSignup} 
                 style={styles.signupButton}
-                disabled={isSubmitting} 
+                disabled={isSubmitting} // Disable button while submitting
             >
                 <Text style={styles.signupText}>{isSubmitting ? 'Creating...' : 'Sign Up'}</Text>
             </TouchableOpacity>
