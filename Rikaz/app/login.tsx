@@ -1,213 +1,157 @@
-// app/login.tsx
+import { router } from "expo-router";
+import React, { useState } from "react";
+import {
+  Alert,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { router } from 'expo-router';
-import React, { useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-const RikazLogo = require('../assets/images/RikazLogo.png');
+const API_BASE_URL = "http://192.168.100.15:8000/api";
+const RikazLogo = require("../assets/images/RikazLogo.png");
 
-/**
- * Rikaz Login Screen
- * - Navigates to home: router.replace('/(tabs)') which resolves to (tabs)/index.tsx
- * - Button: black background, white text (per your request)
- * - Minimal local validation; you can swap in real auth later
- */
-export default function LoginScreen(): React.JSX.Element {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+export default function Login() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const onSubmit = async () => {
-    setError(null);
-
-    // Very light client-side checks to reduce common runtime errors
-    const trimmedEmail = email.trim();
-    const trimmedPassword = password.trim();
-    if (!trimmedEmail || !trimmedPassword) {
-      setError('Please enter email and password.');
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert("Missing Info", "Please fill in all fields.");
       return;
     }
 
+    setIsSubmitting(true);
     try {
-      setSubmitting(true);
+      const res = await fetch(`${API_BASE_URL}/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
-      // TODO: replace with your real authentication call.
-      // Simulate success to demonstrate navigation:
-      await new Promise((r) => setTimeout(r, 400));
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Invalid credentials.");
+      }
 
-      // Important:
-      // Use replace so user cannot "back" to login after success.
-      router.replace('/(tabs)');
-    } catch (e) {
-      setError('Login failed. Please try again.');
+      await AsyncStorage.setItem("userSession", JSON.stringify({ email }));
+      Alert.alert("Welcome Back!", `Logged in as ${email}`);
+      router.replace("/(tabs)");
+    } catch (err: any) {
+      console.error("Login Error:", err);
+      Alert.alert("Login Error", err.message);
     } finally {
-      setSubmitting(false);
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.select({ ios: 'padding', android: undefined })}
+    <View style={styles.container}>
+      <Image source={RikazLogo} style={styles.logo} resizeMode="contain" />
+      <Text style={styles.title}>Welcome Back!</Text>
+      <Text style={styles.subtitle}>Log in to continue</Text>
+
+      <TextInput
+        placeholder="Email"
+        value={email}
+        onChangeText={setEmail}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        style={styles.input}
+      />
+      <TextInput
+        placeholder="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        style={styles.input}
+      />
+
+      <TouchableOpacity
+        onPress={handleLogin}
+        style={styles.loginButton}
+        disabled={isSubmitting}
       >
-        <View style={styles.container}>
-              {/* Rikaz Logo */}
-              <Image source={RikazLogo} style={styles.logo} resizeMode="contain" />
-
-          {/* Page title (use your own wording) */}
-          <Text style={styles.title}>Welcome back!</Text>
-          <Text style={styles.subtitle}>Log in to continue</Text>
-
-          {/* Email */}
-          <View style={styles.card}>
-            <Text style={styles.label}>Email address</Text>
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="name@example.com"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              textContentType="emailAddress"
-              // Keep returnKeyType to help usability:
-              returnKeyType="next"
-            />
-          </View>
-
-          {/* Password */}
-          <View style={styles.card}>
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="••••••••"
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              textContentType="password"
-              returnKeyType="done"
-              onSubmitEditing={onSubmit}
-            />
-          </View>
-
-          {/* Error message (if any) */}
-          {!!error && <Text style={styles.error}>{error}</Text>}
-
-        {/* Main Login button */}
-        <Pressable
-        onPress={onSubmit}
-        disabled={submitting}
-        style={({ pressed }) => [
-            styles.button,
-            pressed && styles.buttonPressed,
-            submitting && styles.buttonDisabled,
-        ]}
-        >
-        <Text style={styles.buttonText}>
-            {submitting ? 'Logging in…' : 'Log in'}
+        <Text style={styles.loginText}>
+          {isSubmitting ? "Logging in..." : "Log In"}
         </Text>
-        </Pressable>
+      </TouchableOpacity>
 
-        {/* Temporary dev bypass button */}
-        <Pressable
-        onPress={() => router.replace('/(tabs)')}
-        style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-        >
-        <Text style={styles.buttonText}>Continue without account (till now)</Text>
-        </Pressable>
-
-
-          {/* Optional: helper text / links area */}
-          <Text style={styles.helper}>
-            By continuing you agree to our terms.
-          </Text>
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      <Pressable
+        onPress={() => router.replace("/signup")}
+        style={({ pressed }) => [
+          styles.continueButton,
+          pressed && styles.buttonPressed,
+        ]}
+      >
+        <Text style={styles.continueText}>Don’t have an account? Sign Up</Text>
+      </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: '#F6F4F1', // soft, neutral background to match your theme direction
-  },
-  flex: { flex: 1 },
   container: {
     flex: 1,
-    paddingHorizontal: 20,
-    justifyContent: 'center',
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    paddingHorizontal: 24,
   },
   logo: {
     width: 150,
     height: 150,
-    alignSelf: 'center',
+    alignSelf: "center",
     marginBottom: 10,
-    marginTop: -40,
-
   },
   title: {
     fontSize: 28,
-    fontWeight: '700',
-    marginBottom: 4,
-    color: '#1E1E1E',
+    fontWeight: "bold",
+    textAlign: "center",
+    color: "#222",
+    marginBottom: 8,
   },
   subtitle: {
     fontSize: 14,
-    color: '#6A6A6A',
+    color: "#666",
+    textAlign: "center",
     marginBottom: 24,
   },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E6E2DC',
-  },
-  label: {
-    fontSize: 12,
-    color: '#7A7A7A',
-    marginBottom: 6,
-  },
   input: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    padding: 12,
     fontSize: 16,
-    paddingVertical: 8,
-    color: '#1E1E1E',
+    marginBottom: 12,
   },
-  error: {
-    color: '#B00020',
-    marginTop: 4,
-    marginBottom: 10,
-  },
-  button: {
-    backgroundColor: '#000000', // black button per requirement
-    borderRadius: 14,
+  loginButton: {
+    backgroundColor: "#4f46e5",
+    borderRadius: 8,
     paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 4,
+    marginBottom: 16,
+  },
+  loginText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  continueButton: {
+    marginTop: 20,
+    alignSelf: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  continueText: {
+    color: "#4f46e5",
+    fontSize: 15,
   },
   buttonPressed: {
-    opacity: 0.9,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: '#FFFFFF', // white text
-    fontSize: 16,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-  },
-  helper: {
-    textAlign: 'center',
-    color: '#868686',
-    marginTop: 14,
-    fontSize: 12,
+    opacity: 0.5,
   },
 });

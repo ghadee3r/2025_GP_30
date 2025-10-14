@@ -22,14 +22,16 @@ export default function TabLayout() {
           title: 'Home',
           tabBarIcon: ({ color }) => <MaterialIcons name="home" size={24} color={color} />,
         }}
-      />
+      />  
+      {/*
       <Tabs.Screen
-        name="progress" // اسم الملف: progress.tsx
+        name="" // اسم الملف: progress.tsx
         options={{
           title: 'Progress',
           tabBarIcon: ({ color }) => <MaterialIcons name="trending-up" size={24} color={color} />,
         }}
-      />
+      /> 
+      */}
       <Tabs.Screen
         name="games" // اسم الملف: games.tsx
         options={{
@@ -37,6 +39,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <MaterialIcons name="gamepad" size={24} color={color} />,
         }}
       />
+      
       <Tabs.Screen
         name="profile" // اسم الملف: profile.tsx
         options={{
