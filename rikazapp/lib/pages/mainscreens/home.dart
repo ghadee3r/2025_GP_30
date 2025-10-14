@@ -20,9 +20,27 @@ class _HomePageState extends State<HomePage> {
     setState(() => isLoading = false);
   }
 
-void handleSetSession() {
-  debugPrint('Navigate to ${selectedMode == "Pomodoro Mode" ? "subscreens/pomodoro" : "Custom"} screen');
-}
+  // --- FIXED FUNCTION START ---
+  void handleSetSession() {
+    // Determine the route name based on the selected mode
+    String routeName;
+    
+    if (selectedMode == "Pomodoro Mode") {
+      // Assuming you have a named route '/pomodoro'
+      routeName = '/pomodoro';
+    } else { // This covers 'Custom Mode'
+      // Assuming you have a named route '/custom'
+      routeName = '/custom';
+    }
+
+    debugPrint('Navigating to $routeName');
+    
+    // Perform the actual navigation using the determined routeName
+    // NOTE: For this to work, you must register '/pomodoro' and '/custom' 
+    // in your MaterialApp's `routes` property or your routing package (like GoRouter).
+    Navigator.of(context).pushNamed(routeName); 
+  }
+  // --- FIXED FUNCTION END ---
 
   void handlePresetSelect(String preset) {
     setState(() => selectedPreset = preset);
@@ -218,17 +236,21 @@ void handleSetSession() {
 
               const SizedBox(height: 20),
 
-              // Set session
-              ElevatedButton(
-                onPressed: handleSetSession,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF8B5353),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+              // Set session button
+              SizedBox( // Wrap in a SizedBox to make the button full width
+                width: double.infinity, 
+                child: ElevatedButton(
+                  onPressed: handleSetSession, // This now navigates!
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF8B5353),
+                    padding: const EdgeInsets.symmetric(vertical: 14), // Add padding for better look
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                   ),
+                  child: const Text('Set Session',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
                 ),
-                child: const Text('Set Session',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               ),
               const SizedBox(height: 30),
 
