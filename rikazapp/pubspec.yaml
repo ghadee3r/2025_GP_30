@@ -5,28 +5,30 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.9.2
+sdk: ^3.9.2
 
 dependencies:
-  flutter:
-    sdk: flutter
+flutter:
+sdk: flutter
+slide_to_act: ^2.0.1
 
-  # iOS-style icons
-  cupertino_icons: ^1.0.8
 
-  # --- START: Additional Packages ---
-  http: ^1.1.0             # For HTTP requests (API calls)
-  shared_preferences: ^2.2.2  # For local data persistence
-  slide_to_act: ^2.0.2     # For slide-to-connect button
-  # --- END: Additional Packages ---
+# iOS-style icons
+cupertino_icons: ^1.0.8
+
+# --- START: New Dependencies for API and Persistence ---
+http: ^1.1.0 # Required for making HTTP requests (API calls)
+shared_preferences: ^2.2.2 # Required for local data persistence (AsyncStorage replacement)
+fluid_bottom_nav_bar: ^1.4.0
+# --- END: New Dependencies ---
 
 dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  flutter_lints: ^5.0.0
+flutter_test:
+sdk: flutter
+flutter_lints: ^5.0.0
 
 flutter:
-  uses-material-design: true
+uses-material-design: true
 
-  assets:
-    - assets/images/
+assets:
+- assets/images/
