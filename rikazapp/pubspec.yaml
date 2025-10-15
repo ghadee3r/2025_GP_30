@@ -5,30 +5,42 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-sdk: ^3.9.2
+  sdk: ^3.9.2
 
 dependencies:
-flutter:
-sdk: flutter
-slide_to_act: ^2.0.1
+  flutter:
+    sdk: flutter
 
+  # Utility packages already in use
+  slide_to_act: ^2.0.1
+  http: ^1.1.0
+  shared_preferences: ^2.2.2
 
-# iOS-style icons
-cupertino_icons: ^1.0.8
+  # Essential for date and time formatting (used in home.dart)
+  intl: ^0.19.0
+  
+  # NEW: Missing dependency from main.dart
+  fluid_bottom_nav_bar: ^1.4.0 # Using a recent stable version
 
-# --- START: New Dependencies for API and Persistence ---
-http: ^1.1.0 # Required for making HTTP requests (API calls)
-shared_preferences: ^2.2.2 # Required for local data persistence (AsyncStorage replacement)
-fluid_bottom_nav_bar: ^1.4.0
-# --- END: New Dependencies ---
+  # iOS-style icons
+  cupertino_icons: ^1.0.8
+
+  # --- START: GOOGLE CALENDAR API PACKAGES ---
+  # 1. Handles Google Sign-In (required for OAuth)
+  google_sign_in: ^6.1.6
+  # 2. Contains the generated Dart client for the Calendar API
+  googleapis: ^11.4.0
+  # 3. Helper to integrate Google Sign-In with the Google APIs client
+  extension_google_sign_in_as_googleapis_auth: ^2.0.7
+  # --- END: GOOGLE CALENDAR API PACKAGES ---
 
 dev_dependencies:
-flutter_test:
-sdk: flutter
-flutter_lints: ^5.0.0
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
 
 flutter:
-uses-material-design: true
+  uses-material-design: true
 
-assets:
-- assets/images/
+  assets:
+    - assets/images/

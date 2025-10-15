@@ -1,0 +1,64 @@
+{
+  "project_info": {
+    "project_number": "464258371961",
+    "project_id": "rikazapp",
+    "storage_bucket": "rikazapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:464258371961:android:e6a82d025f5347cc509fa8",
+        "android_client_info": {
+          "package_name": "com.example.rikazapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBEHjr4LzAROQBjOUoeReTmtoZmInHH9LM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "464258371961-sk013ngtpvprvtru88hh4m3h52i80q21.apps.googleusercontent.com",
+              "client_type": 3,
+              "ios_info": {
+                "bundle_id": "com.example.rikazapp"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:464258371961:android:974dad87e5eedab2509fa8",
+        "android_client_info": {
+          "package_name": "com.gp.rikazapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBEHjr4LzAROQBjOUoeReTmtoZmInHH9LM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "464258371961-sk013ngtpvprvtru88hh4m3h52i80q21.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.rikazapp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
