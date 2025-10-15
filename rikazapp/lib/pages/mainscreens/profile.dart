@@ -1,5 +1,8 @@
-// lib/screens/profile.dart
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
+
+// Get the Supabase client instance
+final supabase = sb.Supabase.instance.client;
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -10,6 +13,8 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool isDarkMode = false;
+  String userName = 'Loading...';
+  String userEmail = '';
 
   List<Map<String, dynamic>> presets = [
     {'id': '1', 'name': 'Deep Work', 'sensitivity': 'High', 'triggers': 3},
@@ -17,7 +22,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
     {'id': '3', 'name': 'Study Session', 'sensitivity': 'Mid', 'triggers': 4},
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    _loadUserProfile();
+  }
+
+  // --- Profile Data Fetching (Displays Name/Email) ---
+  Future<void> _loadUserProfile() async {
+    final user = supabase.auth.currentUser;
+    if (user != null) {
+      // The full name is stored in user_metadata during signup
+      final metadata = user.userMetadata;
+      
+      setState(() {
+        userEmail = user.email ?? 'No Email';
+        // Use the 'full_name' saved in signup, falling back to email if metadata is null
+        userName = metadata?['full_name'] ?? user.email?.split('@')[0] ?? 'User Name';
+      });
+    }
+  }
+
   void handleDeletePreset(String id) {
+    // Existing preset deletion logic (currently mock data)
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -41,11 +68,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void handleSignOut() {
-    debugPrint('User signed out.');
+  // --- Secure Logout Logic ---
+  void handleSignOut() async {
+    // 1. Destroy the Supabase session token
+    await supabase.auth.signOut();
+
+    // 2. Clear navigation stack and redirect to the login screen
+    if (mounted) {
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/login',
+        (route) => false,
+      );
+    }
   }
 
   void addPreset() {
+    // Placeholder for navigation to add preset screen
     Navigator.pushNamed(context, '/add-preset');
   }
 
@@ -77,8 +115,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       children: [
                         const CircleAvatar(
                           radius: 50,
-                          backgroundImage:
-                              NetworkImage('https://via.placeholder.com/100'),
+                          backgroundImage: NetworkImage('https://via.placeholder.com/100'),
                         ),
                         Positioned(
                           bottom: 0,
@@ -97,7 +134,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'User Name',
+                      userName, // Dynamically fetched name
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -105,7 +142,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                     Text(
-                      'user.name@email.com',
+                      userEmail, // Dynamically fetched email
                       style: TextStyle(
                         fontSize: 14,
                         color: isDark ? Colors.grey[400] : Colors.grey[700],
@@ -274,7 +311,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           Switch(
                             value: isDarkMode,
                             onChanged: (val) => setState(() => isDarkMode = val),
-                            activeColor: Colors.blueAccent,
+                            activeThumbColor: Colors.blueAccent,
                           ),
                         ],
                       ),
@@ -292,7 +329,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   textColor: textColor,
                   cardColor: cardColor,
                   trailing: Icons.chevron_right,
-                  onTap: handleSignOut,
+                  onTap: handleSignOut, // This is now connected to the secure function
                 ),
               ),
             ],
@@ -350,7 +387,7 @@ class _Section extends StatelessWidget {
 class _SettingsItem extends StatelessWidget {
   final IconData icon;
   final String label;
-  final IconData trailing;
+  final IconData? trailing;
   final Color textColor;
   final Color cardColor;
   final VoidCallback onTap;
@@ -361,7 +398,7 @@ class _SettingsItem extends StatelessWidget {
     required this.textColor,
     required this.cardColor,
     required this.onTap,
-    this.trailing = Icons.chevron_right,
+    this.trailing,
   });
 
   @override
@@ -386,7 +423,8 @@ class _SettingsItem extends StatelessWidget {
                     style: TextStyle(fontSize: 16, color: textColor)),
               ],
             ),
-            Icon(trailing, color: textColor, size: 20),
+            if (trailing != null) 
+              Icon(trailing, color: textColor, size: 20),
           ],
         ),
       ),
@@ -414,7 +452,3 @@ class _Tag extends StatelessWidget {
     );
   }
 }
-
-
-
-

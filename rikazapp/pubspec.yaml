@@ -11,6 +11,9 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Supabase Client (REQUIRED for RLS and Auth)
+  supabase_flutter: ^2.0.0 
+
   # Utility packages already in use
   slide_to_act: ^2.0.1
   http: ^1.1.0
