@@ -215,7 +215,7 @@ class _PomodoroPageState extends State<PomodoroPage> {
               Switch(
                 value: isCameraDetectionEnabled,
                 onChanged: (v) => setState(() => isCameraDetectionEnabled = v),
-                activeColor: Colors.black,
+                activeThumbColor: Colors.black,
               ),
             ],
           ),

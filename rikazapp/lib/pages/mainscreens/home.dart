@@ -784,7 +784,7 @@ class _HomePageState extends State<HomePage> {
                       ),
                       subtitle: Text(
                         // Format for timed vs all-day events
-                        endTime != null && startTime is DateTime && endTime is DateTime
+                        endTime != null
                           ? '${DateFormat('MMM d, hh:mm a').format(startTime)} - ${DateFormat('hh:mm a').format(endTime)}'
                           : DateFormat('MMM d, yyyy').format(startTime), // All day event
                       ),
