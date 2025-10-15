@@ -195,9 +195,9 @@ class _HomePageState extends State<HomePage> {
 
     if (success) {
       _fetchSchedule();
-      _showSnackbar('Successfully connected to Google Calendar! 🎉', Colors.green);
+      _showSnackbar('Successfully connected to Google Calendar! ', Colors.green);
     } else {
-      _showSnackbar('Connection failed or cancelled. 😔 Check network.', Colors.red);
+      _showSnackbar('Connection failed or cancelled.  Check network.', Colors.red);
     }
   }
   
@@ -208,7 +208,7 @@ class _HomePageState extends State<HomePage> {
       _isCalendarConnected = false;
       _events = [];
     });
-    _showSnackbar('Disconnected from Google. 👋', Colors.blueGrey);
+    _showSnackbar('Disconnected from Google. ', Colors.blueGrey);
   }
 
   // Placeholder for Rikaz Tool Connect (using SlideAction)
@@ -682,7 +682,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 Text(
                   _isCalendarConnected 
-                    ? 'Sessions are synced successfully! ✅'
+                    ? 'Sessions are synced successfully! '
                     : 'Connect to sync your sessions and manage them directly.',
                   style: TextStyle(
                     fontSize: 13,
@@ -893,7 +893,7 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
     if (result != null) {
       widget.onEventUpdated();
       Navigator.pop(context);
-      _showSnackbar('Event added to Google Calendar! ✨', Colors.green);
+      _showSnackbar('Event added to Google Calendar!', Colors.green);
     } else {
       _showSnackbar('Add failed. Check console for details.', Colors.red);
     }
