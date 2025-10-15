@@ -1,3 +1,9 @@
+plugins {
+    // REQUIRED: Defines the Google Services plugin and its version for all subprojects.
+    // 'apply false' means it's available but not active here in the root.
+    id("com.google.gms.google-services") version "4.4.1" apply false
+}
+
 allprojects {
     repositories {
         google()
@@ -22,4 +28,3 @@ subprojects {
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
-
