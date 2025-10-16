@@ -15,15 +15,16 @@ dependencies:
   supabase_flutter: ^2.0.0 
 
   # Utility packages already in use
-  slide_to_act: ^2.0.1
+  slide_to_act: ^2.0.2 # Downgraded to compatible version
   http: ^1.1.0
   shared_preferences: ^2.2.2
 
   # Essential for date and time formatting (used in home.dart)
   intl: ^0.19.0
   
-  # NEW: Missing dependency from main.dart
-  fluid_bottom_nav_bar: ^1.4.0 # Using a recent stable version
+  # UI/UX packages
+  fluid_bottom_nav_bar: ^1.4.0
+  table_calendar: ^3.0.9 # <--- ADDED: REQUIRED for the calendar widget
 
   # iOS-style icons
   cupertino_icons: ^1.0.8
