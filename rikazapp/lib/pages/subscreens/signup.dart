@@ -3,8 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 // ========= Constants =========
 const String _rikazLogoPath = "assets/images/RikazLogo.png";
-const String _googleIconUrl = "https://developers.google.com/identity/images/g-logo.png";
-
+// NOTE: Removed _googleIconUrl as it is no longer used
 // Get the Supabase client instance using the alias 'sb'
 final supabase = sb.Supabase.instance.client;
 
@@ -42,9 +41,6 @@ class _SignupScreenState extends State<SignupScreen> {
 
   bool _isSubmitting = false;
 
-  // Mock flag to keep the Google UI active but functionally inert
-  final bool _isGoogleAuthReady = true; 
-
   @override
   void dispose() {
     _nameController.dispose();
@@ -65,8 +61,8 @@ class _SignupScreenState extends State<SignupScreen> {
     }
     
     // Simple client-side validation
-    if (password.length < 6) { 
-        _showAlert(context, "Password Error", "Password must be at least 6 characters long.");
+    if (password.length < 8) { 
+        _showAlert(context, "Password Error", "Password must be at least 8 characters long.");
         return;
     }
 
@@ -105,15 +101,6 @@ class _SignupScreenState extends State<SignupScreen> {
     }
   }
 
-  // Placeholder function for Google button (MOCKED)
-  void _handleGoogleConnect() {
-    _showAlert(
-      context,
-      "Feature Not Enabled",
-      "Google Sign-In logic is currently disabled in the code and requires native configuration.",
-    );
-  }
-
   Widget _buildTextInput({
     required TextEditingController controller,
     required String hintText,
@@ -145,7 +132,6 @@ class _SignupScreenState extends State<SignupScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
               // Logo
-              // NOTE: Ensure you have "assets/images/RikazLogo.png" configured in pubspec.yaml
               Image.asset(_rikazLogoPath, height: 150, width: 150),
               const SizedBox(height: 10),
 
@@ -183,28 +169,6 @@ class _SignupScreenState extends State<SignupScreen> {
                 child: Text(
                   _isSubmitting ? "Creating..." : "Sign Up",
                   style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-              ),
-              const SizedBox(height: 10),
-
-              const Text('or', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF666666), fontSize: 16)),
-              const SizedBox(height: 10),
-
-              // Google Button UI (Mocked)
-              OutlinedButton(
-                onPressed: (_isSubmitting || !_isGoogleAuthReady) ? null : _handleGoogleConnect,
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  side: const BorderSide(color: Color(0xFFcccccc), width: 1),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: <Widget>[
-                    Image.network(_googleIconUrl, width: 22, height: 22),
-                    const SizedBox(width: 8),
-                    const Text('Connect Google Calendar', style: TextStyle(fontSize: 15, color: Color(0xFF333333))),
-                  ],
                 ),
               ),
               const SizedBox(height: 20),
