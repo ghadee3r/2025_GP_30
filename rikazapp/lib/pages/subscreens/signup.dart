@@ -3,11 +3,22 @@ import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 // ========= Constants =========
 const String _rikazLogoPath = "assets/images/RikazLogo.png";
-// NOTE: Removed _googleIconUrl as it is no longer used
 // Get the Supabase client instance using the alias 'sb'
 final supabase = sb.Supabase.instance.client;
 
 // ========= Helpers =========
+
+// Basic email format check: e.g., 'user@domain.com'
+final RegExp _emailRegex = RegExp(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$");
+
+// Password complexity check:
+// - At least 8 characters long
+// - Contains at least one uppercase letter (A-Z)
+// - Contains at least one lowercase letter (a-z)
+// - Contains at least one number (0-9)
+final RegExp _passwordRegex = RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$');
+
+
 void _showAlert(BuildContext context, String title, String message) {
   showDialog(
     context: context,
@@ -49,7 +60,7 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
-  // 🚨 SUPABASE SIGN UP LOGIC 🚨
+  // 🚨 SUPABASE SIGN UP LOGIC WITH VALIDATION 🚨
   Future<void> _handleSignup() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
@@ -60,10 +71,23 @@ class _SignupScreenState extends State<SignupScreen> {
       return;
     }
     
-    // Simple client-side validation
-    if (password.length < 8) { 
-        _showAlert(context, "Password Error", "Password must be at least 8 characters long.");
-        return;
+    // 1. Email Validation Check
+    if (!_emailRegex.hasMatch(email)) {
+      _showAlert(context, "Invalid Email", "Please enter a valid email address.");
+      return;
+    }
+    
+    // 2. Password Complexity Check (Enhanced for 8+ chars, uppercase, lowercase, and number)
+    if (!_passwordRegex.hasMatch(password)) {
+      _showAlert(
+        context,
+        "Weak Password",
+        "Password must be at least 8 characters long and contain:\n"
+        "• One uppercase letter\n"
+        "• One lowercase letter\n"
+        "• One number",
+      );
+      return;
     }
 
     setState(() => _isSubmitting = true);
@@ -186,27 +210,8 @@ class _SignupScreenState extends State<SignupScreen> {
                 ),
               ),
 
-              // Skip link
-              const SizedBox(height: 10),
-              TextButton(
-                onPressed: _isSubmitting
-                    ? null
-                    : () {
-                        Navigator.of(context).pushNamedAndRemoveUntil(
-                          '/tabs',
-                          (route) => false,
-                          arguments: 0,
-                        );
-                      },
-                child: const Text(
-                  'Skip for now (No DB)',
-                  style: TextStyle(
-                    color: Color(0xFF9ca3af),
-                    fontSize: 14,
-                    decoration: TextDecoration.underline,
-                  ),
-                ),
-              ),
+              // NOTE: The 'Skip for now (No DB)' link has been removed as requested.
+              
             ],
           ),
         ),
