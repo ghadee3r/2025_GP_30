@@ -398,7 +398,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 const SizedBox(height: 20),
 
                 // ---------------------------------------------------
-                // GOOGLE CALENDAR CONNECT SECTION (MOVED TO BOTTOM)
+                // GOOGLE CALENDAR CONNECT SECTION (CORRECT PLACEMENT: Below Set Session)
                 // ---------------------------------------------------
                 _buildGlassSection(_buildGoogleConnectSection(cs)),
                 const SizedBox(height: 20),
@@ -616,15 +616,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // Widget for Google Connection Status Card
   Widget _buildGoogleConnectSection(ColorScheme cs) {
     // Determine softer, non-aggressive status colors
-    final statusColor = cs.tertiary; // Use soft theme color for connection status
-    final statusBackground = cs.tertiaryContainer;
+    final connectedColor = cs.tertiary; // Use soft theme color for success (e.g., green/teal)
+    final disconnectedColor = cs.error; // Use the theme's error color for required/warning (red/pink)
+    
+    // Select the primary color and background container based on connection status
+    final statusColor = _isCalendarConnected ? connectedColor : disconnectedColor;
+    final statusBackground = _isCalendarConnected ? cs.tertiaryContainer : cs.errorContainer;
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: statusBackground.withOpacity(0.5), // Softer background
+        // Background: Soft color based on status, ensuring transparency for glass effect
+        color: statusBackground.withOpacity(0.5), 
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: statusColor, width: 1.5),
+        // Border: A more saturated version of the status color
+        border: Border.all(color: statusColor.withOpacity(0.8), width: 1.5),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -888,7 +894,20 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
     final endDateTime = _combineDateTime(_startDate, _endTime);
     
     if (endDateTime.isBefore(startDateTime)) {
-      _showSnackbar('End time cannot be before start time.', Colors.red);
+      // FIX: Replace snackbar with AlertDialog for critical validation error
+      await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Time Error'),
+          content: const Text('The session end time cannot be before the start time.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
       setState(() => _isLoading = false);
       return;
     }
