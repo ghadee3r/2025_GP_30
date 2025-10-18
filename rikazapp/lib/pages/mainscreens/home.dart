@@ -7,6 +7,9 @@ import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sig
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart'; 
 
+// Enum to manage the user's schedule view preference
+enum ScheduleView { all, rikaz }
+
 // -----------------------------------------------------------------------------
 // 1. API Client Setup (The brain for all Calendar interactions)
 // -----------------------------------------------------------------------------
@@ -98,10 +101,12 @@ class CalendarClient {
   }
 
   // Creates a new calendar event (Two-way sync: Write)
+  // MODIFIED: Added isRikazSession flag to tag events internally.
   Future<calendar.Event?> createEvent({
     required String title,
     required DateTime startTime,
     required DateTime endTime,
+    bool isRikazSession = false, 
   }) async {
     if (calendarApi == null) return null;
 
@@ -109,6 +114,10 @@ class CalendarClient {
       summary: title,
       start: calendar.EventDateTime(dateTime: startTime.toUtc(), timeZone: 'UTC'),
       end: calendar.EventDateTime(dateTime: endTime.toUtc(), timeZone: 'UTC'),
+      // NEW: Add extended property to tag events created by this app
+      extendedProperties: isRikazSession 
+          ? calendar.EventExtendedProperties(private: {'isRikazSession': 'true'}) 
+          : null,
     );
 
     try {
@@ -150,7 +159,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final CalendarClient _client = CalendarClient();
   bool _isCalendarConnected = false;
   bool _isSigningIn = false;
-  List<calendar.Event> _events = [];
+  List<calendar.Event> _events = []; // All events fetched from Google
+  List<calendar.Event> _displayedEvents = []; // Filtered list for display (NEW)
+  ScheduleView _scheduleView = ScheduleView.all; // Current schedule filter (NEW)
 
   // Calendar UI State for table_calendar
   DateTime _focusedDay = DateTime.now();
@@ -158,7 +169,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   // Existing Focus State
   String selectedPreset = 'Choose Preset';
-  int? selectedModeIndex; // Changed to nullable int for initial unselected state
+  int? selectedModeIndex; 
   
   bool isRikazToolConnected = false; 
   bool isLoading = false; 
@@ -207,31 +218,50 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  // FIX 4: Override didChangeAppLifecycleState (Handles external changes, e.g., deleting from Google Calendar app)
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && _isCalendarConnected) {
-      // When the app comes back to the foreground, fetch the latest schedule
       debugPrint('App resumed from background, fetching schedule...');
       _fetchSchedule();
     }
   }
 
-  // FIX: This method forces the schedule to refresh every time the tab/route is entered (Handles internal tab switching).
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Use a flag to prevent fetch on initial load, but ensure it runs on route changes.
-    // If we're connected and the route changed, fetch.
     if (_isCalendarConnected) {
       _fetchSchedule();
     }
   }
 
+  // MODIFIED: Filters events based STRICTLY on the 'isRikazSession' extended property.
+  void _filterEvents() {
+    if (_scheduleView == ScheduleView.all) {
+      _displayedEvents = _events;
+    } else {
+      // Filter for Rikaz sessions by checking the definitive app-created tag.
+      _displayedEvents = _events.where((event) {
+        return event.extendedProperties?.private?['isRikazSession'] == 'true';
+      }).toList();
+    }
+  }
+
+  // Setter to change view and re-fetch/re-filter (MODIFIED for 2-way update)
+  void _setScheduleView(ScheduleView view) {
+    setState(() {
+      _scheduleView = view;
+    });
+    // Trigger a fetch to ensure data is fresh from the network whenever the view changes.
+    _fetchSchedule(); 
+  }
+
   // Refreshes the event list from Google Calendar (Two-way sync: Read)
   Future<void> _fetchSchedule() async {
     if (!_client.isConnected) {
-      if (mounted) setState(() => _events = []);
+      if (mounted) setState(() {
+          _events = [];
+          _displayedEvents = [];
+      });
       return;
     }
     
@@ -239,6 +269,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (mounted) {
         setState(() {
           _events = fetchedEvents;
+          _filterEvents(); // Filter immediately after fetching
         });
     }
   }
@@ -270,6 +301,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() {
       _isCalendarConnected = false;
       _events = [];
+      _displayedEvents = []; // Reset displayed events too
     });
     _showSnackbar('Disconnected from Google.', Colors.blueGrey);
   }
@@ -397,16 +429,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 _buildGlassSection(_buildFocusSection(lavender, accentBlue)),
                 const SizedBox(height: 20),
 
-                // ---------------------------------------------------
-                // GOOGLE CALENDAR CONNECT SECTION (CORRECT PLACEMENT: Below Set Session)
-                // ---------------------------------------------------
+                // GOOGLE CALENDAR CONNECT SECTION
                 _buildGlassSection(_buildGoogleConnectSection(cs)),
                 const SizedBox(height: 20),
 
 
-                // ---------------------------------------------------
                 // SCHEDULE SECTION (Calendar View & List)
-                // ---------------------------------------------------
                 _buildGlassSection(_buildScheduleSection(cs)),
                 
                 const SizedBox(height: 50),
@@ -521,7 +549,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                             title: Text(p),
                             onTap: () => handlePresetSelect(p),
                           ))
-                      .toList(),
+                      ,
                   ListTile(
                     title: const Text('Custom Session', style: TextStyle(fontStyle: FontStyle.italic)),
                     onTap: () => handlePresetSelect('Custom Session'),
@@ -688,19 +716,67 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  // New Widget: Toggle for All/Rikaz Sessions (NEW)
+  Widget _buildScheduleToggle(ColorScheme cs) {
+    final activeColor = cs.primary;
+    final inactiveColor = cs.onSurface.withOpacity(0.5);
+
+    Widget _buildButton(ScheduleView view, String text, IconData icon) {
+      final isSelected = _scheduleView == view;
+      return Expanded(
+        child: InkWell(
+          onTap: () => _setScheduleView(view),
+          borderRadius: BorderRadius.circular(12),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: isSelected ? activeColor : Colors.white.withOpacity(0.4),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: isSelected ? activeColor : cs.outlineVariant),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 18, color: isSelected ? Colors.white : inactiveColor),
+                const SizedBox(width: 8),
+                Text(
+                  text,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    color: isSelected ? Colors.white : inactiveColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        _buildButton(ScheduleView.all, 'All Calendar', Icons.calendar_month),
+        const SizedBox(width: 8),
+        _buildButton(ScheduleView.rikaz, 'Rikaz Focus', Icons.auto_awesome),
+      ],
+    );
+  }
+
   // New Widget: Schedule Display Section
   Widget _buildScheduleSection(ColorScheme cs) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // NEW HEADER: Calendar
+        // CALENDAR HEADER
         const Text(
           'Calendar',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 15),
 
-        // NEW: Small Calendar View (TableCalendar)
+        // Small Calendar View (TableCalendar)
         Card(
           elevation: 4,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -740,6 +816,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           'Upcoming Sessions',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
+
+        // VIEW TOGGLE BUTTONS (NEW)
+        const SizedBox(height: 10),
+        _buildScheduleToggle(cs),
+        const SizedBox(height: 15),
         
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
@@ -757,13 +838,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         const SizedBox(height: 10),
         
         // Events List from Google Calendar
-        _events.isEmpty
+        _displayedEvents.isEmpty // Use the filtered list
             ? Center(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 20.0),
                   child: Text(
                     _client.isConnected
-                        ? 'No upcoming sessions found.'
+                        ? (_scheduleView == ScheduleView.rikaz 
+                            ? 'No upcoming Rikaz Focus Sessions found.' 
+                            : 'No upcoming sessions found.')
                         : 'Connect Google Calendar to see your schedule.',
                     style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
                   ),
@@ -772,9 +855,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             : ListView.builder(
                 physics: const NeverScrollableScrollPhysics(),
                 shrinkWrap: true,
-                itemCount: _events.length,
+                itemCount: _displayedEvents.length, // Use the filtered list
                 itemBuilder: (context, index) {
-                  final event = _events[index];
+                  final event = _displayedEvents[index];
                   final startTime = event.start?.dateTime?.toLocal() ?? event.start?.date;
                   final endTime = event.end?.dateTime?.toLocal() ?? event.end?.date;
 
@@ -827,7 +910,6 @@ class _EventManagementOverlay extends StatefulWidget {
   final DateTime? initialDate; // FIX: New field to receive selected date
 
   const _EventManagementOverlay({
-    super.key,
     required this.client,
     required this.onEventUpdated,
     this.eventToEdit,
@@ -962,6 +1044,8 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
         title: _title,
         startTime: startDateTime,
         endTime: endDateTime,
+        // NEW: Tag this event as created by the Rikaz app
+        isRikazSession: true, 
     );
     
     if (result != null) {
@@ -1171,8 +1255,8 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                         Expanded(
                           child: ElevatedButton.icon(
                             onPressed: _handleDelete,
-                            icon: const Icon(Icons.delete, color: Colors.white),
-                            label: const Text('Delete Session'),
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            label: const Text('Delete Session', style: TextStyle(color: Colors.white)),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.red.shade600,
                               foregroundColor: Colors.white,
