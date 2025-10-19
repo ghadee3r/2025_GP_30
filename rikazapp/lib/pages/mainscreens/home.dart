@@ -980,7 +980,7 @@ boxShadow: [
 }
 
 // -----------------------------------------------------------------------------
-// 5. Cute Overlay (Modal Bottom Sheet Widget for Add/Delete) - THEMED (Unchanged Functionality)
+// 5. Cute Overlay (Modal Bottom Sheet Widget for Add/Delete) - THEMED 
 // -----------------------------------------------------------------------------
 
 class _EventManagementOverlay extends StatefulWidget {
@@ -1053,6 +1053,33 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
     final startDateTime = _combineDateTime(_startDate, _startTime);
     final endDateTime = _combineDateTime(_startDate, _endTime);
     
+    // NEW: Get the start of today for comparison.
+    final today = DateTime.now();
+    final startOfToday = DateTime(today.year, today.month, today.day);
+
+    // -----------------------------------------------------
+    // NEW: BLOCKED PAST DATE SCHEDULING VALIDATION
+    // -----------------------------------------------------
+    // Only perform this check for new events.
+    if (!isEditing && startDateTime.isBefore(startOfToday)) {
+      await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Scheduling Error'),
+          content: const Text('You cannot schedule a new focus session on a date before today.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      setState(() => _isLoading = false);
+      return;
+    }
+    // -----------------------------------------------------
+
     if (endDateTime.isBefore(startDateTime)) {
       await showDialog(
         context: context,
@@ -1278,6 +1305,9 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                 final date = await showDatePicker(
                   context: context,
                   initialDate: _startDate,
+                  // The original date picker range allows selecting dates before today.
+                  // We rely on the _handleSave check for the block, but for better UX, 
+                  // the date picker itself should prevent past dates if the intention is to only schedule future/today events.
                   firstDate: DateTime.now().subtract(const Duration(days: 30)),
                   lastDate: DateTime.now().add(const Duration(days: 365)),
                 );
