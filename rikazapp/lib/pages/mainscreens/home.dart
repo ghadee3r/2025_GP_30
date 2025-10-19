@@ -10,8 +10,44 @@ import 'package:table_calendar/table_calendar.dart';
 // Enum to manage the user's schedule view preference
 enum ScheduleView { all, rikaz }
 
+// =============================================================================
+// 1. FINAL REFINED THEME DEFINITIONS - Minimalist Soft UI with Cute Pastels
+// =============================================================================
+
+// Base Colors
+const Color primaryThemePurple = Color(0xFF7A68FF); // Main action color
+const Color secondaryThemeBlue = Color(0xFF8DC0FF); // Header end color (soft gradient)
+const Color softAccentHighlight = Color(0xFFE9E5FF); // Lightest purple for selections/backgrounds
+
+// Custom Colors based on the HP Image
+const Color hpDeepBlue = Color.fromARGB(255, 24, 114, 150); // Exact shade for "Good Evening" and key text
+const Color hpThinBlack = Color(0xFF1E1E1E); // Thin black for names
+
+const Color primaryTextDark = Color(0xFF30304D); 
+const Color secondaryTextGrey = Color(0xFF8C8C99); 
+
+// Soft Pastel Accent Colors for diversity
+const Color softLavender = Color(0xFFE9E5FF); // Used for Google Connect background
+const Color softCyan = Color(0xFFE8F8FF);    // Used for Mode Selection backgrounds (light cyan)
+
+const Color primaryBackground = Color(0xFFFFFFFF); // Pure white background
+const Color cardBackground = Color(0xFFFFFFFF); // Pure white for card surfaces
+
+const double cardBorderRadius = 24.0; // Highly rounded corners
+const double globalHorizontalPadding = 42.5; // Increased side margins
+
+// Subtle shadow for the floating effect (Purple-tinted)
+List<BoxShadow> get subtleShadow => [
+      BoxShadow(
+        color: const Color.fromARGB(255, 155, 141, 255).withOpacity(0.4),
+        blurRadius: 20,
+        offset: const Offset(0, 10),
+      ),
+    ];
+
+
 // -----------------------------------------------------------------------------
-// 1. API Client Setup (The brain for all Calendar interactions)
+// 2. API Client Setup (Functionality Unchanged)
 // -----------------------------------------------------------------------------
 
 const List<String> _scopes = <String>[
@@ -80,19 +116,18 @@ class CalendarClient {
     if (calendarApi == null) return [];
     
     final now = DateTime.now().toUtc();
-    final thirtyDaysFromNow = now.add(const Duration(days: 30)).toUtc(); // FIX: Define the end date
+    final thirtyDaysFromNow = now.add(const Duration(days: 30)).toUtc();
 
     try {
       final events = await calendarApi!.events.list(
         'primary',
-        maxResults: 20, // Increased results for better schedule visibility
-        timeMin: now, // Start time: Now
-        timeMax: thirtyDaysFromNow, // FIX: End time: 30 days from now
+        maxResults: 20, 
+        timeMin: now, 
+        timeMax: thirtyDaysFromNow, 
         singleEvents: true,
         orderBy: 'startTime',
       );
       
-      // Filter events to only show those with titles and valid start times
       return events.items?.where((e) => e.summary != null && e.start != null).toList() ?? [];
     } catch (e) {
       debugPrint('Error fetching events: $e');
@@ -101,7 +136,6 @@ class CalendarClient {
   }
 
   // Creates a new calendar event (Two-way sync: Write)
-  // MODIFIED: Added isRikazSession flag to tag events internally.
   Future<calendar.Event?> createEvent({
     required String title,
     required DateTime startTime,
@@ -114,7 +148,6 @@ class CalendarClient {
       summary: title,
       start: calendar.EventDateTime(dateTime: startTime.toUtc(), timeZone: 'UTC'),
       end: calendar.EventDateTime(dateTime: endTime.toUtc(), timeZone: 'UTC'),
-      // NEW: Add extended property to tag events created by this app
       extendedProperties: isRikazSession 
           ? calendar.EventExtendedProperties(private: {'isRikazSession': 'true'}) 
           : null,
@@ -144,7 +177,7 @@ class CalendarClient {
 }
 
 // -----------------------------------------------------------------------------
-// 2. Main Page Widget (HomePage)
+// 3. Main Page Widget (HomePage)
 // -----------------------------------------------------------------------------
 
 class HomePage extends StatefulWidget {
@@ -159,9 +192,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final CalendarClient _client = CalendarClient();
   bool _isCalendarConnected = false;
   bool _isSigningIn = false;
-  List<calendar.Event> _events = []; // All events fetched from Google
-  List<calendar.Event> _displayedEvents = []; // Filtered list for display (NEW)
-  ScheduleView _scheduleView = ScheduleView.all; // Current schedule filter (NEW)
+  List<calendar.Event> _events = []; 
+  List<calendar.Event> _displayedEvents = []; 
+  ScheduleView _scheduleView = ScheduleView.all; 
 
   // Calendar UI State for table_calendar
   DateTime _focusedDay = DateTime.now();
@@ -190,13 +223,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       'desc': 'Set your own duration',
     },
   ];
+  
+  // Class-level fields for theme constants
+  final Color localPrimaryThemePurple = primaryThemePurple;
+  final Color localSecondaryThemeBlue = secondaryThemeBlue;
+  final Color localSoftAccentHighlight = softAccentHighlight;
+  final Color localPrimaryTextDark = primaryTextDark;
+  final Color localSecondaryTextGrey = secondaryTextGrey;
+  final Color localPrimaryBackground = primaryBackground;
+  final Color localCardBackground = cardBackground;
+  final Color localSoftLavender = softLavender;
+  final Color localSoftCyan = softCyan;
+  final Color localSoftPeach = const Color(0xFFFFEEEA); 
+
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this); 
 
-    // Attempt silent sign-in to restore previous session on app launch
     _client._googleSignIn.onCurrentUserChanged.listen((GoogleSignInAccount? account) {
       if (account != null) {
         _client.signIn().then((success) {
@@ -234,28 +279,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  // MODIFIED: Filters events based STRICTLY on the 'isRikazSession' extended property.
   void _filterEvents() {
     if (_scheduleView == ScheduleView.all) {
       _displayedEvents = _events;
     } else {
-      // Filter for Rikaz sessions by checking the definitive app-created tag.
       _displayedEvents = _events.where((event) {
         return event.extendedProperties?.private?['isRikazSession'] == 'true';
       }).toList();
     }
   }
 
-  // Setter to change view and re-fetch/re-filter (MODIFIED for 2-way update)
   void _setScheduleView(ScheduleView view) {
     setState(() {
       _scheduleView = view;
     });
-    // Trigger a fetch to ensure data is fresh from the network whenever the view changes.
     _fetchSchedule(); 
   }
 
-  // Refreshes the event list from Google Calendar (Two-way sync: Read)
   Future<void> _fetchSchedule() async {
     if (!_client.isConnected) {
       if (mounted) setState(() {
@@ -269,12 +309,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (mounted) {
         setState(() {
           _events = fetchedEvents;
-          _filterEvents(); // Filter immediately after fetching
+          _filterEvents(); 
         });
     }
   }
 
-  // Handles Google Calendar Sign-in
   Future<void> _handleCalendarSignIn() async {
     if (_isCalendarConnected) return;
 
@@ -295,18 +334,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
   
-  // Handles Google Calendar Sign-out
   Future<void> _handleCalendarSignOut() async {
     await _client.signOut();
     setState(() {
       _isCalendarConnected = false;
       _events = [];
-      _displayedEvents = []; // Reset displayed events too
+      _displayedEvents = []; 
     });
     _showSnackbar('Disconnected from Google.', Colors.blueGrey);
   }
 
-  // Placeholder for Rikaz Tool Connect (using SlideAction)
   Future<void> handleConnect() async {
     setState(() => isLoading = true); 
     await Future.delayed(const Duration(seconds: 2));
@@ -317,20 +354,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     });
   }
 
-  // Existing session logic
-  void handleSetSession() {
-    // Only proceed if a mode is selected
-    if (selectedModeIndex == null) return;
+void handleSetSession() {
+    // We no longer need to check selectedModeIndex or selectedTitle,
+    // as all session configuration is now handled by the unified page.
     
-    final selectedTitle = modes[selectedModeIndex!]['title']!;
-    final routeName = (selectedTitle == 'Pomodoro Mode') ? '/pomodoro' : '/custom';
-    Navigator.of(context).pushNamed(routeName);
-  }
+    // final selectedTitle = modes[selectedModeIndex!]['title']!;
+    // final routeName = (selectedTitle == 'Pomodoro Mode') ? '/pomodoro' : '/custom';
+    
+    // Navigate directly to the unified SetSessionPage
+    Navigator.of(context).pushNamed('/setsession');
+}
 
-  void handlePresetSelect(String preset) {
-    setState(() => selectedPreset = preset);
-    Navigator.of(context).pop(); 
-  }
 
   void _showSnackbar(String message, Color color) {
     if (mounted) {
@@ -361,7 +395,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             client: _client,
             eventToEdit: eventToEdit,
             onEventUpdated: _fetchSchedule, 
-            initialDate: selectedDate, // FIX: Pass the selected date here
+            initialDate: selectedDate, 
           ),
         );
       },
@@ -369,296 +403,244 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   // ---------------------------------------------------------------------------
-  // Build
+  // THEMED UI SECTIONS (Now using class-level color fields)
   // ---------------------------------------------------------------------------
-  @override
-  Widget build(BuildContext context) {
-    // Using fixed colors from the second code block for theme consistency
-    const accentBlue = Color(0xFF6E5DE7);
-    const lavender = Color.fromARGB(255, 174, 165, 255);
-    final cs = Theme.of(context).colorScheme;
-
-    return Scaffold(
-      extendBody: true,
-      backgroundColor: Colors.white,
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Color(0xFFFFFFFF),
-              Color.fromARGB(148, 197, 201, 253),
-              Color(0xFFFFFFFF),
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+  
+  Widget buildWelcomeHeaderLocal() {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Good Evening,',
+            style: TextStyle(
+              fontSize: 36,
+              fontWeight: FontWeight.w700,
+              color: hpDeepBlue,
+            ),
           ),
+        ],
+      ),
+      const SizedBox(height: 4),
+      Text(
+        'UserName !',
+        style: TextStyle(
+          fontSize: 32,
+          fontWeight: FontWeight.w400,
+          color: hpThinBlack,
         ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
-            child: Column(
+      ),
+      const SizedBox(height: 8), // slightly smaller gap
+      Text(
+        'Are you ready for a productive day?',
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w400,
+          color: const Color.fromARGB(255, 129, 129, 129),
+          
+        ),
+      ),
+      const SizedBox(height: 20),
+    ],
+  );
+}
+  
+  Widget buildRikazConnectLocal() {
+    final statusColor = isRikazToolConnected ? Colors.green.shade600 : localPrimaryThemePurple;
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(top: 8, bottom: 20), 
+      decoration: BoxDecoration(
+        color: localCardBackground, 
+        borderRadius: BorderRadius.circular(cardBorderRadius),
+        boxShadow: subtleShadow, // Minimal elevation/shadow
+        border: Border.all(color: Colors.grey.shade100, width: 1.0),
+      ),
+      child: isRikazToolConnected
+          ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Center(
-                  child: CircleAvatar(
-                    radius: 70,
-                    backgroundImage:
-                        const AssetImage('assets/images/RikazLogo.png'),
-                    backgroundColor: Colors.transparent,
-                  )),
-                const SizedBox(height: 20),
-                const Text(
-                  'Welcome back, User!',
-                  style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Color.fromARGB(221, 29, 29, 29)),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  ' Ready for a productive day?',
-                  style: TextStyle(fontSize: 13, color: Colors.black54),
-                ),
-                const SizedBox(height: 25),
-
-                // RIKAZ TOOL CONNECT SECTION (Glass)
-                _buildGlassSection(_buildRikazConnect(lavender)),
-                const SizedBox(height: 20),
-
-                // START FOCUS SESSION SECTION (Glass)
-                _buildGlassSection(_buildFocusSection(lavender, accentBlue)),
-                const SizedBox(height: 20),
-
-                // GOOGLE CALENDAR CONNECT SECTION
-                _buildGlassSection(_buildGoogleConnectSection(cs)),
-                const SizedBox(height: 20),
-
-
-                // SCHEDULE SECTION (Calendar View & List)
-                _buildGlassSection(_buildScheduleSection(cs)),
-                
-                const SizedBox(height: 50),
+                Text('Rikaz Tools Connected',
+                    style: TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold, color: statusColor)),
+                const SizedBox(height: 8),
+                Text('Custom presets and features unlocked.',
+                    style: TextStyle(fontSize: 14, color: localSecondaryTextGrey)), 
               ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // Glass Section Helper
-  // ---------------------------------------------------------------------------
-  Widget _buildGlassSection(Widget child) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.55),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withOpacity(0.4)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: child,
-        ),
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // UI Sections Implementation
-  // ---------------------------------------------------------------------------
-  Widget _buildRikazConnect(Color lavender) {
-    return isRikazToolConnected
-        ? Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Rikaz Tools Connected',
-                  style: TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold, color: const Color.fromARGB(255, 80, 80, 80))),
-              const SizedBox(height: 8),
-              const Text('Custom presets and features unlocked.',
-                  style: TextStyle(color: Colors.grey)),
-            ],
-          )
-        : Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Connect Rikaz Tools',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 6),
-              const Text(
-                  'Connect to unlock custom presets and advanced features',
-                  style: TextStyle(fontSize: 13, color: Colors.grey)),
-              const SizedBox(height: 10),
-              SlideAction(
-                text: "Slide to Connect",
-                textStyle: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white),
-                innerColor: Colors.white,
-                outerColor: lavender,
-                sliderButtonIcon:
-                    const Icon(Icons.wifi, color: Colors.black, size: 15),
-                height: 42,
-                onSubmit: () async {
-                  await handleConnect();
-                  return null;
-                },
-              ),
-            ],
-          );
-  }
-
-  Widget _buildFocusSection(Color lavender, Color accentBlue) {
-    final hasSelectedMode = selectedModeIndex != null; // Use local variable for readability
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('Start Focus Session',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 10),
-        
-        // Preset Dropdown
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.8),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade300),
-          ),
-          child: GestureDetector(
-            onTap: () => showModalBottomSheet(
-              context: context,
-              builder: (_) => Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ...presets
-                      .map((p) => ListTile(
-                            title: Text(p),
-                            onTap: () => handlePresetSelect(p),
-                          ))
-                      ,
-                  ListTile(
-                    title: const Text('Custom Session', style: TextStyle(fontStyle: FontStyle.italic)),
-                    onTap: () => handlePresetSelect('Custom Session'),
-                  ),
-                ],
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(selectedPreset, style: const TextStyle(fontSize: 16, color: Colors.black)),
-                const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+                Text('Connect Rikaz Tools',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: localPrimaryTextDark)), 
+                const SizedBox(height: 6),
+                Text(
+                    'Connect to unlock custom presets and advanced features',
+                    style: TextStyle(fontSize: 14, color: localSecondaryTextGrey)), 
+                const SizedBox(height: 15),
+                SlideAction(
+                  text: "Slide to Connect",
+                  textStyle: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white),
+                  innerColor: localCardBackground, 
+                  outerColor: localPrimaryThemePurple.withOpacity(0.9), // Primary Purple for slider
+                  sliderButtonIcon:
+                      Icon(Icons.wifi, color: localPrimaryTextDark, size: 18),
+                  height: 45, 
+                  borderRadius: cardBorderRadius, 
+                  onSubmit: () async {
+                    await handleConnect();
+                    return null;
+                  },
+                ),
               ],
             ),
-          ),
+    );
+  }
+  
+  Widget buildFocusSessionLocal() {
+  final hasSelectedMode = selectedModeIndex != null;
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        'Start Focus Session',
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+          color: localPrimaryTextDark,
         ),
-        const SizedBox(height: 20),
+      ),
+      const SizedBox(height: 15),
 
-        // Mode Selection Cards
-        Row(
-          children: List.generate(modes.length, (i) {
-            final mode = modes[i];
-            final selected = selectedModeIndex == i;
-            return Expanded(
-              child: GestureDetector(
-                onTap: () => setState(() => selectedModeIndex = i),
+      // Mode Selection Cards - With persistent AnimatedScale animation
+      Row(
+        children: List.generate(modes.length, (i) {
+          final mode = modes[i];
+          final selected = selectedModeIndex == i;
+
+          final Color modeBgColor = localSoftCyan;
+          final Color selectedTextColor = hpDeepBlue;
+          final Color defaultTextColor = hpDeepBlue;
+
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => selectedModeIndex = i),
+              child: AnimatedScale(
+                scale: selected ? 1.08 : 1.0, // Slight enlargement when selected
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  margin: const EdgeInsets.symmetric(horizontal: 5),
-                  height: 100,
+                  duration: const Duration(milliseconds: 250),
+                  margin: EdgeInsets.only(
+                    right: i == 0 ? 12 : 0,
+                    left: i == 1 ? 12 : 0,
+                  ),
+                  height: 110,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: selected ? lavender : Colors.white.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                        color: selected ? lavender : Colors.grey.shade300,
-                        width: 2),
-                    boxShadow: selected
-                        ? [
-                            BoxShadow(
-                                color: lavender.withOpacity(0.3),
-                                blurRadius: 8,
-                                offset: const Offset(0, 4))
-                          ]
-                        : [],
+                    color: selected ? modeBgColor : localCardBackground,
+                    borderRadius:
+                        BorderRadius.circular(cardBorderRadius / 2),
+                    border: Border.all(color: Colors.transparent, width: 0),
+boxShadow: [
+  BoxShadow(
+    color: const Color.fromARGB(255, 176, 163, 247).withOpacity(0.8),
+    blurRadius: 14,
+    offset: const Offset(0, 8),
+  ),
+],
+
                   ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(mode['title']!,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: selected ? Colors.white : Colors.black)),
+                      Text(
+                        mode['title']!,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: selected
+                              ? selectedTextColor
+                              : defaultTextColor,
+                        ),
+                      ),
                       const SizedBox(height: 6),
-                      Text(mode['desc']!,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: selected ? Colors.white70 : Colors.grey)),
+                      Text(
+                        mode['desc']!,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: selected
+                              ? selectedTextColor.withOpacity(0.7)
+                              : localSecondaryTextGrey,
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ),
-            );
-          }),
-        ),
-        const SizedBox(height: 24),
-
-        // Set Session Button
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: selectedModeIndex != null ? handleSetSession : null,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: selectedModeIndex != null ? accentBlue : Colors.grey.shade400,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
-            child: Text('Set Session',
-                style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: selectedModeIndex != null ? Colors.white : Colors.white.withOpacity(0.7))),
+          );
+        }),
+      ),
+      const SizedBox(height: 24),
+
+      // Set Session Button - unchanged logic
+      SizedBox(
+        width: double.infinity,
+        child: ElevatedButton(
+          onPressed: selectedModeIndex != null ? handleSetSession : null,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: hasSelectedMode
+                ? localPrimaryThemePurple
+                : localPrimaryThemePurple.withOpacity(0.5),
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(cardBorderRadius / 2),
+            ),
+            elevation: hasSelectedMode ? 4 : 0,
+          ),
+          child: Text(
+            'Set Session',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              color: hasSelectedMode
+                  ? Colors.white
+                  : Colors.white.withOpacity(0.7),
+            ),
           ),
         ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
+}
 
-  // Widget for Google Connection Status Card
-  Widget _buildGoogleConnectSection(ColorScheme cs) {
-    // Determine softer, non-aggressive status colors
-    final connectedColor = cs.tertiary; // Use soft theme color for success (e.g., green/teal)
-    final disconnectedColor = cs.error; // Use the theme's error color for required/warning (red/pink)
+  
+  Widget buildGoogleConnectSectionLocal(ColorScheme cs) {
+    final activeColor = primaryThemePurple;
     
-    // Select the primary color and background container based on connection status
-    final statusColor = _isCalendarConnected ? connectedColor : disconnectedColor;
-    final statusBackground = _isCalendarConnected ? cs.tertiaryContainer : cs.errorContainer;
+    final statusColor = _isCalendarConnected ? Colors.green.shade600 : activeColor;
+    final statusTextColor = _isCalendarConnected ? Colors.green.shade800 : primaryTextDark;
+
+    // Use softLavender for the background
+    final statusBackground = localSoftLavender.withOpacity(0.9);
 
     return Container(
       padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(top: 20, bottom: 20),
       decoration: BoxDecoration(
-        // Background: Soft color based on status, ensuring transparency for glass effect
-        color: statusBackground.withOpacity(0.5), 
-        borderRadius: BorderRadius.circular(12),
-        // Border: A more saturated version of the status color
-        border: Border.all(color: statusColor.withOpacity(0.8), width: 1.5),
+        color: statusBackground, 
+        borderRadius: BorderRadius.circular(cardBorderRadius),
+        border: Border.all(color: statusColor.withOpacity(0.2), width: 1.5),
+        boxShadow: subtleShadow,
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -669,21 +651,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               children: [
                 Text(
                   _isCalendarConnected 
-                    ? 'Google Calendar Sync'
-                    : 'Google Calendar Required',
+                      ? 'Google Calendar Sync'
+                      : 'Google Calendar Required',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
-                    color: statusColor,
+                    color: statusTextColor,
                   ),
                 ),
                 Text(
                   _isCalendarConnected 
-                    ? 'Sessions are synced successfully!' 
-                    : 'Connect to sync your sessions and manage them directly.',
+                      ? 'Sessions are synced successfully!' 
+                      : 'Connect to sync your sessions and manage them directly.',
                   style: TextStyle(
                     fontSize: 13,
-                    color: cs.onSurfaceVariant,
+                    color: localSecondaryTextGrey,
                   ),
                 ),
               ],
@@ -696,30 +678,204 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   icon: const Icon(Icons.logout, size: 18),
                   label: const Text('Disconnect'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueGrey.shade400, // Neutral color for disconnect
+                    backgroundColor: Colors.blueGrey.shade400,
                     foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(cardBorderRadius/2)),
                   ),
                 )
               : ElevatedButton.icon(
                   onPressed: _isSigningIn ? null : _handleCalendarSignIn,
                   icon: _isSigningIn ? 
-                        const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
-                        : const Icon(Icons.person_add_alt_1, size: 18),
+                      const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
+                      : const Icon(Icons.person_add_alt_1, size: 18),
                   label: Text(_isSigningIn ? 'Connecting...' : 'Connect Google'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: cs.primary,
+                    backgroundColor: localPrimaryThemePurple,
                     foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(cardBorderRadius/2)),
                   ),
                 ),
         ],
       ),
     );
   }
+  
+  Widget buildScheduleSectionLocal(ColorScheme cs) {
+    final calendarAccent = localPrimaryThemePurple; 
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // SCHEDULE SESSIONS SECTION HEADER
+        Text(
+          'Scheduled Sessions',
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: localPrimaryTextDark), 
+        ),
+        const SizedBox(height: 20),
 
-  // New Widget: Toggle for All/Rikaz Sessions (NEW)
+        // CALENDAR CONTAINER (Still needs a minimal background for visual separation)
+        Container(
+          margin: const EdgeInsets.only(bottom: 20),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: localCardBackground,
+            borderRadius: BorderRadius.circular(cardBorderRadius),
+            boxShadow: subtleShadow,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Calendar',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: localPrimaryTextDark), 
+              ),
+              const SizedBox(height: 15),
+              // Table Calendar Widget
+              Container(
+                decoration: BoxDecoration(
+                  color: localCardBackground,
+                  borderRadius: BorderRadius.circular(cardBorderRadius/2),
+                  boxShadow: [BoxShadow(color: Colors.grey.shade100, blurRadius: 5)],
+                ),
+                child: TableCalendar(
+                  locale: 'en_US',
+                  firstDay: DateTime.utc(2023, 1, 1),
+                  lastDay: DateTime.utc(2030, 12, 31),
+                  focusedDay: _focusedDay,
+                  currentDay: DateTime.now(),
+                  headerStyle: HeaderStyle(
+                    formatButtonVisible: false,
+                    titleCentered: true,
+                    titleTextStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: localPrimaryTextDark), 
+                  ),
+                  calendarFormat: CalendarFormat.month, 
+                  calendarStyle: CalendarStyle(
+                    todayDecoration: BoxDecoration(color: calendarAccent.withOpacity(0.2), shape: BoxShape.circle),
+                    selectedDecoration: BoxDecoration(color: calendarAccent, shape: BoxShape.circle),
+                    outsideDaysVisible: false,
+                    weekendTextStyle: TextStyle(color: Colors.red.shade600),
+                  ),
+                  selectedDayPredicate: (day) {
+                    return isSameDay(_selectedDay, day);
+                  },
+                  onDaySelected: (selectedDay, focusedDay) {
+                    setState(() {
+                      _selectedDay = selectedDay;
+                      _focusedDay = focusedDay; 
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
+        ), // END Calendar Container
+
+        // UPCOMING SESSIONS LIST (Floating, minimalist style)
+        Text(
+          'Upcoming Sessions',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: localPrimaryTextDark), 
+        ),
+
+        const SizedBox(height: 10),
+        _buildScheduleToggle(cs),
+        const SizedBox(height: 15),
+        
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            TextButton.icon(
+              onPressed: () => _showEventOverlay(selectedDate: _selectedDay), 
+              icon: Icon(Icons.add_circle, color: calendarAccent),
+              label: Text('Add Session', style: TextStyle(color: calendarAccent)),
+            ),
+          ],
+        ),
+        
+        const SizedBox(height: 10),
+        
+        _displayedEvents.isEmpty
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20.0),
+                  child: Text(
+                    _client.isConnected
+                          ? (_scheduleView == ScheduleView.rikaz 
+                              ? 'No upcoming Rikaz Focus Sessions found.' 
+                              : 'No upcoming sessions found.')
+                          : 'Connect Google Calendar to see your schedule.',
+                    style: TextStyle(fontStyle: FontStyle.italic, color: secondaryTextGrey), 
+                  ),
+                ),
+              )
+            : ListView.builder(
+                physics: const NeverScrollableScrollPhysics(),
+                shrinkWrap: true,
+                itemCount: _displayedEvents.length, 
+                itemBuilder: (context, index) {
+                  final event = _displayedEvents[index];
+                  final startTime = event.start?.dateTime?.toLocal() ?? event.start?.date;
+                  final endTime = event.end?.dateTime?.toLocal() ?? event.end?.date;
+
+                  if (startTime == null) return const SizedBox.shrink();
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: localCardBackground,
+                        borderRadius: BorderRadius.circular(cardBorderRadius/2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: softLavender.withOpacity(0.4),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Center(
+                              child: Text(
+                                DateFormat('d').format(startTime), 
+                                style: TextStyle(color: calendarAccent, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                        title: Text(
+                          event.summary ?? 'Untitled Session',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: localPrimaryTextDark), 
+                        ),
+                        subtitle: Text(
+                          endTime != null
+                            ? '${DateFormat('MMM d, h:mm a').format(startTime)} - ${DateFormat('h:mm a').format(endTime)}'
+                            : DateFormat('MMM d, yyyy').format(startTime), 
+                            style: TextStyle(color: localSecondaryTextGrey), 
+                        ),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete_forever, color: Colors.red),
+                          onPressed: () => _showEventOverlay(eventToEdit: event),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+      ],
+    );
+  }
+  
+  // Schedule Toggle Buttons (Themed)
   Widget _buildScheduleToggle(ColorScheme cs) {
-    final activeColor = cs.primary;
-    final inactiveColor = cs.onSurface.withOpacity(0.5);
+    final activeColor = primaryThemePurple;
+    final inactiveColor = secondaryTextGrey;
 
     Widget _buildButton(ScheduleView view, String text, IconData icon) {
       final isSelected = _scheduleView == view;
@@ -729,11 +885,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           borderRadius: BorderRadius.circular(12),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
+            margin: const EdgeInsets.symmetric(horizontal: 4),
             padding: const EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(
-              color: isSelected ? activeColor : Colors.white.withOpacity(0.4),
+              color: isSelected ? activeColor : cardBackground.withOpacity(0.8),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: isSelected ? activeColor : cs.outlineVariant),
+              border: Border.all(color: isSelected ? activeColor : Colors.grey.shade300),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -744,7 +901,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   text,
                   style: TextStyle(
                     fontSize: 13,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                     color: isSelected ? Colors.white : inactiveColor,
                   ),
                 ),
@@ -763,157 +920,80 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ],
     );
   }
-
-  // New Widget: Schedule Display Section
-  Widget _buildScheduleSection(ColorScheme cs) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // CALENDAR HEADER
-        const Text(
-          'Calendar',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 15),
-
-        // Small Calendar View (TableCalendar)
-        Card(
-          elevation: 4,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: TableCalendar(
-            locale: 'en_US',
-            firstDay: DateTime.utc(2023, 1, 1),
-            lastDay: DateTime.utc(2030, 12, 31),
-            focusedDay: _focusedDay,
-            currentDay: DateTime.now(),
-            headerStyle: HeaderStyle(
-              formatButtonVisible: false,
-              titleCentered: true,
-              titleTextStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.primary),
-            ),
-            calendarFormat: CalendarFormat.month, // Month View
-            calendarStyle: CalendarStyle(
-              todayDecoration: BoxDecoration(color: cs.primary.withOpacity(0.6), shape: BoxShape.circle),
-              selectedDecoration: BoxDecoration(color: cs.primary, shape: BoxShape.circle),
-              outsideDaysVisible: false,
-              weekendTextStyle: TextStyle(color: cs.error),
-            ),
-            selectedDayPredicate: (day) {
-              return isSameDay(_selectedDay, day);
-            },
-            onDaySelected: (selectedDay, focusedDay) {
-              setState(() {
-                _selectedDay = selectedDay;
-                _focusedDay = focusedDay; 
-              });
-            },
+  
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    
+    return Scaffold(
+      extendBody: true,
+      backgroundColor: localPrimaryBackground, 
+      body: Container(
+        decoration: BoxDecoration(
+          // Subtle purple glow on the white background
+          gradient: LinearGradient(
+            colors: [
+              localPrimaryBackground,
+              localSoftAccentHighlight.withOpacity(0.3),
+              localPrimaryBackground,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
         ),
-        const SizedBox(height: 20),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            // APPLIED BIG HORIZONTAL AND TOP MARGINS
+            padding: const EdgeInsets.only(left: globalHorizontalPadding, right: globalHorizontalPadding, top: 90, bottom: 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                
+                // 1. WELCOME HEADER (NO LONGER A CARD)
+                buildWelcomeHeaderLocal(),
+                const SizedBox(height: 25), // Space after greeting
 
-        // UPCOMING SESSIONS HEADER
-        const Text(
-          'Upcoming Sessions',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
+                // 2. RIKAZ TOOL CONNECT SECTION
+                buildRikazConnectLocal(),
+                const SizedBox(height: 20),
 
-        // VIEW TOGGLE BUTTONS (NEW)
-        const SizedBox(height: 10),
-        _buildScheduleToggle(cs),
-        const SizedBox(height: 15),
-        
-        Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            // Add Session Button
-            TextButton.icon(
-              // FIX: Pass the currently selected day to the overlay
-              onPressed: () => _showEventOverlay(selectedDate: _selectedDay), 
-              icon: Icon(Icons.add_circle, color: cs.primary),
-              label: Text('Add Session', style: TextStyle(color: cs.primary)),
+                // 3. START FOCUS SESSION SECTION (NO OUTER CARD)
+                buildFocusSessionLocal(),
+                const SizedBox(height: 20),
+
+                // 4. GOOGLE CALENDAR CONNECT SECTION
+                buildGoogleConnectSectionLocal(cs),
+                const SizedBox(height: 20),
+
+
+                // 5. SCHEDULE SESSIONS SECTION (NO OUTER CARD, Custom Name)
+                buildScheduleSectionLocal(cs),
+                
+                const SizedBox(height: 50),
+              ],
             ),
-          ],
+          ),
         ),
-        
-        const SizedBox(height: 10),
-        
-        // Events List from Google Calendar
-        _displayedEvents.isEmpty // Use the filtered list
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 20.0),
-                  child: Text(
-                    _client.isConnected
-                        ? (_scheduleView == ScheduleView.rikaz 
-                            ? 'No upcoming Rikaz Focus Sessions found.' 
-                            : 'No upcoming sessions found.')
-                        : 'Connect Google Calendar to see your schedule.',
-                    style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
-                  ),
-                ),
-              )
-            : ListView.builder(
-                physics: const NeverScrollableScrollPhysics(),
-                shrinkWrap: true,
-                itemCount: _displayedEvents.length, // Use the filtered list
-                itemBuilder: (context, index) {
-                  final event = _displayedEvents[index];
-                  final startTime = event.start?.dateTime?.toLocal() ?? event.start?.date;
-                  final endTime = event.end?.dateTime?.toLocal() ?? event.end?.date;
-
-                  if (startTime == null) return const SizedBox.shrink();
-
-                  return Card(
-                    elevation: 2,
-                    margin: const EdgeInsets.only(bottom: 10),
-                    child: ListTile(
-                      tileColor: cs.surfaceContainerHighest,
-                      leading: CircleAvatar(
-                        backgroundColor: cs.primary.withOpacity(0.8),
-                        child: Text(
-                          DateFormat('d').format(startTime), 
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      title: Text(
-                        event.summary ?? 'Untitled Session',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Text(
-                        // Format for timed vs all-day events
-                        endTime != null
-                          ? '${DateFormat('MMM d, h:mm a').format(startTime)} - ${DateFormat('h:mm a').format(endTime)}'
-                          : DateFormat('MMM d, yyyy').format(startTime), // All day event
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_forever, color: Colors.red),
-                        // Opens the management overlay for deletion
-                        onPressed: () => _showEventOverlay(eventToEdit: event),
-                      ),
-                    ),
-                  );
-                },
-              ),
-      ],
+      ),
     );
   }
 }
 
 // -----------------------------------------------------------------------------
-// 5. Cute Overlay (Modal Bottom Sheet Widget for Add/Delete)
+// 5. Cute Overlay (Modal Bottom Sheet Widget for Add/Delete) - THEMED (Unchanged Functionality)
 // -----------------------------------------------------------------------------
 
 class _EventManagementOverlay extends StatefulWidget {
   final CalendarClient client;
   final calendar.Event? eventToEdit;
   final VoidCallback onEventUpdated;
-  final DateTime? initialDate; // FIX: New field to receive selected date
+  final DateTime? initialDate; 
 
   const _EventManagementOverlay({
     required this.client,
     required this.onEventUpdated,
     this.eventToEdit,
-    this.initialDate, // FIX: Receive initial date
+    this.initialDate, 
   });
 
   @override
@@ -944,7 +1024,6 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
       _startTime = TimeOfDay.fromDateTime(start);
       _endTime = TimeOfDay.fromDateTime(end);
     } else {
-      // FIX: Use the date passed from the calendar, defaulting to today if null.
       final selectedDate = widget.initialDate ?? now; 
       
       _title = '';
@@ -969,14 +1048,12 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
     if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
     
-    // We start the loading state before the conflict check
     setState(() => _isLoading = true);
     
     final startDateTime = _combineDateTime(_startDate, _startTime);
     final endDateTime = _combineDateTime(_startDate, _endTime);
     
     if (endDateTime.isBefore(startDateTime)) {
-      // FIX: Replace snackbar with AlertDialog for critical validation error
       await showDialog(
         context: context,
         builder: (context) => AlertDialog(
@@ -995,22 +1072,18 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
     }
 
     if (isEditing) {
-        // Block editing for simplicity and security. User must delete and re-add.
         _showSnackbar('Please use the delete button below to remove this session.', Colors.orange);
         setState(() => _isLoading = false);
         return;
     }
     
-    // -----------------------------------------------------
     // CONFLICT CHECK IMPLEMENTATION
-    // -----------------------------------------------------
     final hasConflict = await widget.client.checkConflicts(
       startTime: startDateTime, 
       endTime: endDateTime,
     );
 
     if (hasConflict) {
-      // Conflict found, show confirmation dialog and wait for user response
       final confirmOverride = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -1020,31 +1093,28 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(false), // Cancel
+              onPressed: () => Navigator.of(context).pop(false), 
               child: const Text('No, Cancel', style: TextStyle(color: Colors.red)),
             ),
             TextButton(
-              onPressed: () => Navigator.of(context).pop(true), // Yes, Override
+              onPressed: () => Navigator.of(context).pop(true), 
               child: const Text('Yes, Continue'),
             ),
           ],
         ),
       );
 
-      // If the user selects No/Cancel, stop the process and stop loading.
       if (confirmOverride != true) {
         setState(() => _isLoading = false);
         return;
       }
     }
-    // -----------------------------------------------------
     
-    // Proceed to create the event (either because there was no conflict or user confirmed)
+    // Proceed to create the event 
     final result = await widget.client.createEvent(
         title: _title,
         startTime: startDateTime,
         endTime: endDateTime,
-        // NEW: Tag this event as created by the Rikaz app
         isRikazSession: true, 
     );
     
@@ -1063,9 +1133,6 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
   Future<void> _handleDelete() async {
     if (!isEditing || widget.eventToEdit!.id == null) return;
     
-    // -----------------------------------------------------
-    // NEW: CONFIRMATION DIALOG FOR DELETE
-    // -----------------------------------------------------
     final confirmDelete = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -1087,11 +1154,9 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
       ),
     );
 
-    // If the user cancels deletion, stop here.
     if (confirmDelete != true) {
       return;
     }
-    // -----------------------------------------------------
 
     setState(() => _isLoading = true);
 
@@ -1119,22 +1184,49 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
       );
     }
   }
+  
+  // Custom Themed Input Decoration
+  InputDecoration _inputDecoration({required String label, required IconData icon, bool enabled = true}) {
+    final accent = primaryThemePurple;
+    return InputDecoration(
+      labelText: label,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.grey.shade300, width: 1),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: enabled ? accent.withOpacity(0.5) : Colors.grey.shade300, width: 1),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: accent, width: 2),
+      ),
+      prefixIcon: Icon(icon, color: enabled ? accent : secondaryTextGrey),
+      fillColor: enabled ? cardBackground : Colors.grey.shade100,
+      filled: true,
+      labelStyle: TextStyle(color: enabled ? primaryTextDark : secondaryTextGrey),
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {
+    final accent = primaryThemePurple;
+    
     return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      decoration: const BoxDecoration(
+        color: primaryBackground,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(cardBorderRadius)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.15),
-            blurRadius: 15,
-            spreadRadius: 5,
+            color: Colors.black12,
+            blurRadius: 10,
+            spreadRadius: 2,
           ),
         ],
       ),
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
+      padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 20),
       child: Form(
         key: _formKey,
         child: Column(
@@ -1145,15 +1237,14 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const SizedBox(width: 40), // Placeholder for balance
+                const SizedBox(width: 40), 
                 Text(
                   isEditing ? 'Delete Session' : 'Add New Session',
-                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blueGrey),
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: primaryTextDark),
                   textAlign: TextAlign.center,
                 ),
-                // The explicit "arrow" / close button
                 IconButton(
-                  icon: const Icon(Icons.close, color: Colors.grey),
+                  icon: const Icon(Icons.close, color: secondaryTextGrey),
                   onPressed: () => Navigator.pop(context),
                   tooltip: 'Close',
                 ),
@@ -1161,15 +1252,14 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
             ),
             // --- END: HEADER AND CLOSE BUTTON ---
 
-            const Divider(height: 20),
+            const Divider(height: 20, color: Colors.grey),
             
             // Title Field
             TextFormField(
               initialValue: isEditing ? _title : null,
-              decoration: InputDecoration(
-                labelText: 'Session Title',
-                border: const OutlineInputBorder(),
-                prefixIcon: const Icon(Icons.title),
+              decoration: _inputDecoration(
+                label: 'Session Title',
+                icon: Icons.title,
                 enabled: !isEditing,
               ),
               validator: (value) => value == null || value.isEmpty ? 'Title is required' : null,
@@ -1180,9 +1270,10 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
 
             // Date Picker (Disabled when editing/deleting)
             ListTile(
+              contentPadding: EdgeInsets.zero,
               title: const Text('Date'),
-              trailing: Text(DateFormat('MMM dd, yyyy').format(_startDate)),
-              leading: const Icon(Icons.calendar_today, color: Color(0xFF6E5DE7)),
+              trailing: Text(DateFormat('MMM dd, yyyy').format(_startDate), style: const TextStyle(fontWeight: FontWeight.w600)),
+              leading: Icon(Icons.calendar_today, color: accent),
               onTap: isEditing ? null : () async {
                 final date = await showDatePicker(
                   context: context,
@@ -1194,15 +1285,17 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
               },
               enabled: !isEditing,
             ),
+            const Divider(),
 
             // Time Pickers (Disabled when editing/deleting)
             Row(
               children: [
                 Expanded(
                   child: ListTile(
+                    contentPadding: EdgeInsets.zero,
                     title: const Text('Start Time'),
-                    trailing: Text(_startTime.format(context)),
-                    leading: const Icon(Icons.schedule, color: Color(0xFF4f46e5)),
+                    trailing: Text(_startTime.format(context), style: const TextStyle(fontWeight: FontWeight.w600)),
+                    leading: Icon(Icons.schedule, color: accent),
                     onTap: isEditing ? null : () async {
                       final time = await showTimePicker(context: context, initialTime: _startTime);
                       if (time != null) setState(() => _startTime = time);
@@ -1212,9 +1305,10 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                 ),
                 Expanded(
                   child: ListTile(
+                    contentPadding: EdgeInsets.zero,
                     title: const Text('End Time'),
-                    trailing: Text(_endTime.format(context)),
-                    leading: const Icon(Icons.schedule, color: Color(0xFF4f46e5)),
+                    trailing: Text(_endTime.format(context), style: const TextStyle(fontWeight: FontWeight.w600)),
+                    leading: Icon(Icons.schedule, color: accent),
                     onTap: isEditing ? null : () async {
                       final time = await showTimePicker(context: context, initialTime: _endTime);
                       if (time != null) setState(() => _endTime = time);
@@ -1224,13 +1318,13 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                 ),
               ],
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 30),
 
             // Action Buttons
             _isLoading
-                ? const Center(child: Padding(
-                    padding: EdgeInsets.all(10.0),
-                    child: CircularProgressIndicator()))
+                ? Center(child: Padding(
+                    padding: const EdgeInsets.all(10.0),
+                    child: CircularProgressIndicator(color: accent)))
                 : Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
@@ -1242,10 +1336,10 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                             icon: const Icon(Icons.add, color: Colors.white),
                             label: const Text('Add Session'),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Theme.of(context).colorScheme.primary,
+                              backgroundColor: accent,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 15),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
                           ),
                         ),
@@ -1255,13 +1349,13 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                         Expanded(
                           child: ElevatedButton.icon(
                             onPressed: _handleDelete,
-                            icon: const Icon(Icons.delete, color: Colors.red),
+                            icon: const Icon(Icons.delete, color: Colors.white),
                             label: const Text('Delete Session', style: TextStyle(color: Colors.white)),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.red.shade600,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 15),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
                           ),
                         ),
@@ -1272,7 +1366,7 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                       Expanded(
                         child: TextButton(
                           onPressed: () => Navigator.pop(context),
-                          child: Text(isEditing ? 'Close' : 'Cancel', style: TextStyle(color: Colors.grey.shade600)),
+                          child: Text(isEditing ? 'Close' : 'Cancel', style: TextStyle(color: secondaryTextGrey)),
                         ),
                       ),
                     ],

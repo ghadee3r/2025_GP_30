@@ -18,7 +18,7 @@ const Color cardBackground = Color(0xFFFFFFFF);
 const double cardBorderRadius = 24.0; 
 const double globalHorizontalPadding = 42.5; 
 
-// Subtle shadow for the floating effect (Purple-tinted) - Only used for active selections
+// Subtle shadow for the floating effect (Purple-tinted) - Used for Pomodoro options
 List<BoxShadow> get subtleShadow => [
       BoxShadow(
         color: const Color.fromARGB(255, 155, 141, 255).withOpacity(0.4),
@@ -26,6 +26,15 @@ List<BoxShadow> get subtleShadow => [
         offset: const Offset(0, 10),
       ),
     ];
+
+// Shadow for unselected/inner cards
+List<BoxShadow> get cardShadow => [
+    BoxShadow(
+        color: Colors.black.withOpacity(0.05),
+        offset: const Offset(0, 5),
+        blurRadius: 10,
+    ),
+];
 
 // Define Presets for the Dropdown
 const List<String> toolPresets = [
@@ -35,50 +44,62 @@ const List<String> toolPresets = [
     'Quiet Office (Light only)',
 ];
 
+// Enum to manage the session configuration mode
+enum SessionMode { pomodoro, custom }
+
 // =============================================================================
-// REFACTORED POMODORO PAGE
+// MERGED FOCUS CONFIGURATION PAGE (SetSessionPage)
 // =============================================================================
 
-class PomodoroPage extends StatefulWidget {
-    const PomodoroPage({super.key});
+class SetSessionPage extends StatefulWidget {
+    // MODIFIED: Accepts an optional initial mode from the previous page
+    final SessionMode? initialMode;
+
+    const SetSessionPage({super.key, this.initialMode});
 
     @override
-    State<PomodoroPage> createState() => _PomodoroPageState();
+    State<SetSessionPage> createState() => _SetSessionPageState();
 }
 
-class _PomodoroPageState extends State<PomodoroPage> {
-    String duration = '25min';
+class _SetSessionPageState extends State<SetSessionPage> {
+    // Session State
+    // MODIFIED: Initialize state from widget.initialMode, defaulting to pomodoro
+    late SessionMode sessionMode;
+
+    // Pomodoro State
+    String pomodoroDuration = '25min';
     double numberOfBlocks = 4;
+
+    // Custom State
+    double customDuration = 70; // Default between 25 and 120
+
+    // Configuration State (Shared)
     bool isConfigurationOpen = false;
     bool isCameraDetectionEnabled = true;
     double sensitivity = 0.5;
     String notificationStyle = 'Both';
     String selectedPreset = toolPresets.first;
+    bool isLoading = false;
 
-    // Local theme variables for easy access
+
+    // Local theme variables
     final Color primaryColor = primaryThemePurple;
     final Color darkText = primaryTextDark;
     final Color lightText = secondaryTextGrey;
     final double radius = cardBorderRadius / 2;
-    // Target Blue Color
     final Color blueText = hpDeepBlue;
-    
-    // Custom shadow for cards
-    final List<BoxShadow> cardShadow = [
-        BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            offset: const Offset(0, 5),
-            blurRadius: 10,
-        ),
-    ];
 
 
     @override
     void initState() {
         super.initState();
+        // INITIALIZATION CHANGE: Set sessionMode based on the passed argument
+        sessionMode = widget.initialMode ?? SessionMode.pomodoro;
+
         _applyPreset(selectedPreset);
     }
 
+    // Applies settings from the tool preset dropdown
     void _applyPreset(String preset) {
         if (preset == 'Aggressive Focus (High Sensitivity)') {
             isCameraDetectionEnabled = true;
@@ -103,15 +124,18 @@ class _PomodoroPageState extends State<PomodoroPage> {
         }
     }
 
+    void handleStartSessionPress() {
+        final String sessionType = sessionMode == SessionMode.pomodoro ? 'pomodoro' : 'custom';
+        final String durationValue = sessionMode == SessionMode.pomodoro ? pomodoroDuration : customDuration.toInt().toString();
+        final String? blocks = sessionMode == SessionMode.pomodoro ? numberOfBlocks.toInt().toString() : null;
 
-    void handleStartPomodoroPress() {
         Navigator.pushNamed(
             context,
             '/session',
             arguments: {
-                'sessionType': 'pomodoro',
-                'duration': duration,
-                'numberOfBlocks': numberOfBlocks.toInt().toString(),
+                'sessionType': sessionType,
+                'duration': durationValue,
+                'numberOfBlocks': blocks,
                 'isCameraDetectionEnabled': isCameraDetectionEnabled,
                 'sensitivity': sensitivity,
                 'notificationStyle': notificationStyle,
@@ -119,11 +143,13 @@ class _PomodoroPageState extends State<PomodoroPage> {
         );
     }
     
-    // Themed Duration Option Widget
-    Widget _durationOption(String label, String breakText) {
-        final isSelected = duration == label;
+    // --- UI Component Builders ---
+
+    // Themed Duration Option Widget (Used only in Pomodoro Mode)
+    Widget _pomodoroDurationOption(String label, String breakText) {
+        final isSelected = pomodoroDuration == label;
         return GestureDetector(
-            onTap: () => setState(() => duration = label),
+            onTap: () => setState(() => pomodoroDuration = label),
             child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 margin: const EdgeInsets.only(bottom: 15),
@@ -152,8 +178,112 @@ class _PomodoroPageState extends State<PomodoroPage> {
             ),
         );
     }
+    
+    // Number of Blocks Slider (Used only in Pomodoro Mode)
+    Widget _pomodoroBlocksSlider() {
+        return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+                Text('Number of Blocks',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: darkText)),
+                const SizedBox(height: 15),
+                Container(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    decoration: BoxDecoration(
+                        color: softCyan.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(radius),
+                        border: Border.all(color: Colors.grey.shade200),
+                        boxShadow: cardShadow,
+                    ),
+                    child: Column(
+                        children: [
+                            Center(
+                                child: Text(
+                                    numberOfBlocks.toInt().toString(),
+                                    style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: blueText),
+                                ),
+                            ),
+                            Slider(
+                                value: numberOfBlocks,
+                                min: 1,
+                                max: 8,
+                                divisions: 7,
+                                label: '${numberOfBlocks.toInt()}',
+                                onChanged: (v) => setState(() => numberOfBlocks = v),
+                                activeColor: blueText, 
+                                inactiveColor: softAccentHighlight,
+                            ),
+                            Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+                                child: Text(
+                                    'One block = one focus session followed by its break.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(fontSize: 14, color: lightText),
+                                ),
+                            ),
+                        ],
+                    ),
+                ),
+            ],
+        );
+    }
 
-    // Themed Configuration Menu Widget
+    // Custom Duration Slider (Used only in Custom Mode)
+    Widget _customDurationSlider() {
+        return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+                Text('Session Duration',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: darkText)),
+                const SizedBox(height: 15),
+                Container(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    decoration: BoxDecoration(
+                        color: softCyan.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(radius),
+                        border: Border.all(color: Colors.grey.shade200),
+                        boxShadow: cardShadow,
+                    ),
+                    child: Column(
+                        children: [
+                            Center(
+                                child: Text(
+                                    '${customDuration.toInt()}:00',
+                                    style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: hpDeepBlue),
+                                ),
+                            ),
+                            Text('No Breaks',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: 16, color: lightText)),
+                            Slider(
+                                value: customDuration,
+                                min: 25,
+                                max: 120,
+                                divisions: (120 - 25), // 95 divisions
+                                label: '${customDuration.toInt()} min',
+                                onChanged: (v) => setState(() => customDuration = v),
+                                activeColor: hpDeepBlue,
+                                inactiveColor: softAccentHighlight,
+                            ),
+                            Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 20),
+                                child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                        Text('25 Minutes', style: TextStyle(fontSize: 12, color: lightText)),
+                                        Text('120 Minutes', style: TextStyle(fontSize: 12, color: lightText)),
+                                    ],
+                                ),
+                            ),
+                        ],
+                    ),
+                ),
+            ],
+        );
+    }
+
+
+    // Themed Configuration Menu Widget (Shared)
     Widget _configurationMenu() {
         return Container(
             padding: const EdgeInsets.all(20),
@@ -203,7 +333,7 @@ class _PomodoroPageState extends State<PomodoroPage> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Camera Switch
+                    // Camera Switch (Themed)
                     Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -213,7 +343,7 @@ class _PomodoroPageState extends State<PomodoroPage> {
                                 onChanged: (v) {
                                     setState(() {
                                         isCameraDetectionEnabled = v;
-                                        selectedPreset = toolPresets.first; // Custom setting
+                                        selectedPreset = toolPresets.first;
                                     });
                                 },
                                 activeColor: primaryColor,
@@ -223,7 +353,7 @@ class _PomodoroPageState extends State<PomodoroPage> {
                     ),
                     const SizedBox(height: 15),
 
-                    // Triggers (Themed dummy boxes)
+                    // Triggers (Themed)
                     Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -247,7 +377,7 @@ class _PomodoroPageState extends State<PomodoroPage> {
                     ),
                     const SizedBox(height: 15),
 
-                    // Sensitivity Slider
+                    // Sensitivity Slider (Themed)
                     Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -261,15 +391,11 @@ class _PomodoroPageState extends State<PomodoroPage> {
                                             min: 0,
                                             max: 1,
                                             divisions: 2,
-                                            label: sensitivity == 0
-                                                ? 'Low'
-                                                : sensitivity == 0.5
-                                                    ? 'Medium'
-                                                    : 'High',
+                                            label: sensitivity == 0 ? 'Low' : sensitivity == 0.5 ? 'Medium' : 'High',
                                             onChanged: (v) {
                                                 setState(() {
                                                     sensitivity = v;
-                                                    selectedPreset = toolPresets.first; // Custom setting
+                                                    selectedPreset = toolPresets.first;
                                                 });
                                             },
                                             activeColor: primaryColor,
@@ -283,7 +409,7 @@ class _PomodoroPageState extends State<PomodoroPage> {
                     ),
                     const SizedBox(height: 15),
 
-                    // Notification Style Radios
+                    // Notification Style Radios (Themed)
                     Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -297,7 +423,7 @@ class _PomodoroPageState extends State<PomodoroPage> {
                                         onTap: () {
                                             setState(() {
                                                 notificationStyle = option;
-                                                selectedPreset = toolPresets.first; // Custom setting
+                                                selectedPreset = toolPresets.first;
                                             });
                                         },
                                         child: Row(
@@ -308,10 +434,8 @@ class _PomodoroPageState extends State<PomodoroPage> {
                                                     margin: const EdgeInsets.only(right: 5),
                                                     decoration: BoxDecoration(
                                                         shape: BoxShape.circle,
-                                                        border: Border.all(
-                                                            color: isSelected ? primaryColor : Colors.grey),
-                                                        color:
-                                                            isSelected ? primaryColor : Colors.transparent,
+                                                        border: Border.all(color: isSelected ? primaryColor : Colors.grey),
+                                                        color: isSelected ? primaryColor : Colors.transparent,
                                                     ),
                                                 ),
                                                 Text(option, style: TextStyle(color: darkText)),
@@ -330,8 +454,9 @@ class _PomodoroPageState extends State<PomodoroPage> {
 
     @override
     Widget build(BuildContext context) {
+        // --- NOTE: When using the initialMode from the constructor, the app bar title 
+        // and session title will correctly reflect the selection from the home page.
         return Scaffold(
-            // Use AppBar for the back button and title
             appBar: AppBar(
                 backgroundColor: primaryBackground,
                 elevation: 0,
@@ -350,8 +475,7 @@ class _PomodoroPageState extends State<PomodoroPage> {
                 child: Stack(
                     children: [
                         SingleChildScrollView(
-                            // Reduced top padding as AppBar is now present
-                            padding: const EdgeInsets.only(
+                            padding: EdgeInsets.only(
                                 left: globalHorizontalPadding,
                                 right: globalHorizontalPadding,
                                 top: 0, 
@@ -360,74 +484,46 @@ class _PomodoroPageState extends State<PomodoroPage> {
                             child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                    // Header - Simplified
-                                    Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                            const SizedBox(height: 10),
-                                            Text('Pomodoro Session',
-                                                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: hpDeepBlue)),
-                                            Text('Configure your structured focus routine',
-                                                style: TextStyle(fontSize: 16, color: secondaryTextGrey)),
-                                        ],
+                                    const SizedBox(height: 10),
+                                    // Dynamic Header based on selected mode
+                                    Text(
+                                        sessionMode == SessionMode.pomodoro ? 'Pomodoro Session' : 'Custom Session',
+                                        style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: hpDeepBlue)),
+                                    Text(
+                                        sessionMode == SessionMode.pomodoro ? 'Configure your structured focus routine' : 'Set your own uninterrupted timing',
+                                        style: TextStyle(fontSize: 16, color: secondaryTextGrey)),
+                                    const SizedBox(height: 30),
+
+                                    // MODE TOGGLE BUTTONS (Now correctly reflects initial selection)
+                                    _buildModeToggle(),
+                                    const SizedBox(height: 30),
+
+                                    // CONDITIONAL DURATION SECTION
+                                    AnimatedSwitcher(
+                                        duration: const Duration(milliseconds: 300),
+                                        child: (sessionMode == SessionMode.pomodoro)
+                                            ? Column(
+                                                key: const ValueKey(SessionMode.pomodoro),
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                    Text('Duration Options',
+                                                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: darkText)),
+                                                    const SizedBox(height: 15),
+                                                    _pomodoroDurationOption('25min', '+ 5 min break'),
+                                                    _pomodoroDurationOption('50min', '+ 10 min break'),
+                                                    const SizedBox(height: 30),
+                                                    _pomodoroBlocksSlider(),
+                                                ],
+                                            )
+                                            : Column(
+                                                key: const ValueKey(SessionMode.custom),
+                                                children: [_customDurationSlider()],
+                                            ),
                                     ),
+                                    
                                     const SizedBox(height: 30),
 
-                                    // Duration Options
-                                    Text('Duration Options',
-                                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: darkText)),
-                                    const SizedBox(height: 15),
-                                    _durationOption('25min', '+ 5 min break'),
-                                    _durationOption('50min', '+ 10 min break'),
-
-                                    const SizedBox(height: 30),
-
-                                    // Number of Blocks
-                                    Text('Number of Blocks',
-                                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: darkText)),
-                                    const SizedBox(height: 15),
-                                    Container(
-                                        padding: const EdgeInsets.symmetric(vertical: 20),
-                                        decoration: BoxDecoration(
-                                            color: softCyan.withOpacity(0.5),
-                                            borderRadius: BorderRadius.circular(radius),
-                                            border: Border.all(color: Colors.grey.shade200),
-                                            boxShadow: cardShadow,
-                                        ),
-                                        child: Column(
-                                            children: [
-                                                Center(
-                                                    child: Text(
-                                                        numberOfBlocks.toInt().toString(),
-                                                        // CHANGED: Font color to hpDeepBlue
-                                                        style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: blueText),
-                                                    ),
-                                                ),
-                                                Slider(
-                                                    value: numberOfBlocks,
-                                                    min: 1,
-                                                    max: 8,
-                                                    divisions: 7,
-                                                    label: '${numberOfBlocks.toInt()}',
-                                                    onChanged: (v) => setState(() => numberOfBlocks = v),
-                                                    // CHANGED: Active slider color to hpDeepBlue
-                                                    activeColor: blueText, 
-                                                    inactiveColor: softAccentHighlight,
-                                                ),
-                                                Padding(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
-                                                    child: Text(
-                                                        'One block = one focus session followed by its break.',
-                                                        textAlign: TextAlign.center,
-                                                        style: TextStyle(fontSize: 14, color: lightText),
-                                                    ),
-                                                ),
-                                            ],
-                                        ),
-                                    ),
-                                    const SizedBox(height: 30),
-
-                                    // Configuration dropdown toggle (Shadow previously removed)
+                                    // CONFIGURATION TOGGLE
                                     GestureDetector(
                                         onTap: () => setState(() => isConfigurationOpen = !isConfigurationOpen),
                                         child: Container(
@@ -449,7 +545,7 @@ class _PomodoroPageState extends State<PomodoroPage> {
                                         ),
                                     ),
                                     
-                                    // Configuration Content (Animated)
+                                    // Configuration Content
                                     AnimatedSwitcher(
                                         duration: const Duration(milliseconds: 300),
                                         transitionBuilder: (Widget child, Animation<double> animation) {
@@ -464,7 +560,7 @@ class _PomodoroPageState extends State<PomodoroPage> {
                                                 padding: const EdgeInsets.only(top: 10),
                                                 child: _configurationMenu(),
                                               )
-                                            : const SizedBox.shrink(key: ValueKey('ConfigClosed')),
+                                            : const SizedBox.shrink(key: const ValueKey('ConfigClosed')),
                                     ),
                                 ],
                             ),
@@ -476,7 +572,7 @@ class _PomodoroPageState extends State<PomodoroPage> {
                             right: globalHorizontalPadding,
                             bottom: 20,
                             child: ElevatedButton(
-                                onPressed: handleStartPomodoroPress,
+                                onPressed: isLoading ? null : handleStartSessionPress,
                                 style: ElevatedButton.styleFrom(
                                     backgroundColor: primaryColor,
                                     shape: RoundedRectangleBorder(
@@ -485,14 +581,72 @@ class _PomodoroPageState extends State<PomodoroPage> {
                                     elevation: 8,
                                     shadowColor: primaryColor.withOpacity(0.6),
                                 ),
-                                child: const Text(
-                                    'Start Session',
-                                    style: TextStyle(
-                                        color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                                ),
+                                child: isLoading
+                                    ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                    : const Text(
+                                        'Start Session',
+                                        style: TextStyle(
+                                            color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                                    ),
                             ),
                         ),
                     ],
+                ),
+            ),
+        );
+    }
+    
+    Widget _buildModeToggle() {
+        return Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+                color: softAccentHighlight.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+                children: [
+                    _toggleButton(SessionMode.pomodoro, 'Pomodoro', Icons.timer),
+                    const SizedBox(width: 8),
+                    _toggleButton(SessionMode.custom, 'Custom Focus', Icons.tune),
+                ],
+            ),
+        );
+    }
+
+    Widget _toggleButton(SessionMode mode, String text, IconData icon) {
+        final isSelected = sessionMode == mode;
+        final selectedColor = primaryColor;
+        final unselectedColor = secondaryTextGrey;
+
+        return Expanded(
+            child: GestureDetector(
+                onTap: () => setState(() {
+                    sessionMode = mode;
+                    // Keep existing durations when switching modes
+                }),
+                child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                        color: isSelected ? cardBackground : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: isSelected ? [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4)] : null,
+                    ),
+                    child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                            Icon(icon, size: 20, color: isSelected ? selectedColor : unselectedColor),
+                            const SizedBox(width: 8),
+                            Text(
+                                text,
+                                style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                    color: isSelected ? selectedColor : unselectedColor,
+                                ),
+                            ),
+                        ],
+                    ),
                 ),
             ),
         );
