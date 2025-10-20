@@ -5,7 +5,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/calendar/v3.dart' as calendar;
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
 import 'package:intl/intl.dart';
-import 'package:table_calendar/table_calendar.dart'; 
+import 'package:table_calendar/table_calendar.dart';
 
 // Enum to manage the user's schedule view preference
 enum ScheduleView { all, rikaz }
@@ -23,18 +23,18 @@ const Color softAccentHighlight = Color(0xFFE9E5FF); // Lightest purple for sele
 const Color hpDeepBlue = Color.fromARGB(255, 24, 114, 150); // Exact shade for "Good Evening" and key text
 const Color hpThinBlack = Color(0xFF1E1E1E); // Thin black for names
 
-const Color primaryTextDark = Color(0xFF30304D); 
-const Color secondaryTextGrey = Color(0xFF8C8C99); 
+const Color primaryTextDark = Color(0xFF30304D);
+const Color secondaryTextGrey = Color(0xFF8C8C99);
 
 // Soft Pastel Accent Colors for diversity
 const Color softLavender = Color(0xFFE9E5FF); // Used for Google Connect background
-const Color softCyan = Color(0xFFE8F8FF);    // Used for Mode Selection backgrounds (light cyan)
+const Color softCyan = Color(0xFFE8F8FF); // Used for Mode Selection backgrounds (light cyan)
 
 const Color primaryBackground = Color(0xFFFFFFFF); // Pure white background
 const Color cardBackground = Color(0xFFFFFFFF); // Pure white for card surfaces
 
 const double cardBorderRadius = 24.0; // Highly rounded corners
-const double globalHorizontalPadding = 42.5; // Increased side margins
+// REMOVED: const double globalHorizontalPadding = 42.5; // Will be proportional
 
 // Subtle shadow for the floating effect (Purple-tinted)
 List<BoxShadow> get subtleShadow => [
@@ -49,9 +49,9 @@ List<BoxShadow> get subtleShadow => [
 // -----------------------------------------------------------------------------
 // 2. API Client Setup (Functionality Unchanged)
 // -----------------------------------------------------------------------------
-
+// ... (CalendarClient class is unchanged - omitted for brevity)
 const List<String> _scopes = <String>[
-  'https://www.googleapis.com/auth/calendar', 
+  'https://www.googleapis.com/auth/calendar',
   'email',
 ];
 
@@ -67,7 +67,7 @@ class CalendarClient {
       if (googleUser == null) return false;
 
       final authenticatedClient = await _googleSignIn.authenticatedClient();
-      
+
       if (authenticatedClient != null) {
         calendarApi = calendar.CalendarApi(authenticatedClient);
         return true;
@@ -78,7 +78,7 @@ class CalendarClient {
       return false;
     }
   }
-  
+
   Future<void> signOut() async {
     await _googleSignIn.signOut();
     calendarApi = null;
@@ -86,7 +86,7 @@ class CalendarClient {
 
   // Checks for conflicting events (Free/Busy API)
   Future<bool> checkConflicts({
-    required DateTime startTime, 
+    required DateTime startTime,
     required DateTime endTime
   }) async {
     if (calendarApi == null) return false;
@@ -101,12 +101,12 @@ class CalendarClient {
 
     try {
       final response = await calendarApi!.freebusy.query(query);
-      
+
       final busyTimes = response.calendars?['primary']?.busy;
       return busyTimes != null && busyTimes.isNotEmpty;
     } catch (e) {
       debugPrint('Error checking calendar conflicts: $e');
-      return false; 
+      return false;
     }
   }
 
@@ -114,20 +114,20 @@ class CalendarClient {
   // Fetches upcoming events from the user's primary calendar
   Future<List<calendar.Event>> fetchUpcomingEvents() async {
     if (calendarApi == null) return [];
-    
+
     final now = DateTime.now().toUtc();
     final thirtyDaysFromNow = now.add(const Duration(days: 30)).toUtc();
 
     try {
       final events = await calendarApi!.events.list(
         'primary',
-        maxResults: 20, 
-        timeMin: now, 
-        timeMax: thirtyDaysFromNow, 
+        maxResults: 20,
+        timeMin: now,
+        timeMax: thirtyDaysFromNow,
         singleEvents: true,
         orderBy: 'startTime',
       );
-      
+
       return events.items?.where((e) => e.summary != null && e.start != null).toList() ?? [];
     } catch (e) {
       debugPrint('Error fetching events: $e');
@@ -140,7 +140,7 @@ class CalendarClient {
     required String title,
     required DateTime startTime,
     required DateTime endTime,
-    bool isRikazSession = false, 
+    bool isRikazSession = false,
   }) async {
     if (calendarApi == null) return null;
 
@@ -148,8 +148,8 @@ class CalendarClient {
       summary: title,
       start: calendar.EventDateTime(dateTime: startTime.toUtc(), timeZone: 'UTC'),
       end: calendar.EventDateTime(dateTime: endTime.toUtc(), timeZone: 'UTC'),
-      extendedProperties: isRikazSession 
-          ? calendar.EventExtendedProperties(private: {'isRikazSession': 'true'}) 
+      extendedProperties: isRikazSession
+          ? calendar.EventExtendedProperties(private: {'isRikazSession': 'true'})
           : null,
     );
 
@@ -175,6 +175,8 @@ class CalendarClient {
     }
   }
 }
+// -----------------------------------------------------------------------------
+
 
 // -----------------------------------------------------------------------------
 // 3. Main Page Widget (HomePage)
@@ -184,28 +186,28 @@ class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState(); 
+  State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with WidgetsBindingObserver { 
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   // Calendar API State and Client
   final CalendarClient _client = CalendarClient();
   bool _isCalendarConnected = false;
   bool _isSigningIn = false;
-  List<calendar.Event> _events = []; 
-  List<calendar.Event> _displayedEvents = []; 
-  ScheduleView _scheduleView = ScheduleView.all; 
+  List<calendar.Event> _events = [];
+  List<calendar.Event> _displayedEvents = [];
+  ScheduleView _scheduleView = ScheduleView.all;
 
   // Calendar UI State for table_calendar
   DateTime _focusedDay = DateTime.now();
-  DateTime _selectedDay = DateTime.now(); 
+  DateTime _selectedDay = DateTime.now();
 
   // Existing Focus State
   String selectedPreset = 'Choose Preset';
-  int? selectedModeIndex; 
-  
-  bool isRikazToolConnected = false; 
-  bool isLoading = false; 
+  int? selectedModeIndex;
+
+  bool isRikazToolConnected = false;
+  bool isLoading = false;
 
   static const List<String> presets = [
     'Deep Work',
@@ -223,7 +225,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       'desc': 'Set your own duration',
     },
   ];
-  
+
   // Class-level fields for theme constants
   final Color localPrimaryThemePurple = primaryThemePurple;
   final Color localSecondaryThemeBlue = secondaryThemeBlue;
@@ -234,13 +236,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final Color localCardBackground = cardBackground;
   final Color localSoftLavender = softLavender;
   final Color localSoftCyan = softCyan;
-  final Color localSoftPeach = const Color(0xFFFFEEEA); 
+  final Color localSoftPeach = const Color(0xFFFFEEEA);
 
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this); 
+    WidgetsBinding.instance.addObserver(this);
 
     _client._googleSignIn.onCurrentUserChanged.listen((GoogleSignInAccount? account) {
       if (account != null) {
@@ -256,10 +258,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     });
     _client._googleSignIn.signInSilently();
   }
-  
+
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this); 
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -293,24 +295,24 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() {
       _scheduleView = view;
     });
-    _fetchSchedule(); 
+    _fetchSchedule();
   }
 
   Future<void> _fetchSchedule() async {
     if (!_client.isConnected) {
       if (mounted) setState(() {
-          _events = [];
-          _displayedEvents = [];
+        _events = [];
+        _displayedEvents = [];
       });
       return;
     }
-    
+
     final fetchedEvents = await _client.fetchUpcomingEvents();
     if (mounted) {
-        setState(() {
-          _events = fetchedEvents;
-          _filterEvents(); 
-        });
+      setState(() {
+        _events = fetchedEvents;
+        _filterEvents();
+      });
     }
   }
 
@@ -318,34 +320,34 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (_isCalendarConnected) return;
 
     setState(() { _isSigningIn = true; });
-    
+
     final success = await _client.signIn();
-    
+
     setState(() {
       _isCalendarConnected = success;
       _isSigningIn = false;
     });
 
     if (success) {
-      await _fetchSchedule(); 
+      await _fetchSchedule();
       _showSnackbar('Successfully connected to Google Calendar!', Colors.green);
     } else {
       _showSnackbar('Connection failed or cancelled. Check network.', Colors.red);
     }
   }
-  
+
   Future<void> _handleCalendarSignOut() async {
     await _client.signOut();
     setState(() {
       _isCalendarConnected = false;
       _events = [];
-      _displayedEvents = []; 
+      _displayedEvents = [];
     });
     _showSnackbar('Disconnected from Google.', Colors.blueGrey);
   }
 
   Future<void> handleConnect() async {
-    setState(() => isLoading = true); 
+    setState(() => isLoading = true);
     await Future.delayed(const Duration(seconds: 2));
     if (!mounted) return;
     setState(() {
@@ -354,16 +356,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     });
   }
 
-void handleSetSession() {
-    // We no longer need to check selectedModeIndex or selectedTitle,
-    // as all session configuration is now handled by the unified page.
-    
-    // final selectedTitle = modes[selectedModeIndex!]['title']!;
-    // final routeName = (selectedTitle == 'Pomodoro Mode') ? '/pomodoro' : '/custom';
-    
+  void handleSetSession() {
     // Navigate directly to the unified SetSessionPage
     Navigator.of(context).pushNamed('/setsession');
-}
+  }
 
 
   void _showSnackbar(String message, Color color) {
@@ -380,22 +376,22 @@ void handleSetSession() {
 
   void _showEventOverlay({calendar.Event? eventToEdit, DateTime? selectedDate}) {
     if (!_client.isConnected) {
-        _showSnackbar('Please connect to Google Calendar first.', Colors.red);
-        return;
+      _showSnackbar('Please connect to Google Calendar first.', Colors.red);
+      return;
     }
-    
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent, 
+      backgroundColor: Colors.transparent,
       builder: (context) {
         return Padding(
           padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
           child: _EventManagementOverlay(
             client: _client,
             eventToEdit: eventToEdit,
-            onEventUpdated: _fetchSchedule, 
-            initialDate: selectedDate, 
+            onEventUpdated: _fetchSchedule,
+            initialDate: selectedDate,
           ),
         );
       },
@@ -403,230 +399,268 @@ void handleSetSession() {
   }
 
   // ---------------------------------------------------------------------------
-  // THEMED UI SECTIONS (Now using class-level color fields)
+  // THEMED UI SECTIONS (MADE FLEXIBLE)
   // ---------------------------------------------------------------------------
-  
+
   Widget buildWelcomeHeaderLocal() {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            'Good Evening,',
-            style: TextStyle(
-              fontSize: 36,
-              fontWeight: FontWeight.w700,
-              color: hpDeepBlue,
+    // Get screen dimensions for proportional sizing
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Good Evening,',
+              style: TextStyle(
+                // FLEXIBLE FONT SIZE
+                fontSize: screenWidth * 0.085, // Proportional to screen width
+                fontWeight: FontWeight.w700,
+                color: hpDeepBlue,
+              ),
             ),
+          ],
+        ),
+        // FLEXIBLE HEIGHT
+        SizedBox(height: screenHeight * 0.005),
+        Text(
+          'UserName !',
+          style: TextStyle(
+            // FLEXIBLE FONT SIZE
+            fontSize: screenWidth * 0.075, // Proportional to screen width
+            fontWeight: FontWeight.w400,
+            color: hpThinBlack,
           ),
-        ],
-      ),
-      const SizedBox(height: 4),
-      Text(
-        'UserName !',
-        style: TextStyle(
-          fontSize: 32,
-          fontWeight: FontWeight.w400,
-          color: hpThinBlack,
         ),
-      ),
-      const SizedBox(height: 8), // slightly smaller gap
-      Text(
-        'Are you ready for a productive day?',
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w400,
-          color: const Color.fromARGB(255, 129, 129, 129),
-          
+        // FLEXIBLE HEIGHT
+        SizedBox(height: screenHeight * 0.01), // slightly smaller gap
+        Text(
+          'Are you ready for a productive day?',
+          style: TextStyle(
+            // FLEXIBLE FONT SIZE
+            fontSize: screenWidth * 0.035,
+            fontWeight: FontWeight.w400,
+            color: const Color.fromARGB(255, 129, 129, 129),
+
+          ),
         ),
-      ),
-      const SizedBox(height: 20),
-    ],
-  );
-}
-  
+        // FLEXIBLE HEIGHT
+        SizedBox(height: screenHeight * 0.025),
+      ],
+    );
+  }
+
   Widget buildRikazConnectLocal() {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
     final statusColor = isRikazToolConnected ? Colors.green.shade600 : localPrimaryThemePurple;
-    
+
     return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.only(top: 8, bottom: 20), 
+      // FLEXIBLE PADDING
+      padding: EdgeInsets.all(screenWidth * 0.04),
+      // FLEXIBLE MARGIN
+      margin: EdgeInsets.only(top: screenHeight * 0.01, bottom: screenHeight * 0.025),
       decoration: BoxDecoration(
-        color: localCardBackground, 
+        color: localCardBackground,
         borderRadius: BorderRadius.circular(cardBorderRadius),
         boxShadow: subtleShadow, // Minimal elevation/shadow
         border: Border.all(color: Colors.grey.shade100, width: 1.0),
       ),
       child: isRikazToolConnected
           ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Rikaz Tools Connected',
-                    style: TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold, color: statusColor)),
-                const SizedBox(height: 8),
-                Text('Custom presets and features unlocked.',
-                    style: TextStyle(fontSize: 14, color: localSecondaryTextGrey)), 
-              ],
-            )
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Rikaz Tools Connected',
+              style: TextStyle(
+                  // FLEXIBLE FONT SIZE
+                  fontSize: screenWidth * 0.045, fontWeight: FontWeight.bold, color: statusColor)),
+          // FLEXIBLE HEIGHT
+          SizedBox(height: screenHeight * 0.01),
+          Text('Custom presets and features unlocked.',
+              style: TextStyle(fontSize: screenWidth * 0.035, color: localSecondaryTextGrey)),
+        ],
+      )
           : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Connect Rikaz Tools',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: localPrimaryTextDark)), 
-                const SizedBox(height: 6),
-                Text(
-                    'Connect to unlock custom presets and advanced features',
-                    style: TextStyle(fontSize: 14, color: localSecondaryTextGrey)), 
-                const SizedBox(height: 15),
-                SlideAction(
-                  text: "Slide to Connect",
-                  textStyle: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white),
-                  innerColor: localCardBackground, 
-                  outerColor: localPrimaryThemePurple.withOpacity(0.9), // Primary Purple for slider
-                  sliderButtonIcon:
-                      Icon(Icons.wifi, color: localPrimaryTextDark, size: 18),
-                  height: 45, 
-                  borderRadius: cardBorderRadius, 
-                  onSubmit: () async {
-                    await handleConnect();
-                    return null;
-                  },
-                ),
-              ],
-            ),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Connect Rikaz Tools',
+              style: TextStyle(
+                  // FLEXIBLE FONT SIZE
+                  fontSize: screenWidth * 0.045, fontWeight: FontWeight.bold, color: localPrimaryTextDark)),
+          // FLEXIBLE HEIGHT
+          SizedBox(height: screenHeight * 0.008),
+          Text(
+              'Connect to unlock custom presets and advanced features',
+              style: TextStyle(fontSize: screenWidth * 0.035, color: localSecondaryTextGrey)),
+          // FLEXIBLE HEIGHT
+          SizedBox(height: screenHeight * 0.02),
+          SlideAction(
+            text: "Slide to Connect",
+            textStyle: TextStyle(
+              // FLEXIBLE FONT SIZE
+                fontSize: screenWidth * 0.038,
+                fontWeight: FontWeight.w600,
+                color: Colors.white),
+            innerColor: localCardBackground,
+            outerColor: localPrimaryThemePurple.withOpacity(0.9), // Primary Purple for slider
+            sliderButtonIcon:
+            // FLEXIBLE ICON SIZE
+            Icon(Icons.wifi, color: localPrimaryTextDark, size: screenWidth * 0.05),
+            // FLEXIBLE HEIGHT
+            height: screenHeight * 0.055,
+            borderRadius: cardBorderRadius,
+            onSubmit: () async {
+              await handleConnect();
+              return null;
+            },
+          ),
+        ],
+      ),
     );
   }
-  
+
   Widget buildFocusSessionLocal() {
-  final hasSelectedMode = selectedModeIndex != null;
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        'Start Focus Session',
-        style: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-          color: localPrimaryTextDark,
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final hasSelectedMode = selectedModeIndex != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Start Focus Session',
+          style: TextStyle(
+            // FLEXIBLE FONT SIZE
+            fontSize: screenWidth * 0.045,
+            fontWeight: FontWeight.bold,
+            color: localPrimaryTextDark,
+          ),
         ),
-      ),
-      const SizedBox(height: 15),
+        // FLEXIBLE HEIGHT
+        SizedBox(height: screenHeight * 0.02),
 
-      // Mode Selection Cards - With persistent AnimatedScale animation
-      Row(
-        children: List.generate(modes.length, (i) {
-          final mode = modes[i];
-          final selected = selectedModeIndex == i;
+        // Mode Selection Cards - Refactored to use Flexible sizing
+        Row(
+          children: List.generate(modes.length, (i) {
+            final mode = modes[i];
+            final selected = selectedModeIndex == i;
 
-          final Color modeBgColor = localSoftCyan;
-          final Color selectedTextColor = hpDeepBlue;
-          final Color defaultTextColor = hpDeepBlue;
+            final Color modeBgColor = localSoftCyan;
+            final Color selectedTextColor = hpDeepBlue;
+            final Color defaultTextColor = hpDeepBlue;
 
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => selectedModeIndex = i),
-              child: AnimatedScale(
-                scale: selected ? 1.08 : 1.0, // Slight enlargement when selected
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeInOut,
-                child: AnimatedContainer(
+            return Expanded( // Ensures cards share horizontal space
+              child: GestureDetector(
+                onTap: () => setState(() => selectedModeIndex = i),
+                child: AnimatedScale(
+                  scale: selected ? 1.08 : 1.0, // Slight enlargement when selected
                   duration: const Duration(milliseconds: 250),
-                  margin: EdgeInsets.only(
-                    right: i == 0 ? 12 : 0,
-                    left: i == 1 ? 12 : 0,
-                  ),
-                  height: 110,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: selected ? modeBgColor : localCardBackground,
-                    borderRadius:
-                        BorderRadius.circular(cardBorderRadius / 2),
-                    border: Border.all(color: Colors.transparent, width: 0),
-boxShadow: [
-  BoxShadow(
-    color: const Color.fromARGB(255, 176, 163, 247).withOpacity(0.8),
-    blurRadius: 14,
-    offset: const Offset(0, 8),
-  ),
-],
+                  curve: Curves.easeInOut,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    // FLEXIBLE MARGIN
+                    margin: EdgeInsets.only(
+                      right: i == 0 ? screenWidth * 0.03 : 0,
+                      left: i == 1 ? screenWidth * 0.03 : 0,
+                    ),
+                    // FLEXIBLE HEIGHT
+                    height: screenHeight * 0.13,
+                    // FLEXIBLE PADDING
+                    padding: EdgeInsets.all(screenWidth * 0.03),
+                    decoration: BoxDecoration(
+                      color: selected ? modeBgColor : localCardBackground,
+                      borderRadius:
+                      BorderRadius.circular(cardBorderRadius / 2),
+                      border: Border.all(color: Colors.transparent, width: 0),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color.fromARGB(255, 176, 163, 247).withOpacity(0.8),
+                          blurRadius: 14,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
 
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        mode['title']!,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                          color: selected
-                              ? selectedTextColor
-                              : defaultTextColor,
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          mode['title']!,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            // FLEXIBLE FONT SIZE
+                            fontSize: screenWidth * 0.04,
+                            color: selected
+                                ? selectedTextColor
+                                : defaultTextColor,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        mode['desc']!,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: selected
-                              ? selectedTextColor.withOpacity(0.7)
-                              : localSecondaryTextGrey,
+                        // FLEXIBLE HEIGHT
+                        SizedBox(height: screenHeight * 0.008),
+                        Text(
+                          mode['desc']!,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            // FLEXIBLE FONT SIZE
+                            fontSize: screenWidth * 0.03,
+                            color: selected
+                                ? selectedTextColor.withOpacity(0.7)
+                                : localSecondaryTextGrey,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          );
-        }),
-      ),
-      const SizedBox(height: 24),
+            );
+          }),
+        ),
+        // FLEXIBLE HEIGHT
+        SizedBox(height: screenHeight * 0.03),
 
-      // Set Session Button - unchanged logic
-      SizedBox(
-        width: double.infinity,
-        child: ElevatedButton(
-          onPressed: selectedModeIndex != null ? handleSetSession : null,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: hasSelectedMode
-                ? localPrimaryThemePurple
-                : localPrimaryThemePurple.withOpacity(0.5),
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(cardBorderRadius / 2),
+        // Set Session Button - unchanged logic, made padding flexible
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: selectedModeIndex != null ? handleSetSession : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: hasSelectedMode
+                  ? localPrimaryThemePurple
+                  : localPrimaryThemePurple.withOpacity(0.5),
+              // FLEXIBLE PADDING
+              padding: EdgeInsets.symmetric(vertical: screenHeight * 0.02),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(cardBorderRadius / 2),
+              ),
+              elevation: hasSelectedMode ? 4 : 0,
             ),
-            elevation: hasSelectedMode ? 4 : 0,
-          ),
-          child: Text(
-            'Set Session',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-              color: hasSelectedMode
-                  ? Colors.white
-                  : Colors.white.withOpacity(0.7),
+            child: Text(
+              'Set Session',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                // FLEXIBLE FONT SIZE
+                fontSize: screenWidth * 0.04,
+                color: hasSelectedMode
+                    ? Colors.white
+                    : Colors.white.withOpacity(0.7),
+              ),
             ),
           ),
         ),
-      ),
-    ],
-  );
-}
+      ],
+    );
+  }
 
-  
   Widget buildGoogleConnectSectionLocal(ColorScheme cs) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
     final activeColor = primaryThemePurple;
-    
+
     final statusColor = _isCalendarConnected ? Colors.green.shade600 : activeColor;
     final statusTextColor = _isCalendarConnected ? Colors.green.shade800 : primaryTextDark;
 
@@ -634,10 +668,12 @@ boxShadow: [
     final statusBackground = localSoftLavender.withOpacity(0.9);
 
     return Container(
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.only(top: 20, bottom: 20),
+      // FLEXIBLE PADDING
+      padding: EdgeInsets.all(screenWidth * 0.04),
+      // FLEXIBLE MARGIN
+      margin: EdgeInsets.only(top: screenHeight * 0.02, bottom: screenHeight * 0.025),
       decoration: BoxDecoration(
-        color: statusBackground, 
+        color: statusBackground,
         borderRadius: BorderRadius.circular(cardBorderRadius),
         border: Border.all(color: statusColor.withOpacity(0.2), width: 1.5),
         boxShadow: subtleShadow,
@@ -650,73 +686,88 @@ boxShadow: [
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _isCalendarConnected 
+                  _isCalendarConnected
                       ? 'Google Calendar Sync'
                       : 'Google Calendar Required',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                    // FLEXIBLE FONT SIZE
+                    fontSize: screenWidth * 0.04,
                     color: statusTextColor,
                   ),
                 ),
                 Text(
-                  _isCalendarConnected 
-                      ? 'Sessions are synced successfully!' 
+                  _isCalendarConnected
+                      ? 'Sessions are synced successfully!'
                       : 'Connect to sync your sessions and manage them directly.',
                   style: TextStyle(
-                    fontSize: 13,
+                    // FLEXIBLE FONT SIZE
+                    fontSize: screenWidth * 0.033,
                     color: localSecondaryTextGrey,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 10),
+          // FLEXIBLE WIDTH
+          SizedBox(width: screenWidth * 0.025),
           _isCalendarConnected
               ? ElevatedButton.icon(
-                  onPressed: _handleCalendarSignOut,
-                  icon: const Icon(Icons.logout, size: 18),
-                  label: const Text('Disconnect'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueGrey.shade400,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(cardBorderRadius/2)),
-                  ),
-                )
+            onPressed: _handleCalendarSignOut,
+            // FLEXIBLE ICON SIZE
+            icon: Icon(Icons.logout, size: screenWidth * 0.045),
+            label: Text('Disconnect', style: TextStyle(fontSize: screenWidth * 0.03)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blueGrey.shade400,
+              foregroundColor: Colors.white,
+              // FLEXIBLE PADDING
+              padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.02, vertical: screenHeight * 0.015),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(cardBorderRadius/2)),
+            ),
+          )
               : ElevatedButton.icon(
-                  onPressed: _isSigningIn ? null : _handleCalendarSignIn,
-                  icon: _isSigningIn ? 
-                      const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
-                      : const Icon(Icons.person_add_alt_1, size: 18),
-                  label: Text(_isSigningIn ? 'Connecting...' : 'Connect Google'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: localPrimaryThemePurple,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(cardBorderRadius/2)),
-                  ),
-                ),
+            onPressed: _isSigningIn ? null : _handleCalendarSignIn,
+            icon: _isSigningIn ?
+            SizedBox(width: screenWidth * 0.045, height: screenWidth * 0.045, child: const CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : Icon(Icons.person_add_alt_1, size: screenWidth * 0.045),
+            label: Text(_isSigningIn ? 'Connecting...' : 'Connect Google', style: TextStyle(fontSize: screenWidth * 0.03)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: localPrimaryThemePurple,
+              foregroundColor: Colors.white,
+              // FLEXIBLE PADDING
+              padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.02, vertical: screenHeight * 0.015),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(cardBorderRadius/2)),
+            ),
+          ),
         ],
       ),
     );
   }
-  
+
   Widget buildScheduleSectionLocal(ColorScheme cs) {
-    final calendarAccent = localPrimaryThemePurple; 
-    
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final calendarAccent = localPrimaryThemePurple;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // SCHEDULE SESSIONS SECTION HEADER
         Text(
           'Scheduled Sessions',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: localPrimaryTextDark), 
+          style: TextStyle(
+              // FLEXIBLE FONT SIZE
+              fontSize: screenWidth * 0.055, fontWeight: FontWeight.bold, color: localPrimaryTextDark),
         ),
-        const SizedBox(height: 20),
+        // FLEXIBLE HEIGHT
+        SizedBox(height: screenHeight * 0.025),
 
-        // CALENDAR CONTAINER (Still needs a minimal background for visual separation)
+        // CALENDAR CONTAINER
         Container(
-          margin: const EdgeInsets.only(bottom: 20),
-          padding: const EdgeInsets.all(16),
+          // FLEXIBLE MARGIN
+          margin: EdgeInsets.only(bottom: screenHeight * 0.025),
+          // FLEXIBLE PADDING
+          padding: EdgeInsets.all(screenWidth * 0.04),
           decoration: BoxDecoration(
             color: localCardBackground,
             borderRadius: BorderRadius.circular(cardBorderRadius),
@@ -727,9 +778,12 @@ boxShadow: [
             children: [
               Text(
                 'Calendar',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: localPrimaryTextDark), 
+                style: TextStyle(
+                    // FLEXIBLE FONT SIZE
+                    fontSize: screenWidth * 0.045, fontWeight: FontWeight.bold, color: localPrimaryTextDark),
               ),
-              const SizedBox(height: 15),
+              // FLEXIBLE HEIGHT
+              SizedBox(height: screenHeight * 0.02),
               // Table Calendar Widget
               Container(
                 decoration: BoxDecoration(
@@ -746,9 +800,11 @@ boxShadow: [
                   headerStyle: HeaderStyle(
                     formatButtonVisible: false,
                     titleCentered: true,
-                    titleTextStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: localPrimaryTextDark), 
+                    titleTextStyle: TextStyle(
+                        // FLEXIBLE FONT SIZE
+                        fontSize: screenWidth * 0.04, fontWeight: FontWeight.bold, color: localPrimaryTextDark),
                   ),
-                  calendarFormat: CalendarFormat.month, 
+                  calendarFormat: CalendarFormat.month,
                   calendarStyle: CalendarStyle(
                     todayDecoration: BoxDecoration(color: calendarAccent.withOpacity(0.2), shape: BoxShape.circle),
                     selectedDecoration: BoxDecoration(color: calendarAccent, shape: BoxShape.circle),
@@ -761,7 +817,7 @@ boxShadow: [
                   onDaySelected: (selectedDay, focusedDay) {
                     setState(() {
                       _selectedDay = selectedDay;
-                      _focusedDay = focusedDay; 
+                      _focusedDay = focusedDay;
                     });
                   },
                 ),
@@ -770,110 +826,121 @@ boxShadow: [
           ),
         ), // END Calendar Container
 
-        // UPCOMING SESSIONS LIST (Floating, minimalist style)
+        // UPCOMING SESSIONS LIST
         Text(
           'Upcoming Sessions',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: localPrimaryTextDark), 
+          style: TextStyle(
+              // FLEXIBLE FONT SIZE
+              fontSize: screenWidth * 0.045, fontWeight: FontWeight.bold, color: localPrimaryTextDark),
         ),
 
-        const SizedBox(height: 10),
+        // FLEXIBLE HEIGHT
+        SizedBox(height: screenHeight * 0.015),
         _buildScheduleToggle(cs),
-        const SizedBox(height: 15),
-        
+        // FLEXIBLE HEIGHT
+        SizedBox(height: screenHeight * 0.02),
+
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
             TextButton.icon(
-              onPressed: () => _showEventOverlay(selectedDate: _selectedDay), 
+              onPressed: () => _showEventOverlay(selectedDate: _selectedDay),
               icon: Icon(Icons.add_circle, color: calendarAccent),
-              label: Text('Add Session', style: TextStyle(color: calendarAccent)),
+              label: Text('Add Session', style: TextStyle(color: calendarAccent, fontSize: screenWidth * 0.035)),
             ),
           ],
         ),
-        
-        const SizedBox(height: 10),
-        
+
+        // FLEXIBLE HEIGHT
+        SizedBox(height: screenHeight * 0.015),
+
         _displayedEvents.isEmpty
             ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 20.0),
-                  child: Text(
-                    _client.isConnected
-                          ? (_scheduleView == ScheduleView.rikaz 
-                              ? 'No upcoming Rikaz Focus Sessions found.' 
-                              : 'No upcoming sessions found.')
-                          : 'Connect Google Calendar to see your schedule.',
-                    style: TextStyle(fontStyle: FontStyle.italic, color: secondaryTextGrey), 
-                  ),
-                ),
-              )
+          child: Padding(
+            // FLEXIBLE PADDING
+            padding: EdgeInsets.symmetric(vertical: screenHeight * 0.03),
+            child: Text(
+              _client.isConnected
+                  ? (_scheduleView == ScheduleView.rikaz
+                  ? 'No upcoming Rikaz Focus Sessions found.'
+                  : 'No upcoming sessions found.')
+                  : 'Connect Google Calendar to see your schedule.',
+              style: TextStyle(fontStyle: FontStyle.italic, color: secondaryTextGrey, fontSize: screenWidth * 0.035),
+            ),
+          ),
+        )
             : ListView.builder(
-                physics: const NeverScrollableScrollPhysics(),
-                shrinkWrap: true,
-                itemCount: _displayedEvents.length, 
-                itemBuilder: (context, index) {
-                  final event = _displayedEvents[index];
-                  final startTime = event.start?.dateTime?.toLocal() ?? event.start?.date;
-                  final endTime = event.end?.dateTime?.toLocal() ?? event.end?.date;
+          physics: const NeverScrollableScrollPhysics(),
+          shrinkWrap: true,
+          itemCount: _displayedEvents.length,
+          itemBuilder: (context, index) {
+            final event = _displayedEvents[index];
+            final startTime = event.start?.dateTime?.toLocal() ?? event.start?.date;
+            final endTime = event.end?.dateTime?.toLocal() ?? event.end?.date;
 
-                  if (startTime == null) return const SizedBox.shrink();
+            if (startTime == null) return const SizedBox.shrink();
 
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: localCardBackground,
-                        borderRadius: BorderRadius.circular(cardBorderRadius/2),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: softLavender.withOpacity(0.4),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Center(
-                              child: Text(
-                                DateFormat('d').format(startTime), 
-                                style: TextStyle(color: calendarAccent, fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ),
-                        title: Text(
-                          event.summary ?? 'Untitled Session',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: localPrimaryTextDark), 
-                        ),
-                        subtitle: Text(
-                          endTime != null
-                            ? '${DateFormat('MMM d, h:mm a').format(startTime)} - ${DateFormat('h:mm a').format(endTime)}'
-                            : DateFormat('MMM d, yyyy').format(startTime), 
-                            style: TextStyle(color: localSecondaryTextGrey), 
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_forever, color: Colors.red),
-                          onPressed: () => _showEventOverlay(eventToEdit: event),
-                        ),
+            return Padding(
+              // FLEXIBLE PADDING
+              padding: EdgeInsets.only(bottom: screenHeight * 0.01),
+              child: Container(
+                // FLEXIBLE PADDING
+                padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.04, vertical: screenHeight * 0.01),
+                decoration: BoxDecoration(
+                  color: localCardBackground,
+                  borderRadius: BorderRadius.circular(cardBorderRadius/2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    // FLEXIBLE SIZE
+                    width: screenWidth * 0.1,
+                    height: screenWidth * 0.1,
+                    decoration: BoxDecoration(
+                      color: softLavender.withOpacity(0.4),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Center(
+                      child: Text(
+                        DateFormat('d').format(startTime),
+                        style: TextStyle(color: calendarAccent, fontWeight: FontWeight.bold, fontSize: screenWidth * 0.04),
                       ),
                     ),
-                  );
-                },
+                  ),
+                  title: Text(
+                    event.summary ?? 'Untitled Session',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: localPrimaryTextDark, fontSize: screenWidth * 0.04),
+                  ),
+                  subtitle: Text(
+                    endTime != null
+                        ? '${DateFormat('MMM d, h:mm a').format(startTime)} - ${DateFormat('h:mm a').format(endTime)}'
+                        : DateFormat('MMM d, yyyy').format(startTime),
+                    style: TextStyle(color: localSecondaryTextGrey, fontSize: screenWidth * 0.03),
+                  ),
+                  trailing: IconButton(
+                    // FLEXIBLE ICON SIZE
+                    icon: Icon(Icons.delete_forever, color: Colors.red, size: screenWidth * 0.055),
+                    onPressed: () => _showEventOverlay(eventToEdit: event),
+                  ),
+                ),
               ),
+            );
+          },
+        ),
       ],
     );
   }
-  
+
   // Schedule Toggle Buttons (Themed)
   Widget _buildScheduleToggle(ColorScheme cs) {
+    final screenWidth = MediaQuery.of(context).size.width;
     final activeColor = primaryThemePurple;
     final inactiveColor = secondaryTextGrey;
 
@@ -885,8 +952,10 @@ boxShadow: [
           borderRadius: BorderRadius.circular(12),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            margin: const EdgeInsets.symmetric(horizontal: 4),
-            padding: const EdgeInsets.symmetric(vertical: 10),
+            // FLEXIBLE MARGIN
+            margin: EdgeInsets.symmetric(horizontal: screenWidth * 0.01),
+            // FLEXIBLE PADDING
+            padding: EdgeInsets.symmetric(vertical: screenWidth * 0.025),
             decoration: BoxDecoration(
               color: isSelected ? activeColor : cardBackground.withOpacity(0.8),
               borderRadius: BorderRadius.circular(12),
@@ -895,12 +964,15 @@ boxShadow: [
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, size: 18, color: isSelected ? Colors.white : inactiveColor),
-                const SizedBox(width: 8),
+                // FLEXIBLE ICON SIZE
+                Icon(icon, size: screenWidth * 0.045, color: isSelected ? Colors.white : inactiveColor),
+                // FLEXIBLE WIDTH
+                SizedBox(width: screenWidth * 0.02),
                 Text(
                   text,
                   style: TextStyle(
-                    fontSize: 13,
+                    // FLEXIBLE FONT SIZE
+                    fontSize: screenWidth * 0.033,
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                     color: isSelected ? Colors.white : inactiveColor,
                   ),
@@ -915,19 +987,25 @@ boxShadow: [
     return Row(
       children: [
         _buildButton(ScheduleView.all, 'All Calendar', Icons.calendar_month),
-        const SizedBox(width: 8),
+        // FLEXIBLE WIDTH
+        SizedBox(width: screenWidth * 0.02),
         _buildButton(ScheduleView.rikaz, 'Rikaz Focus', Icons.auto_awesome),
       ],
     );
   }
-  
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    // Define proportional horizontal padding
+    final proportionalHorizontalPadding = screenWidth * 0.1; // roughly 10% of screen width (was 42.5 on a 425px screen)
+
     return Scaffold(
       extendBody: true,
-      backgroundColor: localPrimaryBackground, 
+      backgroundColor: localPrimaryBackground,
       body: Container(
         decoration: BoxDecoration(
           // Subtle purple glow on the white background
@@ -943,33 +1021,45 @@ boxShadow: [
         ),
         child: SafeArea(
           child: SingleChildScrollView(
-            // APPLIED BIG HORIZONTAL AND TOP MARGINS
-            padding: const EdgeInsets.only(left: globalHorizontalPadding, right: globalHorizontalPadding, top: 90, bottom: 20),
+            // APPLIED PROPORTIONAL HORIZONTAL AND TOP MARGINS
+            padding: EdgeInsets.only(
+                left: proportionalHorizontalPadding,
+                right: proportionalHorizontalPadding,
+                // FLEXIBLE TOP PADDING
+                top: screenHeight * 0.1,
+                // FLEXIBLE BOTTOM PADDING
+                bottom: screenHeight * 0.025
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                
+
                 // 1. WELCOME HEADER (NO LONGER A CARD)
                 buildWelcomeHeaderLocal(),
-                const SizedBox(height: 25), // Space after greeting
+                // FLEXIBLE HEIGHT
+                SizedBox(height: screenHeight * 0.03), // Space after greeting
 
                 // 2. RIKAZ TOOL CONNECT SECTION
                 buildRikazConnectLocal(),
-                const SizedBox(height: 20),
+                // FLEXIBLE HEIGHT
+                SizedBox(height: screenHeight * 0.025),
 
                 // 3. START FOCUS SESSION SECTION (NO OUTER CARD)
                 buildFocusSessionLocal(),
-                const SizedBox(height: 20),
+                // FLEXIBLE HEIGHT
+                SizedBox(height: screenHeight * 0.025),
 
                 // 4. GOOGLE CALENDAR CONNECT SECTION
                 buildGoogleConnectSectionLocal(cs),
-                const SizedBox(height: 20),
+                // FLEXIBLE HEIGHT
+                SizedBox(height: screenHeight * 0.025),
 
 
                 // 5. SCHEDULE SESSIONS SECTION (NO OUTER CARD, Custom Name)
                 buildScheduleSectionLocal(cs),
-                
-                const SizedBox(height: 50),
+
+                // FLEXIBLE HEIGHT
+                SizedBox(height: screenHeight * 0.05),
               ],
             ),
           ),
@@ -980,20 +1070,20 @@ boxShadow: [
 }
 
 // -----------------------------------------------------------------------------
-// 5. Cute Overlay (Modal Bottom Sheet Widget for Add/Delete) - THEMED 
+// 5. Cute Overlay (Modal Bottom Sheet Widget for Add/Delete) - THEMED AND FLEXIBLE
 // -----------------------------------------------------------------------------
 
 class _EventManagementOverlay extends StatefulWidget {
   final CalendarClient client;
   final calendar.Event? eventToEdit;
   final VoidCallback onEventUpdated;
-  final DateTime? initialDate; 
+  final DateTime? initialDate;
 
   const _EventManagementOverlay({
     required this.client,
     required this.onEventUpdated,
     this.eventToEdit,
-    this.initialDate, 
+    this.initialDate,
   });
 
   @override
@@ -1010,29 +1100,31 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
 
   bool get isEditing => widget.eventToEdit != null;
 
+  // ... (initState, _combineDateTime, _handleSave, _handleDelete, _showSnackbar unchanged - omitted for brevity)
+
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
-    
+
     if (isEditing) {
       _title = widget.eventToEdit!.summary ?? 'Untitled Session';
       final start = widget.eventToEdit!.start!.dateTime?.toLocal() ?? now;
       final end = widget.eventToEdit!.end!.dateTime?.toLocal() ?? now.add(const Duration(hours: 1));
-      
+
       _startDate = DateTime(start.year, start.month, start.day);
       _startTime = TimeOfDay.fromDateTime(start);
       _endTime = TimeOfDay.fromDateTime(end);
     } else {
-      final selectedDate = widget.initialDate ?? now; 
-      
+      final selectedDate = widget.initialDate ?? now;
+
       _title = '';
       _startDate = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
       _startTime = TimeOfDay.fromDateTime(now.add(const Duration(hours: 1)));
       _endTime = TimeOfDay.fromDateTime(now.add(const Duration(hours: 2)));
     }
   }
-  
+
   DateTime _combineDateTime(DateTime date, TimeOfDay time) {
     return DateTime(
       date.year,
@@ -1042,17 +1134,17 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
       time.minute,
     );
   }
-  
+
   // Handles the Add action (Two-way sync: Write)
   Future<void> _handleSave() async {
     if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
-    
+
     setState(() => _isLoading = true);
-    
+
     final startDateTime = _combineDateTime(_startDate, _startTime);
     final endDateTime = _combineDateTime(_startDate, _endTime);
-    
+
     // NEW: Get the start of today for comparison.
     final today = DateTime.now();
     final startOfToday = DateTime(today.year, today.month, today.day);
@@ -1099,14 +1191,14 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
     }
 
     if (isEditing) {
-        _showSnackbar('Please use the delete button below to remove this session.', Colors.orange);
-        setState(() => _isLoading = false);
-        return;
+      _showSnackbar('Please use the delete button below to remove this session.', Colors.orange);
+      setState(() => _isLoading = false);
+      return;
     }
-    
+
     // CONFLICT CHECK IMPLEMENTATION
     final hasConflict = await widget.client.checkConflicts(
-      startTime: startDateTime, 
+      startTime: startDateTime,
       endTime: endDateTime,
     );
 
@@ -1116,15 +1208,15 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
         builder: (context) => AlertDialog(
           title: const Text('Scheduling Conflict'),
           content: Text(
-            'You already have a meeting scheduled between ${DateFormat('h:mm a').format(startDateTime)} and ${DateFormat('h:mm a').format(endDateTime)}.\n\nAre you sure you want to schedule this session anyway?'
+              'You already have a meeting scheduled between ${DateFormat('h:mm a').format(startDateTime)} and ${DateFormat('h:mm a').format(endDateTime)}.\n\nAre you sure you want to schedule this session anyway?'
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(false), 
+              onPressed: () => Navigator.of(context).pop(false),
               child: const Text('No, Cancel', style: TextStyle(color: Colors.red)),
             ),
             TextButton(
-              onPressed: () => Navigator.of(context).pop(true), 
+              onPressed: () => Navigator.of(context).pop(true),
               child: const Text('Yes, Continue'),
             ),
           ],
@@ -1136,36 +1228,36 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
         return;
       }
     }
-    
-    // Proceed to create the event 
+
+    // Proceed to create the event
     final result = await widget.client.createEvent(
-        title: _title,
-        startTime: startDateTime,
-        endTime: endDateTime,
-        isRikazSession: true, 
+      title: _title,
+      startTime: startDateTime,
+      endTime: endDateTime,
+      isRikazSession: true,
     );
-    
+
     if (result != null) {
-      widget.onEventUpdated(); 
+      widget.onEventUpdated();
       Navigator.pop(context);
       _showSnackbar('Event added to Google Calendar!', Colors.green);
     } else {
       _showSnackbar('Add failed. Check console for details.', Colors.red);
     }
-    
+
     setState(() => _isLoading = false);
   }
-  
+
   // Handles the Delete action (Two-way sync: Write)
   Future<void> _handleDelete() async {
     if (!isEditing || widget.eventToEdit!.id == null) return;
-    
+
     final confirmDelete = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Confirm Deletion'),
         content: Text(
-          'Are you sure you want to permanently delete the session "${widget.eventToEdit!.summary ?? 'Untitled'}" from your Google Calendar? This action cannot be undone.'
+            'Are you sure you want to permanently delete the session "${widget.eventToEdit!.summary ?? 'Untitled'}" from your Google Calendar? This action cannot be undone.'
         ),
         actions: [
           TextButton(
@@ -1188,18 +1280,18 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
     setState(() => _isLoading = true);
 
     final success = await widget.client.deleteEvent(widget.eventToEdit!.id!);
-    
+
     if (success) {
-      widget.onEventUpdated(); 
+      widget.onEventUpdated();
       Navigator.pop(context);
       _showSnackbar('Event deleted from Google Calendar! ', Colors.green);
     } else {
       _showSnackbar('Deletion failed. Check console for details.', Colors.red);
     }
-    
+
     setState(() => _isLoading = false);
   }
-  
+
   void _showSnackbar(String message, Color color) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1211,7 +1303,7 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
       );
     }
   }
-  
+
   // Custom Themed Input Decoration
   InputDecoration _inputDecoration({required String label, required IconData icon, bool enabled = true}) {
     final accent = primaryThemePurple;
@@ -1240,7 +1332,9 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
   @override
   Widget build(BuildContext context) {
     final accent = primaryThemePurple;
-    
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+
     return Container(
       decoration: const BoxDecoration(
         color: primaryBackground,
@@ -1253,7 +1347,8 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
           ),
         ],
       ),
-      padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 20),
+      // FLEXIBLE PADDING
+      padding: EdgeInsets.fromLTRB(screenWidth * 0.05, screenHeight * 0.025, screenWidth * 0.05, MediaQuery.of(context).viewInsets.bottom + screenHeight * 0.025),
       child: Form(
         key: _formKey,
         child: Column(
@@ -1264,10 +1359,13 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const SizedBox(width: 40), 
+                // FLEXIBLE SPACE
+                SizedBox(width: screenWidth * 0.08),
                 Text(
                   isEditing ? 'Delete Session' : 'Add New Session',
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: primaryTextDark),
+                  style: TextStyle(
+                      // FLEXIBLE FONT SIZE
+                      fontSize: screenWidth * 0.055, fontWeight: FontWeight.bold, color: primaryTextDark),
                   textAlign: TextAlign.center,
                 ),
                 IconButton(
@@ -1279,9 +1377,10 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
             ),
             // --- END: HEADER AND CLOSE BUTTON ---
 
-            const Divider(height: 20, color: Colors.grey),
-            
-            // Title Field
+            // FLEXIBLE HEIGHT DIVIDER
+            Divider(height: screenHeight * 0.025, color: Colors.grey),
+
+            // Title Field - uses flexible input decoration
             TextFormField(
               initialValue: isEditing ? _title : null,
               decoration: _inputDecoration(
@@ -1293,7 +1392,8 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
               onSaved: (value) => _title = value!,
               readOnly: isEditing,
             ),
-            const SizedBox(height: 15),
+            // FLEXIBLE HEIGHT
+            SizedBox(height: screenHeight * 0.015),
 
             // Date Picker (Disabled when editing/deleting)
             ListTile(
@@ -1305,9 +1405,6 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                 final date = await showDatePicker(
                   context: context,
                   initialDate: _startDate,
-                  // The original date picker range allows selecting dates before today.
-                  // We rely on the _handleSave check for the block, but for better UX, 
-                  // the date picker itself should prevent past dates if the intention is to only schedule future/today events.
                   firstDate: DateTime.now().subtract(const Duration(days: 30)),
                   lastDate: DateTime.now().add(const Duration(days: 365)),
                 );
@@ -1348,59 +1445,63 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                 ),
               ],
             ),
-            const SizedBox(height: 30),
+            // FLEXIBLE HEIGHT
+            SizedBox(height: screenHeight * 0.035),
 
             // Action Buttons
             _isLoading
                 ? Center(child: Padding(
-                    padding: const EdgeInsets.all(10.0),
-                    child: CircularProgressIndicator(color: accent)))
+                // FLEXIBLE PADDING
+                padding: EdgeInsets.all(screenWidth * 0.025),
+                child: CircularProgressIndicator(color: accent)))
                 : Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      // Add Button (Only visible when NOT editing)
-                      if (!isEditing)
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _handleSave,
-                            icon: const Icon(Icons.add, color: Colors.white),
-                            label: const Text('Add Session'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: accent,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 15),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
-                        ),
-                      
-                      // Delete Button (Only visible when editing an existing event)
-                      if (isEditing)
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _handleDelete,
-                            icon: const Icon(Icons.delete, color: Colors.white),
-                            label: const Text('Delete Session', style: TextStyle(color: Colors.white)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red.shade600,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 15),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
-                        ),
-                      
-                      if (isEditing) const SizedBox(width: 10),
-
-                      // Cancel/Close Button
-                      Expanded(
-                        child: TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: Text(isEditing ? 'Close' : 'Cancel', style: TextStyle(color: secondaryTextGrey)),
-                        ),
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                // Add Button (Only visible when NOT editing)
+                if (!isEditing)
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _handleSave,
+                      icon: const Icon(Icons.add, color: Colors.white),
+                      label: Text('Add Session', style: TextStyle(fontSize: screenWidth * 0.038)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: accent,
+                        foregroundColor: Colors.white,
+                        // FLEXIBLE PADDING
+                        padding: EdgeInsets.symmetric(vertical: screenHeight * 0.02),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                    ],
+                    ),
                   ),
+
+                // Delete Button (Only visible when editing an existing event)
+                if (isEditing)
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _handleDelete,
+                      icon: const Icon(Icons.delete, color: Colors.white),
+                      label: Text('Delete Session', style: TextStyle(color: Colors.white, fontSize: screenWidth * 0.038)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade600,
+                        foregroundColor: Colors.white,
+                        // FLEXIBLE PADDING
+                        padding: EdgeInsets.symmetric(vertical: screenHeight * 0.02),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+
+                if (isEditing) SizedBox(width: screenWidth * 0.025),
+
+                // Cancel/Close Button
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(isEditing ? 'Close' : 'Cancel', style: TextStyle(color: secondaryTextGrey, fontSize: screenWidth * 0.038)),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
