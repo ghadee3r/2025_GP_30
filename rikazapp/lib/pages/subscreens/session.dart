@@ -1,7 +1,49 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:ui'; // <--- ADDED for ImageFilter and the glassy effect
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'; 
+
+// ------------------------------------------------------------
+// FrostedGlassContainer (New Utility Widget)
+// ------------------------------------------------------------
+class FrostedGlassContainer extends StatelessWidget {
+  final Widget child;
+  final double blur;
+  final double opacity;
+  final double borderRadius;
+  final Color? borderColor;
+
+  const FrostedGlassContainer({
+    super.key,
+    required this.child,
+    this.blur = 10,
+    this.opacity = 0.6,
+    this.borderRadius = 18,
+    this.borderColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(borderRadius),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(opacity),
+            borderRadius: BorderRadius.circular(borderRadius),
+            border: Border.all(
+              color: borderColor ?? Colors.white.withOpacity(0.3),
+              width: 1.0,
+            ),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
 
 // ------------------------------------------------------------
 // PlayAndPauseButton (No change)
@@ -83,24 +125,24 @@ class _PlayAndPauseButtonState extends State<PlayAndPauseButton>
 }
 
 // ------------------------------------------------------------
-// SessionPage (Modified)
+// SessionPage (Modified to include SoundSection)
 // ------------------------------------------------------------
 class SessionPage extends StatefulWidget {
   final String sessionType;
-    final String duration;
-    final String? numberOfBlocks;
-    final bool? isCameraDetectionEnabled; 
-    final double? sensitivity;
-    final String? notificationStyle;
+  final String duration;
+  final String? numberOfBlocks;
+  final bool? isCameraDetectionEnabled;
+  final double? sensitivity;
+  final String? notificationStyle;
 
   const SessionPage({
     super.key,
-        required this.sessionType,
-        required this.duration,
-        this.numberOfBlocks,
-        this.isCameraDetectionEnabled, 
-        this.sensitivity,
-        this.notificationStyle,
+    required this.sessionType,
+    required this.duration,
+    this.numberOfBlocks,
+    this.isCameraDetectionEnabled,
+    this.sensitivity,
+    this.notificationStyle,
   });
 
   @override
@@ -109,17 +151,16 @@ class SessionPage extends StatefulWidget {
 
 class _SessionPageState extends State<SessionPage>
     with SingleTickerProviderStateMixin {
-  
   late bool isPomodoro;
   late int focusMinutes;
   late int breakMinutes;
   late int totalBlocks;
 
   // ✅ Supabase Logic Variables
-  String? _currentSessionId; 
+  String? _currentSessionId;
   DateTime? _sessionStartTime;
-  int _totalFocusSeconds = 0; 
-  
+  int _totalFocusSeconds = 0;
+
   String mode = 'focus';
   String status = 'running';
   int currentBlock = 1;
@@ -128,7 +169,6 @@ class _SessionPageState extends State<SessionPage>
   Timer? _timer;
 
   late AnimationController pulseController;
-
 
 // -------------------------------------------------------------------
 // 💡 SUPABASE LOGIC START - الكود النظيف
@@ -143,38 +183,38 @@ class _SessionPageState extends State<SessionPage>
       print('Error: User not authenticated. Cannot start session.');
       return;
     }
-    
-    final int plannedDuration = isPomodoro 
-      ? (focusMinutes * totalBlocks) + (breakMinutes * totalBlocks)
-      : focusMinutes; 
 
-    _sessionStartTime = DateTime.now(); 
+    final int plannedDuration = isPomodoro
+        ? (focusMinutes * totalBlocks) + (breakMinutes * totalBlocks)
+        : focusMinutes;
+
+    _sessionStartTime = DateTime.now();
 
     try {
       // ✅ تم إزالة جميع الأعمدة التي تم تعيينها كـ NULLABLE في Supabase
       final response = await supabase
-          .from('Focus_Session') 
+          .from('Focus_Session')
           .insert({
             'user_id': currentUserId,
-            'session_type': widget.sessionType, 
+            'session_type': widget.sessionType,
             'start_time': _sessionStartTime!.toIso8601String(),
             'duration_minutes': plannedDuration, // المدة المخطط لها (بدلاً من 0)
-            
+
             // الأعمدة المتبقية التي يجب أن تكون موجودة في الإدراج (مثل Boolean أو String):
             'camera_monitored': widget.isCameraDetectionEnabled ?? false,
             // إذا كان لديك أي أعمدة أخرى NOT NULL (مثل progress_level, distraction_level)، يجب إضافتها هنا بقيمة افتراضية
-            
-          }).select('session_id'); 
-          
+          }).select('session_id');
+
       if (response.isNotEmpty) {
         setState(() {
-          _currentSessionId = response.first['session_id'].toString(); 
+          _currentSessionId = response.first['session_id'].toString();
         });
         print('✅ Session Started in DB with ID: $_currentSessionId');
       }
     } catch (e) {
       print('❌ Error starting session in DB: $e');
-      print('DEBUG: RLS check, Table Name, or an unhandled NOT NULL constraint remains (e.g., progress_level, distraction_level).');
+      print(
+          'DEBUG: RLS check, Table Name, or an unhandled NOT NULL constraint remains (e.g., progress_level, distraction_level).');
     }
   }
 
@@ -187,30 +227,32 @@ class _SessionPageState extends State<SessionPage>
       print('Error: Cannot end session. Session ID is missing.');
       return;
     }
-    
+
     final int actualFocusDurationMinutes = (_totalFocusSeconds ~/ 60);
 
     // 🛑 شرط الحفظ: يجب أن يكون أكثر من دقيقة تركيز فعلي
     if (actualFocusDurationMinutes < 1) {
-        print('❌ Session duration too short (less than 1 minute focus). Data not saved.');
-        return; 
+      print(
+          '❌ Session duration too short (less than 1 minute focus). Data not saved.');
+      return;
     }
-    
+
     final endDateTime = DateTime.now().toIso8601String();
-    
+
     try {
       // 💡 تحديث البيانات
       await supabase
-          .from('Focus_Session') 
+          .from('Focus_Session')
           .update({
             'end_time': endDateTime,
-            'duration_minutes': actualFocusDurationMinutes, 
+            'duration_minutes': actualFocusDurationMinutes,
             // يمكن إضافة 'completed: completed' إذا كان لديك عمود لذلك
           })
           // ✅ استخدام علامة '!' بأمان بعد التحقق
-          .eq('session_id', _currentSessionId!); 
+          .eq('session_id', _currentSessionId!);
 
-      print('✅ Session ID: $_currentSessionId Ended and recorded successfully. Focus Time: $actualFocusDurationMinutes min');
+      print(
+          '✅ Session ID: $_currentSessionId Ended and recorded successfully. Focus Time: $actualFocusDurationMinutes min');
     } catch (e) {
       print('❌ Error ending session in DB: $e');
     }
@@ -219,7 +261,6 @@ class _SessionPageState extends State<SessionPage>
 // -------------------------------------------------------------------
 // 💡 SUPABASE LOGIC END
 // -------------------------------------------------------------------
-
 
   @override
   void initState() {
@@ -246,7 +287,7 @@ class _SessionPageState extends State<SessionPage>
     startTimer();
 
     // 1. ✅ استدعاء دالة البدء
-    _startSessionInDB(); 
+    _startSessionInDB();
 
     pulseController = AnimationController(
       vsync: this,
@@ -264,8 +305,8 @@ class _SessionPageState extends State<SessionPage>
         setState(() {
           timeLeft--;
           // ✅ NEW: تراكم الثواني فقط في وضع التركيز
-          if (mode == 'focus') { 
-              _totalFocusSeconds++;
+          if (mode == 'focus') {
+            _totalFocusSeconds++;
           }
         });
       }
@@ -277,7 +318,7 @@ class _SessionPageState extends State<SessionPage>
       setState(() => status = 'idle');
       _timer?.cancel();
       // 2. ✅ إنهاء الجلسة المخصصة المكتملة
-      _endSessionInDB(completed: true); 
+      _endSessionInDB(completed: true);
       return;
     }
 
@@ -301,7 +342,7 @@ class _SessionPageState extends State<SessionPage>
         });
         _timer?.cancel();
         // 2. ✅ إنهاء جلسة البومودورو المكتملة
-        _endSessionInDB(completed: true); 
+        _endSessionInDB(completed: true);
       } else {
         setState(() {
           currentBlock = next;
@@ -339,7 +380,7 @@ class _SessionPageState extends State<SessionPage>
               Navigator.pop(context);
 
               // 3. ✅ استدعاء دالة الإنهاء عند الخروج اليدوي
-              _endSessionInDB(completed: false); 
+              _endSessionInDB(completed: false);
 
               // Dispose animation again safely before navigating
               _timer?.cancel();
@@ -348,7 +389,7 @@ class _SessionPageState extends State<SessionPage>
               // Then navigate
               Navigator.pushNamedAndRemoveUntil(
                 context,
-                '/home', 
+                '/home',
                 (route) => false,
               );
             },
@@ -361,7 +402,6 @@ class _SessionPageState extends State<SessionPage>
       ),
     );
   }
-
 
   void onGames() {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -393,7 +433,10 @@ class _SessionPageState extends State<SessionPage>
     final bool isBreak = mode == 'break';
 
     final gradientColors = isPaused
-        ? const [Color.fromARGB(255, 225, 227, 230), Color.fromARGB(255, 185, 196, 207)]
+        ? const [
+            Color.fromARGB(255, 225, 227, 230),
+            Color.fromARGB(255, 185, 196, 207)
+          ]
         : isBreak
             ? const [Color(0xFFFFF7ED), Color(0xFFFFFBEB), Color(0xFFFEF3C7)]
             : const [Color(0xFFF3F6FF), Color(0xFFEEF2FF), Color(0xFFEDE9FE)];
@@ -499,9 +542,7 @@ class _SessionPageState extends State<SessionPage>
                         Text(
                           isPaused
                               ? 'Paused'
-                              : (isBreak
-                                  ? 'Relax & recharge'
-                                  : 'Stay focused'),
+                              : (isBreak ? 'Relax & recharge' : 'Stay focused'),
                           style: const TextStyle(
                             color: Color(0xFF64748B),
                             fontSize: 12,
@@ -545,8 +586,7 @@ class _SessionPageState extends State<SessionPage>
                                       padding: const EdgeInsets.symmetric(
                                           vertical: 14),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(14),
+                                        borderRadius: BorderRadius.circular(14),
                                       ),
                                     ),
                                     icon: const Icon(Icons.videogame_asset,
@@ -602,8 +642,7 @@ class _SessionPageState extends State<SessionPage>
                       final blockNum = i + 1;
                       final isActive =
                           mode == 'focus' && currentBlock == blockNum;
-                      final isCompleted =
-                          completedBlocks.contains(blockNum);
+                      final isCompleted = completedBlocks.contains(blockNum);
                       return _PomodoroBlock(
                         blockNum: blockNum,
                         isActive: isActive,
@@ -613,6 +652,11 @@ class _SessionPageState extends State<SessionPage>
                       );
                     }),
                   ),
+
+                // ✅ SoundSection integration
+                const SizedBox(height: 30),
+                const SoundSection(),
+                // End of SoundSection
               ],
             ),
           ),
@@ -623,7 +667,7 @@ class _SessionPageState extends State<SessionPage>
 }
 
 // ------------------------------------------------------------
-// Gradient Ring Painter (No change)
+// Gradient Ring Painter 
 // ------------------------------------------------------------
 class _GradientRingPainter extends CustomPainter {
   final double progress;
@@ -679,7 +723,7 @@ class _GradientRingPainter extends CustomPainter {
 }
 
 // ------------------------------------------------------------
-// Pomodoro Block (No change)
+// Pomodoro Block 
 // ------------------------------------------------------------
 class _PomodoroBlock extends StatelessWidget {
   final int blockNum;
@@ -698,8 +742,9 @@ class _PomodoroBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color bgColor =
-        isCompleted ? Colors.green : (isActive ? const Color.fromRGBO(33, 150, 243, 1) : Colors.white);
+    final Color bgColor = isCompleted
+        ? Colors.green
+        : (isActive ? const Color.fromRGBO(33, 150, 243, 1) : Colors.white);
 
     final Color shadowColor = isCompleted
         ? Colors.green.withOpacity(0.35)
@@ -755,6 +800,259 @@ class _PomodoroBlock extends StatelessWidget {
           style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
         ),
       ],
+    );
+  }
+}
+
+// ------------------------------------------------------------
+// Sound Model and Mock Data
+// ------------------------------------------------------------
+class Sound {
+  final String id;
+  final String name;
+  final Color color;
+  final IconData icon;
+
+  const Sound({
+    required this.id,
+    required this.name,
+    required this.color,
+    required this.icon,
+  });
+}
+
+const List<Sound> kAvailableSounds = [
+  Sound(
+    id: 'off',
+    name: 'No Sound',
+    color: Color(0xFF64748B), // Slate-500
+    icon: Icons.volume_off_rounded,
+  ),
+  Sound(
+    id: 'rain',
+    name: 'Rain',
+    color: Color(0xFF6366F1), // Indigo-500
+    icon: Icons.water_drop_outlined,
+  ),
+  Sound(
+    id: 'forest',
+    name: 'Forest',
+    color: Color(0xFF10B981), // Emerald-500
+    icon: Icons.forest_outlined,
+  ),
+  Sound(
+    id: 'lofi',
+    name: 'Lofi Beat',
+    color: Color(0xFF7C3AED), // Purple-600
+    icon: Icons.music_note_outlined,
+  ),
+];
+
+// ------------------------------------------------------------
+// SoundSection (Refactored Glassy Dropdown Widget)
+// ------------------------------------------------------------
+class SoundSection extends StatefulWidget {
+  const SoundSection({super.key});
+
+  @override
+  State<SoundSection> createState() => _SoundSectionState();
+}
+
+class _SoundSectionState extends State<SoundSection> {
+  // Mock state data for UI presentation
+  String _currentSoundId = 'off';
+  bool _isSoundPlaying = false;
+  bool _isExpanded = false;
+
+  void _onSoundSelected(String id) {
+    setState(() {
+      _currentSoundId = id;
+      _isExpanded = false; // Collapse the dropdown
+      
+      if (id == 'off') {
+        _isSoundPlaying = false;
+      } else {
+        _isSoundPlaying = true;
+      }
+      print('Sound selected: $id, Playing: $_isSoundPlaying');
+    });
+    // In a real app, call your audio service here
+  }
+
+  void _onPlayPauseTapped() {
+    // Only allow play/pause if a sound is selected
+    if (_currentSoundId != 'off') {
+      setState(() {
+        _isSoundPlaying = !_isSoundPlaying;
+        print('Toggled Play/Pause. Playing: $_isSoundPlaying');
+      });
+      // In a real app, call your audio service here
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentSound = kAvailableSounds.firstWhere((s) => s.id == _currentSoundId);
+    final displayIcon = _isSoundPlaying ? currentSound.icon : Icons.volume_off_rounded;
+    final displayColor = _isSoundPlaying ? currentSound.color : const Color(0xFF64748B);
+
+    return FrostedGlassContainer(
+      child: Column(
+        children: [
+          // 1. Header (Always Visible / Tap Target)
+          InkWell(
+            onTap: () {
+              setState(() {
+                _isExpanded = !_isExpanded;
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  // Current Sound Icon
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      color: displayColor.withOpacity(0.1),
+                    ),
+                    child: Icon(
+                      displayIcon,
+                      color: displayColor,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Title
+                  Expanded(
+                    child: Text(
+                      _isSoundPlaying 
+                        ? 'Playing: ${currentSound.name}' 
+                        : 'Background Sound',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                  ),
+                  
+                  // Pause/Play Button (Only visible if a sound is selected)
+                  if (_currentSoundId != 'off')
+                    Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: IconButton(
+                        icon: Icon(
+                          _isSoundPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
+                          color: displayColor,
+                          size: 32,
+                        ),
+                        onPressed: _onPlayPauseTapped,
+                      ),
+                    ),
+
+                  // Dropdown Indicator
+                  Icon(
+                    _isExpanded 
+                        ? Icons.keyboard_arrow_up_rounded 
+                        : Icons.keyboard_arrow_down_rounded,
+                    color: const Color(0xFF64748B),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // 2. Dropdown List
+          AnimatedCrossFade(
+            duration: const Duration(milliseconds: 300),
+            crossFadeState: _isExpanded 
+                ? CrossFadeState.showSecond 
+                : CrossFadeState.showFirst,
+            firstChild: const SizedBox.shrink(), // Collapsed state
+            secondChild: Column( // Expanded list
+              children: [
+                const Divider(height: 1, color: Color.fromRGBO(255, 255, 255, 0.4), thickness: 1),
+                ...kAvailableSounds.map((sound) {
+                  // Only show 'No Sound' if it's not the currently active one
+                  // This is simplified for the mockup, but generally cleaner to show all options.
+                  // For this clean UI, we'll hide the currently playing sound from the dropdown list.
+                  if (sound.id == _currentSoundId && _isSoundPlaying && sound.id != 'off') return const SizedBox.shrink();
+                  
+                  return _SoundRow(
+                    sound: sound,
+                    isSelected: sound.id == _currentSoundId && _isSoundPlaying,
+                    onTap: () => _onSoundSelected(sound.id),
+                  );
+                }).toList(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ------------------------------------------------------------
+// _SoundRow (Internal Widget for the list items)
+// ------------------------------------------------------------
+class _SoundRow extends StatelessWidget {
+  final Sound sound;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _SoundRow({
+    required this.sound,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            // Row Thumbnail (Icon)
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                color: sound.color.withOpacity(0.15),
+              ),
+              child: Icon(
+                sound.icon,
+                color: sound.color,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Sound Name
+            Expanded(
+              child: Text(
+                sound.name,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF0F172A),
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            // Selection Checkmark (if selected)
+            if (isSelected)
+              Icon(
+                Icons.check,
+                color: Colors.green.shade600,
+                size: 20,
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

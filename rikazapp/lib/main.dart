@@ -127,7 +127,13 @@ class MyApp extends StatelessWidget {
                 '/home' : (context) => const HomePage(),
                 
                 // FIXED ERROR 1: Using the new, merged route
-                '/setsession': (context) => new SetSessionPage(),
+                '/SetSession': (context) {
+  // Retrieve the argument passed via Navigator.pushNamed
+  final initialMode = ModalRoute.of(context)!.settings.arguments as SessionMode?;
+  
+  // Pass the argument to the SetSessionPage constructor
+  return SetSessionPage(initialMode: initialMode);
+},
                 
                 // FIXED ERRORS 2, 3, 4: Added the required named parameters to pass config data
                 '/session' : (context) {
@@ -217,76 +223,59 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
 /// شاشة التبويبات الرئيسية
 class TabsScreen extends StatefulWidget {
-    const TabsScreen({super.key, this.initialIndex = 0}); // 0 = Home
-    final int initialIndex;
-
-    @override
-    State<TabsScreen> createState() => _TabsScreenState();
+const TabsScreen({super.key, this.initialIndex = 0}); // 0 = Home
+final int initialIndex;
+@override
+State<TabsScreen> createState() => _TabsScreenState();
 }
 
 class _TabsScreenState extends State<TabsScreen> {
-    late int _index;
+late int _index;
+@override
+void initState() {
+super.initState();
+_index = widget.initialIndex; // ابدأ بالتبويب المطلوب
+}
 
-    @override
-    void initState() {
-        super.initState();
-        _index = widget.initialIndex; // ابدأ بالتبويب المطلوب
-    }
+// لا تجعل القائمة const لتفادي مشاكل مستقبلية
+final List<Widget> _tabs = [
+const HomePage(),
+const ProgressScreen(),
+const GamesScreen(),
+const ProfileScreen(),
+];
 
-    // لا تجعل القائمة const لتفادي مشاكل مستقبلية
-    final List<Widget> _tabs = [
-        const HomePage(),
-        const ProgressScreen(),
-        const GamesScreen(),
-        const ProfileScreen(),
-    ];
+void _onTabChange(int i) => setState(() => _index = i);
 
-    void _onTabChange(int i) => setState(() => _index = i);
+@override
+Widget build(BuildContext context) {
+final cs = Theme.of(context).colorScheme;
 
-    @override
-    Widget build(BuildContext context) {
-        final cs = Theme.of(context).colorScheme;
-
-        return Scaffold(
-            extendBody: true,
-            body: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 250),
-                child: _tabs[_index],
-            ),
-            bottomNavigationBar: SafeArea(
-                top: false,
-                child: Container(
-                    margin: const EdgeInsets.only(left: 30, right: 30, bottom: 20),
-                    decoration: BoxDecoration(
-                        color: cs.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(cardBorderRadius),
-                        boxShadow: [
-                            BoxShadow(
-                                color: primaryThemePurple.withOpacity(0.4),
-                                blurRadius: 20,
-                                offset: const Offset(0, 10),
-                            ),
-                        ],
-                    ),
-                    child: FluidNavBar(
-                        icons: [
-                            FluidNavBarIcon(icon: Icons.home),
-                            FluidNavBarIcon(icon: Icons.trending_up),
-                            FluidNavBarIcon(icon: Icons.sports_esports),
-                            FluidNavBarIcon(icon: Icons.person),
-                        ],
-                        onChange: _onTabChange,
-                        defaultIndex: _index,
-                        style: FluidNavBarStyle(
-                            barBackgroundColor: Colors.transparent, 
-                            iconSelectedForegroundColor: cs.primary,
-                            iconUnselectedForegroundColor: secondaryTextGrey.withOpacity(0.7), 
-                        ),
-                        scaleFactor: 1.5, 
-                        // Removed animationDuration property as it was undefined/deprecated
-                    ),
-                ),
-            ),
-        );
-    }
+return Scaffold(
+extendBody: true,
+body: AnimatedSwitcher(
+duration: const Duration(milliseconds: 250),
+child: _tabs[_index],
+),
+bottomNavigationBar: SafeArea(
+top: false,
+child: FluidNavBar(
+icons: [
+FluidNavBarIcon(icon: Icons.home),
+FluidNavBarIcon(icon: Icons.trending_up),
+FluidNavBarIcon(icon: Icons.sports_esports),
+FluidNavBarIcon(icon: Icons.person),
+],
+onChange: _onTabChange,
+defaultIndex: _index,
+style: FluidNavBarStyle(
+barBackgroundColor: cs.surfaceContainerHighest,
+iconSelectedForegroundColor: cs.primary,
+// FIX: Corrected syntax for opacity (was .withValues(alpha: .5)
+iconUnselectedForegroundColor: cs.onSurface.withOpacity(0.5), 
+),
+),
+),
+);
+}
 }

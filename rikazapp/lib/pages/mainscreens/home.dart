@@ -6,7 +6,7 @@ import 'package:googleapis/calendar/v3.dart' as calendar;
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
-
+import 'package:rikazapp/pages/subscreens/SetSession.dart';
 // Enum to manage the user's schedule view preference
 enum ScheduleView { all, rikaz }
 
@@ -33,9 +33,9 @@ const Color softCyan = Color(0xFFE8F8FF); // Used for Mode Selection backgrounds
 const Color primaryBackground = Color(0xFFFFFFFF); // Pure white background
 const Color cardBackground = Color(0xFFFFFFFF); // Pure white for card surfaces
 
-const double cardBorderRadius = 24.0; // Highly rounded corners
-// REMOVED: const double globalHorizontalPadding = 42.5; // Will be proportional
 
+const double cardBorderRadius = 24.0; // Highly rounded corners
+// Note: globalHorizontalPadding removed from constants, replaced with proportional calculation in build method.
 // Subtle shadow for the floating effect (Purple-tinted)
 List<BoxShadow> get subtleShadow => [
       BoxShadow(
@@ -49,7 +49,7 @@ List<BoxShadow> get subtleShadow => [
 // -----------------------------------------------------------------------------
 // 2. API Client Setup (Functionality Unchanged)
 // -----------------------------------------------------------------------------
-// ... (CalendarClient class is unchanged - omitted for brevity)
+// ... (CalendarClient class is fully preserved - contents omitted for brevity)
 const List<String> _scopes = <String>[
   'https://www.googleapis.com/auth/calendar',
   'email',
@@ -175,7 +175,6 @@ class CalendarClient {
     }
   }
 }
-// -----------------------------------------------------------------------------
 
 
 // -----------------------------------------------------------------------------
@@ -206,8 +205,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String selectedPreset = 'Choose Preset';
   int? selectedModeIndex;
 
-  bool isRikazToolConnected = false;
-  bool isLoading = false;
+  // REMOVED: bool isRikazToolConnected = false;
+  // REMOVED: bool isLoading = false;
 
   static const List<String> presets = [
     'Deep Work',
@@ -346,19 +345,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _showSnackbar('Disconnected from Google.', Colors.blueGrey);
   }
 
-  Future<void> handleConnect() async {
-    setState(() => isLoading = true);
-    await Future.delayed(const Duration(seconds: 2));
-    if (!mounted) return;
-    setState(() {
-      isRikazToolConnected = true;
-      isLoading = false;
-    });
-  }
+  // REMOVED: handleConnect method
+  // Future<void> handleConnect() async { ... }
 
+// MODIFIED: handleSetSession to pass the selected mode
   void handleSetSession() {
-    // Navigate directly to the unified SetSessionPage
-    Navigator.of(context).pushNamed('/setsession');
+    if (selectedModeIndex == null) return;
+
+    // Determine the selected mode based on the index
+    final initialMode = selectedModeIndex == 0 ? SessionMode.pomodoro : SessionMode.custom;
+
+    // Navigate to SetSessionPage and pass the initialMode as an argument
+    Navigator.of(context).pushNamed(
+      '/SetSession',
+      arguments: initialMode, // Pass the SessionMode enum value directly
+    );
   }
 
 
@@ -453,74 +454,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  Widget buildRikazConnectLocal() {
-    final screenHeight = MediaQuery.of(context).size.height;
-    final screenWidth = MediaQuery.of(context).size.width;
-    final statusColor = isRikazToolConnected ? Colors.green.shade600 : localPrimaryThemePurple;
-
-    return Container(
-      // FLEXIBLE PADDING
-      padding: EdgeInsets.all(screenWidth * 0.04),
-      // FLEXIBLE MARGIN
-      margin: EdgeInsets.only(top: screenHeight * 0.01, bottom: screenHeight * 0.025),
-      decoration: BoxDecoration(
-        color: localCardBackground,
-        borderRadius: BorderRadius.circular(cardBorderRadius),
-        boxShadow: subtleShadow, // Minimal elevation/shadow
-        border: Border.all(color: Colors.grey.shade100, width: 1.0),
-      ),
-      child: isRikazToolConnected
-          ? Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Rikaz Tools Connected',
-              style: TextStyle(
-                  // FLEXIBLE FONT SIZE
-                  fontSize: screenWidth * 0.045, fontWeight: FontWeight.bold, color: statusColor)),
-          // FLEXIBLE HEIGHT
-          SizedBox(height: screenHeight * 0.01),
-          Text('Custom presets and features unlocked.',
-              style: TextStyle(fontSize: screenWidth * 0.035, color: localSecondaryTextGrey)),
-        ],
-      )
-          : Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Connect Rikaz Tools',
-              style: TextStyle(
-                  // FLEXIBLE FONT SIZE
-                  fontSize: screenWidth * 0.045, fontWeight: FontWeight.bold, color: localPrimaryTextDark)),
-          // FLEXIBLE HEIGHT
-          SizedBox(height: screenHeight * 0.008),
-          Text(
-              'Connect to unlock custom presets and advanced features',
-              style: TextStyle(fontSize: screenWidth * 0.035, color: localSecondaryTextGrey)),
-          // FLEXIBLE HEIGHT
-          SizedBox(height: screenHeight * 0.02),
-          SlideAction(
-            text: "Slide to Connect",
-            textStyle: TextStyle(
-              // FLEXIBLE FONT SIZE
-                fontSize: screenWidth * 0.038,
-                fontWeight: FontWeight.w600,
-                color: Colors.white),
-            innerColor: localCardBackground,
-            outerColor: localPrimaryThemePurple.withOpacity(0.9), // Primary Purple for slider
-            sliderButtonIcon:
-            // FLEXIBLE ICON SIZE
-            Icon(Icons.wifi, color: localPrimaryTextDark, size: screenWidth * 0.05),
-            // FLEXIBLE HEIGHT
-            height: screenHeight * 0.055,
-            borderRadius: cardBorderRadius,
-            onSubmit: () async {
-              await handleConnect();
-              return null;
-            },
-          ),
-        ],
-      ),
-    );
-  }
+  // REMOVED: buildRikazConnectLocal widget
 
   Widget buildFocusSessionLocal() {
     final screenHeight = MediaQuery.of(context).size.height;
@@ -1001,7 +935,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final screenHeight = MediaQuery.of(context).size.height;
 
     // Define proportional horizontal padding
-    final proportionalHorizontalPadding = screenWidth * 0.1; // roughly 10% of screen width (was 42.5 on a 425px screen)
+    final proportionalHorizontalPadding = screenWidth * 0.1; // roughly 10% of screen width
 
     return Scaffold(
       extendBody: true,
@@ -1034,17 +968,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
 
-                // 1. WELCOME HEADER (NO LONGER A CARD)
+                // 1. WELCOME HEADER
                 buildWelcomeHeaderLocal(),
                 // FLEXIBLE HEIGHT
                 SizedBox(height: screenHeight * 0.03), // Space after greeting
 
-                // 2. RIKAZ TOOL CONNECT SECTION
-                buildRikazConnectLocal(),
-                // FLEXIBLE HEIGHT
-                SizedBox(height: screenHeight * 0.025),
+                // 2. RIKAZ TOOL CONNECT SECTION - REMOVED
 
-                // 3. START FOCUS SESSION SECTION (NO OUTER CARD)
+                // 3. START FOCUS SESSION SECTION
                 buildFocusSessionLocal(),
                 // FLEXIBLE HEIGHT
                 SizedBox(height: screenHeight * 0.025),
@@ -1055,7 +986,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 SizedBox(height: screenHeight * 0.025),
 
 
-                // 5. SCHEDULE SESSIONS SECTION (NO OUTER CARD, Custom Name)
+                // 5. SCHEDULE SESSIONS SECTION
                 buildScheduleSectionLocal(cs),
 
                 // FLEXIBLE HEIGHT
@@ -1072,6 +1003,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 // -----------------------------------------------------------------------------
 // 5. Cute Overlay (Modal Bottom Sheet Widget for Add/Delete) - THEMED AND FLEXIBLE
 // -----------------------------------------------------------------------------
+// (The _EventManagementOverlay class is fully preserved and uses flexible sizing, so its code is omitted for brevity)
 
 class _EventManagementOverlay extends StatefulWidget {
   final CalendarClient client;
@@ -1099,8 +1031,6 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
   bool _isLoading = false;
 
   bool get isEditing => widget.eventToEdit != null;
-
-  // ... (initState, _combineDateTime, _handleSave, _handleDelete, _showSnackbar unchanged - omitted for brevity)
 
   @override
   void initState() {
@@ -1191,7 +1121,13 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
     }
 
     if (isEditing) {
-      _showSnackbar('Please use the delete button below to remove this session.', Colors.orange);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Please use the delete button below to remove this session.'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
       setState(() => _isLoading = false);
       return;
     }
@@ -1240,9 +1176,21 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
     if (result != null) {
       widget.onEventUpdated();
       Navigator.pop(context);
-      _showSnackbar('Event added to Google Calendar!', Colors.green);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Event added to Google Calendar!'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } else {
-      _showSnackbar('Add failed. Check console for details.', Colors.red);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Add failed. Check console for details.'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
 
     setState(() => _isLoading = false);
@@ -1284,9 +1232,21 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
     if (success) {
       widget.onEventUpdated();
       Navigator.pop(context);
-      _showSnackbar('Event deleted from Google Calendar! ', Colors.green);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Event deleted from Google Calendar! '),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } else {
-      _showSnackbar('Deletion failed. Check console for details.', Colors.red);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Deletion failed. Check console for details.'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
 
     setState(() => _isLoading = false);
@@ -1327,7 +1287,6 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
       labelStyle: TextStyle(color: enabled ? primaryTextDark : secondaryTextGrey),
     );
   }
-
 
   @override
   Widget build(BuildContext context) {
