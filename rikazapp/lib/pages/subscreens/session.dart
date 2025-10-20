@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; 
 
 // ------------------------------------------------------------
-// PlayAndPauseButton
+// PlayAndPauseButton (No change)
 // ------------------------------------------------------------
 class PlayAndPauseButton extends StatefulWidget {
   final Duration animationDuration;
@@ -82,23 +83,21 @@ class _PlayAndPauseButtonState extends State<PlayAndPauseButton>
 }
 
 // ------------------------------------------------------------
-// SessionPage
+// SessionPage (Modified)
 // ------------------------------------------------------------
 class SessionPage extends StatefulWidget {
-final String sessionType;
+  final String sessionType;
     final String duration;
     final String? numberOfBlocks;
-    // ADD THESE THREE LINES:
     final bool? isCameraDetectionEnabled; 
     final double? sensitivity;
     final String? notificationStyle;
 
   const SessionPage({
-super.key,
+    super.key,
         required this.sessionType,
         required this.duration,
         this.numberOfBlocks,
-        // ADD THESE THREE LINES TO THE CONSTRUCTOR:
         this.isCameraDetectionEnabled, 
         this.sensitivity,
         this.notificationStyle,
@@ -110,11 +109,17 @@ super.key,
 
 class _SessionPageState extends State<SessionPage>
     with SingleTickerProviderStateMixin {
+  
   late bool isPomodoro;
   late int focusMinutes;
   late int breakMinutes;
   late int totalBlocks;
 
+  // ✅ Supabase Logic Variables
+  String? _currentSessionId; 
+  DateTime? _sessionStartTime;
+  int _totalFocusSeconds = 0; 
+  
   String mode = 'focus';
   String status = 'running';
   int currentBlock = 1;
@@ -123,6 +128,98 @@ class _SessionPageState extends State<SessionPage>
   Timer? _timer;
 
   late AnimationController pulseController;
+
+
+// -------------------------------------------------------------------
+// 💡 SUPABASE LOGIC START - الكود النظيف
+// -------------------------------------------------------------------
+
+  // دالة تسجيل بداية الجلسة (INSERT)
+  Future<void> _startSessionInDB() async {
+    final supabase = Supabase.instance.client;
+    final currentUserId = supabase.auth.currentUser?.id;
+
+    if (currentUserId == null) {
+      print('Error: User not authenticated. Cannot start session.');
+      return;
+    }
+    
+    final int plannedDuration = isPomodoro 
+      ? (focusMinutes * totalBlocks) + (breakMinutes * totalBlocks)
+      : focusMinutes; 
+
+    _sessionStartTime = DateTime.now(); 
+
+    try {
+      // ✅ تم إزالة جميع الأعمدة التي تم تعيينها كـ NULLABLE في Supabase
+      final response = await supabase
+          .from('Focus_Session') 
+          .insert({
+            'user_id': currentUserId,
+            'session_type': widget.sessionType, 
+            'start_time': _sessionStartTime!.toIso8601String(),
+            'duration_minutes': plannedDuration, // المدة المخطط لها (بدلاً من 0)
+            
+            // الأعمدة المتبقية التي يجب أن تكون موجودة في الإدراج (مثل Boolean أو String):
+            'camera_monitored': widget.isCameraDetectionEnabled ?? false,
+            // إذا كان لديك أي أعمدة أخرى NOT NULL (مثل progress_level, distraction_level)، يجب إضافتها هنا بقيمة افتراضية
+            
+          }).select('session_id'); 
+          
+      if (response.isNotEmpty) {
+        setState(() {
+          _currentSessionId = response.first['session_id'].toString(); 
+        });
+        print('✅ Session Started in DB with ID: $_currentSessionId');
+      }
+    } catch (e) {
+      print('❌ Error starting session in DB: $e');
+      print('DEBUG: RLS check, Table Name, or an unhandled NOT NULL constraint remains (e.g., progress_level, distraction_level).');
+    }
+  }
+
+  // دالة تسجيل نهاية الجلسة (UPDATE)
+  Future<void> _endSessionInDB({bool completed = false}) async {
+    final supabase = Supabase.instance.client;
+
+    // ✅ تم إضافة التحقق من null لحل الخطأ البرمجي
+    if (_currentSessionId == null) {
+      print('Error: Cannot end session. Session ID is missing.');
+      return;
+    }
+    
+    final int actualFocusDurationMinutes = (_totalFocusSeconds ~/ 60);
+
+    // 🛑 شرط الحفظ: يجب أن يكون أكثر من دقيقة تركيز فعلي
+    if (actualFocusDurationMinutes < 1) {
+        print('❌ Session duration too short (less than 1 minute focus). Data not saved.');
+        return; 
+    }
+    
+    final endDateTime = DateTime.now().toIso8601String();
+    
+    try {
+      // 💡 تحديث البيانات
+      await supabase
+          .from('Focus_Session') 
+          .update({
+            'end_time': endDateTime,
+            'duration_minutes': actualFocusDurationMinutes, 
+            // يمكن إضافة 'completed: completed' إذا كان لديك عمود لذلك
+          })
+          // ✅ استخدام علامة '!' بأمان بعد التحقق
+          .eq('session_id', _currentSessionId!); 
+
+      print('✅ Session ID: $_currentSessionId Ended and recorded successfully. Focus Time: $actualFocusDurationMinutes min');
+    } catch (e) {
+      print('❌ Error ending session in DB: $e');
+    }
+  }
+
+// -------------------------------------------------------------------
+// 💡 SUPABASE LOGIC END
+// -------------------------------------------------------------------
+
 
   @override
   void initState() {
@@ -148,6 +245,9 @@ class _SessionPageState extends State<SessionPage>
     timeLeft = focusMinutes * 60;
     startTimer();
 
+    // 1. ✅ استدعاء دالة البدء
+    _startSessionInDB(); 
+
     pulseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 1),
@@ -161,7 +261,13 @@ class _SessionPageState extends State<SessionPage>
       if (timeLeft <= 1) {
         onPhaseEnd();
       } else {
-        setState(() => timeLeft--);
+        setState(() {
+          timeLeft--;
+          // ✅ NEW: تراكم الثواني فقط في وضع التركيز
+          if (mode == 'focus') { 
+              _totalFocusSeconds++;
+          }
+        });
       }
     });
   }
@@ -170,6 +276,8 @@ class _SessionPageState extends State<SessionPage>
     if (!isPomodoro) {
       setState(() => status = 'idle');
       _timer?.cancel();
+      // 2. ✅ إنهاء الجلسة المخصصة المكتملة
+      _endSessionInDB(completed: true); 
       return;
     }
 
@@ -192,6 +300,8 @@ class _SessionPageState extends State<SessionPage>
           status = 'idle';
         });
         _timer?.cancel();
+        // 2. ✅ إنهاء جلسة البومودورو المكتملة
+        _endSessionInDB(completed: true); 
       } else {
         setState(() {
           currentBlock = next;
@@ -208,54 +318,52 @@ class _SessionPageState extends State<SessionPage>
     });
   }
 
- void onQuit() {
-  // Stop everything first
-  _timer?.cancel();
-  pulseController.stop();
-  pulseController.dispose();
+  void onQuit() {
+    _timer?.cancel();
+    pulseController.stop();
 
-  // Make sure widget won’t rebuild after dispose
-  if (!mounted) return;
+    if (!mounted) return;
 
-  showDialog(
-    context: context,
-    builder: (_) => AlertDialog(
-      title: const Text('End Session?'),
-      content: const Text('Are you sure you want to quit this session?'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: () {
-            // Close dialog first
-            Navigator.pop(context);
-
-            // Dispose animation again safely before navigating
-            _timer?.cancel();
-            if (pulseController.isAnimating) pulseController.stop();
-
-            // Then navigate
-            Navigator.pushNamedAndRemoveUntil(
-              context,
-              '/home',
-              (route) => false,
-            );
-          },
-          child: const Text(
-            'Quit',
-            style: TextStyle(color: Colors.red),
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('End Session?'),
+        content: const Text('Are you sure you want to quit this session?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
           ),
-        ),
-      ],
-    ),
-  );
-}
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+
+              // 3. ✅ استدعاء دالة الإنهاء عند الخروج اليدوي
+              _endSessionInDB(completed: false); 
+
+              // Dispose animation again safely before navigating
+              _timer?.cancel();
+              if (pulseController.isAnimating) pulseController.stop();
+
+              // Then navigate
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                '/home', 
+                (route) => false,
+              );
+            },
+            child: const Text(
+              'Quit',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
 
   void onGames() {
-    // Placeholder for future navigation
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Games page coming soon!')),
     );
@@ -515,7 +623,7 @@ class _SessionPageState extends State<SessionPage>
 }
 
 // ------------------------------------------------------------
-// Gradient Ring Painter
+// Gradient Ring Painter (No change)
 // ------------------------------------------------------------
 class _GradientRingPainter extends CustomPainter {
   final double progress;
@@ -571,7 +679,7 @@ class _GradientRingPainter extends CustomPainter {
 }
 
 // ------------------------------------------------------------
-// Pomodoro Block
+// Pomodoro Block (No change)
 // ------------------------------------------------------------
 class _PomodoroBlock extends StatelessWidget {
   final int blockNum;
@@ -590,7 +698,6 @@ class _PomodoroBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool isPausedTheme = Theme.of(context).brightness == Brightness.light;
     final Color bgColor =
         isCompleted ? Colors.green : (isActive ? const Color.fromRGBO(33, 150, 243, 1) : Colors.white);
 
