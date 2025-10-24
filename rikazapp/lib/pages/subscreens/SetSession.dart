@@ -104,6 +104,25 @@ class _SetSessionPageState extends State<SetSessionPage> {
     _applyPreset(selectedPreset);
   }
 
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
+    // NEW HELPER: Adaptive Font Size function
+    // Adjusts the proportional font size based on the system's text scale factor to prevent overflow
+    double _adaptiveFontSize(double baseScreenWidthMultiplier) {
+        final screenWidth = MediaQuery.of(context).size.width;
+        final baseSize = screenWidth * baseScreenWidthMultiplier;
+        final textScaleFactor = MediaQuery.of(context).textScaleFactor;
+        
+        // Mitigation factor to prevent excessive scaling on devices with large system fonts
+        final mitigationFactor = 0.8; 
+        
+        // Size = BaseSize / (1.0 + (ScaleFactor - 1.0) * MitigationFactor)
+        return baseSize / (1.0 + (textScaleFactor - 1.0) * mitigationFactor);
+    }
+
   // --- LOGIC (Functionality Unchanged) ---
   void _applyPreset(String preset) {
     if (preset == 'Aggressive Focus (High Sensitivity)') {
@@ -154,20 +173,23 @@ class _SetSessionPageState extends State<SetSessionPage> {
     if (isRikazToolConnected) return;
 
     setState(() => isLoading = true);
-    await Future.delayed(const Duration(milliseconds: 800));
+    // FIX: Increased delay slightly for better UX, but protected by mounted check
+    await Future.delayed(const Duration(milliseconds: 1500)); 
 
-    if (!mounted) return;
+    if (!mounted) return; // FIX: Protects setState after await
     setState(() {
       isRikazToolConnected = true;
       isLoading = false;
       _showRikazConfirmation = true;
     });
 
+    // Delay for confirmation visibility
     await Future.delayed(const Duration(seconds: 2));
-    if (mounted) {
+    
+    if (mounted) { // FIX: Protects final setState
       setState(() {
         _showRikazConfirmation = false;
-        isConfigurationOpen = true; // Auto-open config menu after successful connection
+        isConfigurationOpen = true; 
       });
     }
   }
@@ -192,10 +214,10 @@ class _SetSessionPageState extends State<SetSessionPage> {
           SizedBox(height: screenHeight * 0.01),
           Text('Connection Successful! 🎉',
               style: TextStyle(
-                  fontSize: screenWidth * 0.045, fontWeight: FontWeight.bold, color: statusColor)),
+                  fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: statusColor)), // MODIFIED
           SizedBox(height: screenHeight * 0.008),
           Text('You can now monitor your focus and apply custom configurations to your sessions.',
-              style: TextStyle(fontSize: screenWidth * 0.035, color: localSecondaryTextGrey)),
+              style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: localSecondaryTextGrey)), // MODIFIED
         ],
       );
     } else if (isRikazToolConnected) {
@@ -206,10 +228,10 @@ class _SetSessionPageState extends State<SetSessionPage> {
         children: [
           Text('Rikaz Tools Active',
               style: TextStyle(
-                  fontSize: screenWidth * 0.045, fontWeight: FontWeight.bold, color: statusColor)),
+                  fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: statusColor)), // MODIFIED
           SizedBox(height: screenHeight * 0.01),
           Text('Tool connected. Configuration is available below.',
-              style: TextStyle(fontSize: screenWidth * 0.035, color: localSecondaryTextGrey)),
+              style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: localSecondaryTextGrey)), // MODIFIED
         ],
       );
     } else {
@@ -220,16 +242,16 @@ class _SetSessionPageState extends State<SetSessionPage> {
         children: [
           Text('Connect Rikaz Tools',
               style: TextStyle(
-                  fontSize: screenWidth * 0.045, fontWeight: FontWeight.bold, color: darkText)),
+                  fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: darkText)), // MODIFIED
           SizedBox(height: screenHeight * 0.008),
           Text(
               'Slide to connect the Rikaz focus tools and unlock settings.',
-              style: TextStyle(fontSize: screenWidth * 0.035, color: localSecondaryTextGrey)),
+              style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: localSecondaryTextGrey)), // MODIFIED
           SizedBox(height: screenHeight * 0.02),
           SlideAction(
             text: isLoading ? "Connecting..." : "Slide to Connect",
             textStyle: TextStyle(
-                fontSize: screenWidth * 0.038,
+                fontSize: _adaptiveFontSize(0.038), // MODIFIED
                 fontWeight: FontWeight.w600,
                 color: Colors.white),
             innerColor: localCardBackground,
@@ -295,10 +317,10 @@ class _SetSessionPageState extends State<SetSessionPage> {
             Expanded(
               child: Text(label,
                   style: TextStyle(
-                      fontSize: screenWidth * 0.04, fontWeight: FontWeight.w600, color: darkText)),
+                      fontSize: _adaptiveFontSize(0.04), fontWeight: FontWeight.w600, color: darkText)), // MODIFIED
             ),
             Text(breakText, style: TextStyle(
-                fontSize: screenWidth * 0.035, color: lightText)),
+                fontSize: _adaptiveFontSize(0.035), color: lightText)), // MODIFIED
           ],
         ),
       ),
@@ -314,7 +336,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
       children: [
         Text('Number of Blocks',
             style: TextStyle(
-                fontSize: screenWidth * 0.045, fontWeight: FontWeight.bold, color: darkText)),
+                fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: darkText)), // MODIFIED
         SizedBox(height: screenHeight * 0.02),
         Container(
           padding: EdgeInsets.symmetric(vertical: screenHeight * 0.025),
@@ -330,7 +352,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                 child: Text(
                   numberOfBlocks.toInt().toString(),
                   style: TextStyle(
-                      fontSize: screenWidth * 0.12, fontWeight: FontWeight.bold, color: blueText),
+                      fontSize: _adaptiveFontSize(0.12), fontWeight: FontWeight.bold, color: blueText), // MODIFIED
                 ),
               ),
               Slider(
@@ -349,7 +371,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                   'One block = one focus session followed by its break.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                      fontSize: screenWidth * 0.035, color: lightText),
+                      fontSize: _adaptiveFontSize(0.035), color: lightText), // MODIFIED
                 ),
               ),
             ],
@@ -368,7 +390,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
       children: [
         Text('Session Duration',
             style: TextStyle(
-                fontSize: screenWidth * 0.045, fontWeight: FontWeight.bold, color: darkText)),
+                fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: darkText)), // MODIFIED
         SizedBox(height: screenHeight * 0.02),
         Container(
           padding: EdgeInsets.symmetric(vertical: screenHeight * 0.025),
@@ -384,13 +406,13 @@ class _SetSessionPageState extends State<SetSessionPage> {
                 child: Text(
                   '${customDuration.toInt()}:00',
                   style: TextStyle(
-                      fontSize: screenWidth * 0.12, fontWeight: FontWeight.bold, color: hpDeepBlue),
+                      fontSize: _adaptiveFontSize(0.12), fontWeight: FontWeight.bold, color: hpDeepBlue), // MODIFIED
                 ),
               ),
               Text('No Breaks',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                      fontSize: screenWidth * 0.04, color: lightText)),
+                      fontSize: _adaptiveFontSize(0.04), color: lightText)), // MODIFIED
               Slider(
                 value: customDuration,
                 min: 25,
@@ -407,9 +429,9 @@ class _SetSessionPageState extends State<SetSessionPage> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text('25 Minutes', style: TextStyle(
-                        fontSize: screenWidth * 0.03, color: lightText)),
+                        fontSize: _adaptiveFontSize(0.03), color: lightText)), // MODIFIED
                     Text('120 Minutes', style: TextStyle(
-                        fontSize: screenWidth * 0.03, color: lightText)),
+                        fontSize: _adaptiveFontSize(0.03), color: lightText)), // MODIFIED
                   ],
                 ),
               ),
@@ -454,7 +476,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                 child: Text(
                   'Connection Required to edit settings.',
                   style: TextStyle(
-                    fontSize: screenWidth * 0.038,
+                    fontSize: _adaptiveFontSize(0.038), // MODIFIED
                     fontWeight: FontWeight.bold,
                     color: Colors.red.shade700,
                   ),
@@ -466,7 +488,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Rikaz Tools Preset', style: TextStyle(
-                    fontSize: screenWidth * 0.035, color: isConfigurationDisabled ? disabledTextColor : darkText, fontWeight: FontWeight.bold)),
+                    fontSize: _adaptiveFontSize(0.035), color: isConfigurationDisabled ? disabledTextColor : darkText, fontWeight: FontWeight.bold)), // MODIFIED
                 SizedBox(height: screenHeight * 0.01),
                 Container(
                   padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.03),
@@ -481,7 +503,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                       isExpanded: true,
                       icon: Icon(Icons.arrow_drop_down, color: isConfigurationDisabled ? disabledTextColor : primaryColor),
                       style: TextStyle(color: isConfigurationDisabled ? disabledTextColor : darkText,
-                          fontSize: screenWidth * 0.04),
+                          fontSize: _adaptiveFontSize(0.04)), // MODIFIED
                       dropdownColor: cardBackground,
                       onChanged: isConfigurationDisabled ? null : (String? newValue) {
                         if (newValue != null) {
@@ -491,7 +513,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                       items: toolPresets.map<DropdownMenuItem<String>>((String value) {
                         return DropdownMenuItem<String>(
                           value: value,
-                          child: Text(value, style: TextStyle(color: darkText)),
+                          child: Text(value, style: TextStyle(color: darkText, fontSize: _adaptiveFontSize(0.04))), // MODIFIED
                         );
                       }).toList(),
                     ),
@@ -506,7 +528,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Camera Detection', style: TextStyle(
-                    fontSize: screenWidth * 0.04, color: isConfigurationDisabled ? disabledTextColor : darkText)),
+                    fontSize: _adaptiveFontSize(0.04), color: isConfigurationDisabled ? disabledTextColor : darkText)), // MODIFIED
                 Switch(
                   value: isCameraDetectionEnabled,
                   onChanged: isConfigurationDisabled ? null : (v) {
@@ -528,7 +550,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Triggers', style: TextStyle(
-                    fontSize: screenWidth * 0.04, color: isConfigurationDisabled ? disabledTextColor : darkText)),
+                    fontSize: _adaptiveFontSize(0.04), color: isConfigurationDisabled ? disabledTextColor : darkText)), // MODIFIED
                 Row(
                   children: List.generate(
                     3,
@@ -553,11 +575,11 @@ class _SetSessionPageState extends State<SetSessionPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Sensitivity', style: TextStyle(
-                    fontSize: screenWidth * 0.04, color: isConfigurationDisabled ? disabledTextColor : darkText)),
+                    fontSize: _adaptiveFontSize(0.04), color: isConfigurationDisabled ? disabledTextColor : darkText)), // MODIFIED
                 Row(
                   children: [
                     Text('Low', style: TextStyle(
-                        fontSize: screenWidth * 0.03, color: isConfigurationDisabled ? disabledTextColor : lightText)),
+                        fontSize: _adaptiveFontSize(0.03), color: isConfigurationDisabled ? disabledTextColor : lightText)), // MODIFIED
                     Expanded(
                       child: Slider(
                         value: sensitivity,
@@ -576,7 +598,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                       ),
                     ),
                     Text('High', style: TextStyle(
-                        fontSize: screenWidth * 0.03, color: isConfigurationDisabled ? disabledTextColor : lightText)),
+                        fontSize: _adaptiveFontSize(0.03), color: isConfigurationDisabled ? disabledTextColor : lightText)), // MODIFIED
                   ],
                 ),
               ],
@@ -588,7 +610,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Notification Style', style: TextStyle(
-                    fontSize: screenWidth * 0.04, color: isConfigurationDisabled ? disabledTextColor : darkText)),
+                    fontSize: _adaptiveFontSize(0.04), color: isConfigurationDisabled ? disabledTextColor : darkText)), // MODIFIED
                 SizedBox(height: screenHeight * 0.015),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -617,7 +639,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                                 ),
                               ),
                               Text(option, style: TextStyle(color: isConfigurationDisabled ? disabledTextColor : darkText,
-                                  fontSize: screenWidth * 0.035)),
+                                  fontSize: _adaptiveFontSize(0.035))), // MODIFIED
                             ],
                           ),
                         ),
@@ -683,7 +705,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
               Text(
                 text,
                 style: TextStyle(
-                  fontSize: screenWidth * 0.035,
+                  fontSize: _adaptiveFontSize(0.035), // MODIFIED
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                   color: isSelected ? selectedColor : unselectedColor,
                 ),
@@ -698,22 +720,6 @@ class _SetSessionPageState extends State<SetSessionPage> {
 
   @override
   Widget build(BuildContext context) {
-    // We expect the arguments to be a SessionMode enum value
-    // NOTE: This logic assumes you are defining routes (like in main.dart)
-    // where you construct SetSessionPage using the arguments.
-    // Example route definition:
-    // '/setsession': (context) => SetSessionPage(initialMode: ModalRoute.of(context)!.settings.arguments as SessionMode?),
-
-    // We do NOT need to fetch arguments here if they are correctly passed to the constructor.
-    // However, if the route is defined simply as SetSessionPage(), we would do this:
-    /*
-    final SessionMode? initialModeFromRoute = ModalRoute.of(context)!.settings.arguments as SessionMode?;
-    if (initialModeFromRoute != null && sessionMode != initialModeFromRoute) {
-      // Temporarily set state based on navigation argument if needed, 
-      // but relying on initState is cleaner. The current setup relies on the 
-      // constructor argument being passed to widget.initialMode.
-    }
-    */
     
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -729,12 +735,12 @@ class _SetSessionPageState extends State<SetSessionPage> {
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: primaryTextDark),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () => Navigator.of(context).pop(), // CORRECT pop command
         ),
         title: Text(
           'Set Session',
           style: TextStyle(
-              fontSize: screenWidth * 0.05, fontWeight: FontWeight.bold, color: primaryTextDark),
+              fontSize: _adaptiveFontSize(0.05), fontWeight: FontWeight.bold, color: primaryTextDark), // MODIFIED
         ),
         centerTitle: true,
       ),
@@ -759,11 +765,11 @@ class _SetSessionPageState extends State<SetSessionPage> {
                   Text(
                     sessionMode == SessionMode.pomodoro ? 'Pomodoro Session' : 'Custom Session',
                     style: TextStyle(
-                        fontSize: screenWidth * 0.07, fontWeight: FontWeight.bold, color: hpDeepBlue)),
+                        fontSize: _adaptiveFontSize(0.07), fontWeight: FontWeight.bold, color: hpDeepBlue)), // MODIFIED
                   Text(
                     sessionMode == SessionMode.pomodoro ? 'Configure your structured focus routine' : 'Set your own uninterrupted timing',
                     style: TextStyle(
-                        fontSize: screenWidth * 0.04, color: secondaryTextGrey)),
+                        fontSize: _adaptiveFontSize(0.04), color: secondaryTextGrey)), // MODIFIED
                   SizedBox(height: screenHeight * 0.035),
 
                   // MODE TOGGLE BUTTONS
@@ -776,6 +782,9 @@ class _SetSessionPageState extends State<SetSessionPage> {
                   // CONDITIONAL DURATION SECTION
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
+                    transitionBuilder: (Widget child, Animation<double> animation) {
+                      return FadeTransition(opacity: animation, child: child);
+                    },
                     child: (sessionMode == SessionMode.pomodoro)
                         ? Column(
                       key: const ValueKey(SessionMode.pomodoro),
@@ -783,7 +792,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                       children: [
                         Text('Duration Options',
                             style: TextStyle(
-                                fontSize: screenWidth * 0.045, fontWeight: FontWeight.bold, color: darkText)),
+                                fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: darkText)), // MODIFIED
                         SizedBox(height: screenHeight * 0.02),
                         _pomodoroDurationOption('25min', '+ 5 min break'),
                         _pomodoroDurationOption('50min', '+ 10 min break'),
@@ -820,7 +829,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                                 style: TextStyle(
                                     color: isRikazToolConnected ? darkText : Colors.grey.shade600,
                                     fontWeight: FontWeight.bold,
-                                    fontSize: screenWidth * 0.04)),
+                                    fontSize: _adaptiveFontSize(0.04))), // MODIFIED
                             Icon(isConfigurationOpen && isRikazToolConnected ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
                                 color: isRikazToolConnected ? primaryColor : Colors.grey.shade600,
                                 size: screenWidth * 0.06),
@@ -884,7 +893,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                           child: Text(
                             'Rikaz tools offline. Session tracking will be limited.',
                             style: TextStyle(
-                              fontSize: screenWidth * 0.03,
+                              fontSize: _adaptiveFontSize(0.03), // MODIFIED
                               color: Colors.grey.shade600,
                               fontStyle: FontStyle.italic,
                             ),
@@ -911,7 +920,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                                 'Start Session',
                                 style: TextStyle(
                                     color: Colors.white,
-                                    fontSize: screenWidth * 0.045, fontWeight: FontWeight.bold),
+                                    fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold), // MODIFIED
                               )
                             : SizedBox(
                                 width: screenWidth * 0.055, 

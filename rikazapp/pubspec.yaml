@@ -48,11 +48,12 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/fonts/
 
   fonts:
-    - family: Poppins
+    - family: Montserrat
       fonts:
-        - asset: assets/fonts/Poppins-Regular.ttf
-        - asset: assets/fonts/Poppins-BoldItalic.ttf
-        - asset: assets/fonts/Poppins-ThinItalic.ttf
-          weight: 700
+        - asset: assets/fonts/Montserrat-Regular.ttf # Use your actual file name
+          weight: 400 # Regular
+        - asset: assets/fonts/Montserrat-Bold.ttf    # Use your actual file name
+          weight: 700 # Bold

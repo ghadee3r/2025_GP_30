@@ -7,6 +7,8 @@ import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sig
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:rikazapp/pages/subscreens/SetSession.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb; // ADDED SUPABASE IMPORT
+
 // Enum to manage the user's schedule view preference
 enum ScheduleView { all, rikaz }
 
@@ -197,6 +199,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   List<calendar.Event> _displayedEvents = [];
   ScheduleView _scheduleView = ScheduleView.all;
 
+  // Supabase Client Reference (Assumes global initialization)
+  final supabase = sb.Supabase.instance.client; // ADDED SUPABASE CLIENT
+
+  // NEW: State variable for user name
+  String _userName = 'User Name'; // Default placeholder
+
   // Calendar UI State for table_calendar
   DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime.now();
@@ -242,6 +250,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    
+    _fetchUserName(); // NEW: Fetch user name on load
 
     _client._googleSignIn.onCurrentUserChanged.listen((GoogleSignInAccount? account) {
       if (account != null) {
@@ -279,6 +289,42 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _fetchSchedule();
     }
   }
+  
+  // --- NEW: SUPABASE FETCH LOGIC (Based on ProfileScreen code) ---
+  Future<void> _fetchUserName() async {
+    final user = supabase.auth.currentUser;
+    if (user != null) {
+      // Fetch name from user_metadata (as shown in your ProfileScreen context)
+      final metadata = user.userMetadata;
+      
+      String fetchedName = 'User';
+      
+      // 1. Try to get name from metadata
+      final metadataName = metadata?['full_name'] as String?;
+      if (metadataName != null && metadataName.isNotEmpty) {
+          fetchedName = metadataName;
+      } else {
+        // 2. Fallback to email if name is missing
+        fetchedName = user.email?.split('@')[0] ?? 'User';
+      }
+      
+      // Simple capitalization (e.g., "john doe" -> "John Doe") for display
+      final formattedName = fetchedName.split(' ').map((word) {
+          if (word.isEmpty) return '';
+          return word[0].toUpperCase() + word.substring(1).toLowerCase();
+      }).join(' ');
+
+      if (mounted) {
+        setState(() {
+          _userName = formattedName;
+        });
+      }
+    } else {
+        if (mounted) setState(() => _userName = 'Guest');
+    }
+  }
+  // ---------------------------------------------------------------
+
 
   void _filterEvents() {
     if (_scheduleView == ScheduleView.all) {
@@ -321,6 +367,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     setState(() { _isSigningIn = true; });
 
     final success = await _client.signIn();
+    
+    if (!mounted) return; // FIX: Protects against the widget being disposed.
 
     setState(() {
       _isCalendarConnected = success;
@@ -329,9 +377,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     if (success) {
       await _fetchSchedule();
-      _showSnackbar('Successfully connected to Google Calendar!', Colors.green);
+      if (mounted) {
+        _showSnackbar('Successfully connected to Google Calendar!', Colors.green);
+      }
     } else {
-      _showSnackbar('Connection failed or cancelled. Check network.', Colors.red);
+      if (mounted) {
+        _showSnackbar('Connection failed or cancelled. Check network.', Colors.red);
+      }
     }
   }
 
@@ -442,7 +494,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         // FLEXIBLE HEIGHT
         SizedBox(height: screenHeight * 0.005),
         Text(
-          'UserName !',
+          '$_userName !', // MODIFIED TO USE SUPABASE NAME
           style: TextStyle(
             // MODIFIED: Use _adaptiveFontSize
             fontSize: _adaptiveFontSize(0.075), // Proportional to screen width
