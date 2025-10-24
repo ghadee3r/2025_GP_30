@@ -400,18 +400,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   // NEW HELPER: Adaptive Font Size function
-  // Adjusts the proportional font size based on the system's text scale factor
+  // Adjusts the proportional font size based on the system's text scale factor to prevent overflow
   double _adaptiveFontSize(double baseScreenWidthMultiplier) {
     final screenWidth = MediaQuery.of(context).size.width;
     final baseSize = screenWidth * baseScreenWidthMultiplier;
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
     
-    // Use a compensatory factor to reduce the font size when the system font is large.
-    // The mitigation factor (0.8) ensures that large system fonts still increase the size,
-    // but less aggressively to prevent overflow.
+    // Use a compensatory factor: e.g., if scale is 2.0, reduce effective size by (2.0 - 1.0) * a mitigation factor.
+    // Use a factor of 0.8 for mitigation, meaning only 80% of the excessive scale is compensated for.
     final mitigationFactor = 0.8;
     
-    // Size = BaseSize / (1.0 + (ScaleFactor - 1.0) * MitigationFactor)
+    // The resulting size is reduced relative to the base size by the excessive text scale
     return baseSize / (1.0 + (textScaleFactor - 1.0) * mitigationFactor);
   }
 
@@ -422,7 +421,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Widget buildWelcomeHeaderLocal() {
     // Get screen dimensions for proportional sizing
     final screenHeight = MediaQuery.of(context).size.height;
-    // final screenWidth = MediaQuery.of(context).size.width; // Use _adaptiveFontSize
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -516,10 +514,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       right: i == 0 ? screenWidth * 0.03 : 0,
                       left: i == 1 ? screenWidth * 0.03 : 0,
                     ),
-                    // FLEXIBLE HEIGHT
-                    height: screenHeight * 0.13,
+                    // REMOVED FIXED HEIGHT TO PREVENT OVERFLOW
+
                     // FLEXIBLE PADDING
-                    padding: EdgeInsets.all(screenWidth * 0.03),
+                    padding: EdgeInsets.symmetric(
+                        vertical: screenHeight * 0.02, 
+                        horizontal: screenWidth * 0.03
+                    ),
+                    constraints: BoxConstraints(
+                        minHeight: screenHeight * 0.12, 
+                    ),
                     decoration: BoxDecoration(
                       color: selected ? modeBgColor : localCardBackground,
                       borderRadius:
@@ -536,6 +540,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min, // Ensure minimal height usage
                       children: [
                         Text(
                           mode['title']!,
@@ -554,6 +559,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                         Text(
                           mode['desc']!,
                           textAlign: TextAlign.center,
+                            overflow: TextOverflow.ellipsis, // Added fallback
+                            maxLines: 2, // Added fallback
                           style: TextStyle(
                             // MODIFIED: Use _adaptiveFontSize
                             fontSize: _adaptiveFontSize(0.03),
@@ -948,13 +955,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final cs = Theme.of(context).colorScheme;
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-    // final textScaleFactor = MediaQuery.of(context).textScaleFactor; // Can be removed since it's now in the helper
 
     // Define proportional horizontal padding
     final proportionalHorizontalPadding = screenWidth * 0.1; // roughly 10% of screen width
 
     return Scaffold(
       extendBody: true,
+      // MODIFIED: Added resizeToAvoidBottomInset: false as requested
+      resizeToAvoidBottomInset: false, 
       backgroundColor: localPrimaryBackground,
       body: Container(
         decoration: BoxDecoration(
@@ -1019,7 +1027,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 // -----------------------------------------------------------------------------
 // 5. Cute Overlay (Modal Bottom Sheet Widget for Add/Delete) - THEMED AND FLEXIBLE
 // -----------------------------------------------------------------------------
-// (The _EventManagementOverlay class is fully preserved and uses flexible sizing, so its code is omitted for brevity)
+// (The _EventManagementOverlay class has its own separate logic for keyboard resizing via Padding and viewInsets, which is unaffected.)
 
 class _EventManagementOverlay extends StatefulWidget {
   final CalendarClient client;
@@ -1377,9 +1385,6 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                 icon: Icons.title,
                 enabled: !isEditing,
               ),
-             // Note: Flutter's default TextFormField text size automatically scales, 
-             // but custom labelStyle/helperStyle could be added using _adaptiveFontSize 
-             // if they were explicitly defined here.
               validator: (value) => value == null || value.isEmpty ? 'Title is required' : null,
               onSaved: (value) => _title = value!,
               readOnly: isEditing,
