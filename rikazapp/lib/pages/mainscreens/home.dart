@@ -399,6 +399,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  // NEW HELPER: Adaptive Font Size function
+  // Adjusts the proportional font size based on the system's text scale factor
+  double _adaptiveFontSize(double baseScreenWidthMultiplier) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final baseSize = screenWidth * baseScreenWidthMultiplier;
+    final textScaleFactor = MediaQuery.of(context).textScaleFactor;
+    
+    // Use a compensatory factor to reduce the font size when the system font is large.
+    // The mitigation factor (0.8) ensures that large system fonts still increase the size,
+    // but less aggressively to prevent overflow.
+    final mitigationFactor = 0.8;
+    
+    // Size = BaseSize / (1.0 + (ScaleFactor - 1.0) * MitigationFactor)
+    return baseSize / (1.0 + (textScaleFactor - 1.0) * mitigationFactor);
+  }
+
   // ---------------------------------------------------------------------------
   // THEMED UI SECTIONS (MADE FLEXIBLE)
   // ---------------------------------------------------------------------------
@@ -406,7 +422,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Widget buildWelcomeHeaderLocal() {
     // Get screen dimensions for proportional sizing
     final screenHeight = MediaQuery.of(context).size.height;
-    final screenWidth = MediaQuery.of(context).size.width;
+    // final screenWidth = MediaQuery.of(context).size.width; // Use _adaptiveFontSize
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -417,8 +433,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             Text(
               'Good Evening,',
               style: TextStyle(
-                // FLEXIBLE FONT SIZE
-                fontSize: screenWidth * 0.085, // Proportional to screen width
+                // MODIFIED: Use _adaptiveFontSize
+                fontSize: _adaptiveFontSize(0.085), // Proportional to screen width
                 fontWeight: FontWeight.w700,
                 color: hpDeepBlue,
               ),
@@ -430,8 +446,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         Text(
           'UserName !',
           style: TextStyle(
-            // FLEXIBLE FONT SIZE
-            fontSize: screenWidth * 0.075, // Proportional to screen width
+            // MODIFIED: Use _adaptiveFontSize
+            fontSize: _adaptiveFontSize(0.075), // Proportional to screen width
             fontWeight: FontWeight.w400,
             color: hpThinBlack,
           ),
@@ -441,8 +457,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         Text(
           'Are you ready for a productive day?',
           style: TextStyle(
-            // FLEXIBLE FONT SIZE
-            fontSize: screenWidth * 0.035,
+            // MODIFIED: Use _adaptiveFontSize
+            fontSize: _adaptiveFontSize(0.035),
             fontWeight: FontWeight.w400,
             color: const Color.fromARGB(255, 129, 129, 129),
 
@@ -467,8 +483,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         Text(
           'Start Focus Session',
           style: TextStyle(
-            // FLEXIBLE FONT SIZE
-            fontSize: screenWidth * 0.045,
+            // MODIFIED: Use _adaptiveFontSize
+            fontSize: _adaptiveFontSize(0.045),
             fontWeight: FontWeight.bold,
             color: localPrimaryTextDark,
           ),
@@ -526,8 +542,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            // FLEXIBLE FONT SIZE
-                            fontSize: screenWidth * 0.04,
+                            // MODIFIED: Use _adaptiveFontSize
+                            fontSize: _adaptiveFontSize(0.04),
                             color: selected
                                 ? selectedTextColor
                                 : defaultTextColor,
@@ -539,8 +555,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                           mode['desc']!,
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            // FLEXIBLE FONT SIZE
-                            fontSize: screenWidth * 0.03,
+                            // MODIFIED: Use _adaptiveFontSize
+                            fontSize: _adaptiveFontSize(0.03),
                             color: selected
                                 ? selectedTextColor.withOpacity(0.7)
                                 : localSecondaryTextGrey,
@@ -550,8 +566,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     ),
                   ),
                 ),
-              ),
-            );
+              ));
           }),
         ),
         // FLEXIBLE HEIGHT
@@ -577,8 +592,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               'Set Session',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                // FLEXIBLE FONT SIZE
-                fontSize: screenWidth * 0.04,
+                // MODIFIED: Use _adaptiveFontSize
+                fontSize: _adaptiveFontSize(0.04),
                 color: hasSelectedMode
                     ? Colors.white
                     : Colors.white.withOpacity(0.7),
@@ -625,8 +640,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       : 'Google Calendar Required',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    // FLEXIBLE FONT SIZE
-                    fontSize: screenWidth * 0.04,
+                    // MODIFIED: Use _adaptiveFontSize
+                    fontSize: _adaptiveFontSize(0.04),
                     color: statusTextColor,
                   ),
                 ),
@@ -635,8 +650,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       ? 'Sessions are synced successfully!'
                       : 'Connect to sync your sessions and manage them directly.',
                   style: TextStyle(
-                    // FLEXIBLE FONT SIZE
-                    fontSize: screenWidth * 0.033,
+                    // MODIFIED: Use _adaptiveFontSize
+                    fontSize: _adaptiveFontSize(0.033),
                     color: localSecondaryTextGrey,
                   ),
                 ),
@@ -650,7 +665,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             onPressed: _handleCalendarSignOut,
             // FLEXIBLE ICON SIZE
             icon: Icon(Icons.logout, size: screenWidth * 0.045),
-            label: Text('Disconnect', style: TextStyle(fontSize: screenWidth * 0.03)),
+            label: Text('Disconnect', style: TextStyle(fontSize: _adaptiveFontSize(0.03))), // MODIFIED
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.blueGrey.shade400,
               foregroundColor: Colors.white,
@@ -664,7 +679,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             icon: _isSigningIn ?
             SizedBox(width: screenWidth * 0.045, height: screenWidth * 0.045, child: const CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : Icon(Icons.person_add_alt_1, size: screenWidth * 0.045),
-            label: Text(_isSigningIn ? 'Connecting...' : 'Connect Google', style: TextStyle(fontSize: screenWidth * 0.03)),
+            label: Text(_isSigningIn ? 'Connecting...' : 'Connect Google', style: TextStyle(fontSize: _adaptiveFontSize(0.03))), // MODIFIED
             style: ElevatedButton.styleFrom(
               backgroundColor: localPrimaryThemePurple,
               foregroundColor: Colors.white,
@@ -690,8 +705,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         Text(
           'Scheduled Sessions',
           style: TextStyle(
-              // FLEXIBLE FONT SIZE
-              fontSize: screenWidth * 0.055, fontWeight: FontWeight.bold, color: localPrimaryTextDark),
+              // MODIFIED: Use _adaptiveFontSize
+              fontSize: _adaptiveFontSize(0.055), fontWeight: FontWeight.bold, color: localPrimaryTextDark),
         ),
         // FLEXIBLE HEIGHT
         SizedBox(height: screenHeight * 0.025),
@@ -713,8 +728,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               Text(
                 'Calendar',
                 style: TextStyle(
-                    // FLEXIBLE FONT SIZE
-                    fontSize: screenWidth * 0.045, fontWeight: FontWeight.bold, color: localPrimaryTextDark),
+                    // MODIFIED: Use _adaptiveFontSize
+                    fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: localPrimaryTextDark),
               ),
               // FLEXIBLE HEIGHT
               SizedBox(height: screenHeight * 0.02),
@@ -735,8 +750,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     formatButtonVisible: false,
                     titleCentered: true,
                     titleTextStyle: TextStyle(
-                        // FLEXIBLE FONT SIZE
-                        fontSize: screenWidth * 0.04, fontWeight: FontWeight.bold, color: localPrimaryTextDark),
+                        // MODIFIED: Use _adaptiveFontSize
+                        fontSize: _adaptiveFontSize(0.04), fontWeight: FontWeight.bold, color: localPrimaryTextDark),
                   ),
                   calendarFormat: CalendarFormat.month,
                   calendarStyle: CalendarStyle(
@@ -764,8 +779,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         Text(
           'Upcoming Sessions',
           style: TextStyle(
-              // FLEXIBLE FONT SIZE
-              fontSize: screenWidth * 0.045, fontWeight: FontWeight.bold, color: localPrimaryTextDark),
+              // MODIFIED: Use _adaptiveFontSize
+              fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: localPrimaryTextDark),
         ),
 
         // FLEXIBLE HEIGHT
@@ -780,7 +795,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             TextButton.icon(
               onPressed: () => _showEventOverlay(selectedDate: _selectedDay),
               icon: Icon(Icons.add_circle, color: calendarAccent),
-              label: Text('Add Session', style: TextStyle(color: calendarAccent, fontSize: screenWidth * 0.035)),
+              label: Text('Add Session', style: TextStyle(color: calendarAccent, fontSize: _adaptiveFontSize(0.035))), // MODIFIED
             ),
           ],
         ),
@@ -799,7 +814,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   ? 'No upcoming Rikaz Focus Sessions found.'
                   : 'No upcoming sessions found.')
                   : 'Connect Google Calendar to see your schedule.',
-              style: TextStyle(fontStyle: FontStyle.italic, color: secondaryTextGrey, fontSize: screenWidth * 0.035),
+              style: TextStyle(fontStyle: FontStyle.italic, color: secondaryTextGrey, fontSize: _adaptiveFontSize(0.035)), // MODIFIED
             ),
           ),
         )
@@ -844,19 +859,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     child: Center(
                       child: Text(
                         DateFormat('d').format(startTime),
-                        style: TextStyle(color: calendarAccent, fontWeight: FontWeight.bold, fontSize: screenWidth * 0.04),
+                        style: TextStyle(color: calendarAccent, fontWeight: FontWeight.bold, fontSize: _adaptiveFontSize(0.04)), // MODIFIED
                       ),
                     ),
                   ),
                   title: Text(
                     event.summary ?? 'Untitled Session',
-                    style: TextStyle(fontWeight: FontWeight.bold, color: localPrimaryTextDark, fontSize: screenWidth * 0.04),
+                    style: TextStyle(fontWeight: FontWeight.bold, color: localPrimaryTextDark, fontSize: _adaptiveFontSize(0.04)), // MODIFIED
                   ),
                   subtitle: Text(
                     endTime != null
                         ? '${DateFormat('MMM d, h:mm a').format(startTime)} - ${DateFormat('h:mm a').format(endTime)}'
                         : DateFormat('MMM d, yyyy').format(startTime),
-                    style: TextStyle(color: localSecondaryTextGrey, fontSize: screenWidth * 0.03),
+                    style: TextStyle(color: localSecondaryTextGrey, fontSize: _adaptiveFontSize(0.03)), // MODIFIED
                   ),
                   trailing: IconButton(
                     // FLEXIBLE ICON SIZE
@@ -905,8 +920,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 Text(
                   text,
                   style: TextStyle(
-                    // FLEXIBLE FONT SIZE
-                    fontSize: screenWidth * 0.033,
+                    // MODIFIED: Use _adaptiveFontSize
+                    fontSize: _adaptiveFontSize(0.033),
                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                     color: isSelected ? Colors.white : inactiveColor,
                   ),
@@ -933,6 +948,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final cs = Theme.of(context).colorScheme;
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
+    // final textScaleFactor = MediaQuery.of(context).textScaleFactor; // Can be removed since it's now in the helper
 
     // Define proportional horizontal padding
     final proportionalHorizontalPadding = screenWidth * 0.1; // roughly 10% of screen width
@@ -1264,6 +1280,20 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
     }
   }
 
+  // NEW HELPER: Adaptive Font Size function for the overlay
+  double _adaptiveFontSize(double baseScreenWidthMultiplier) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final baseSize = screenWidth * baseScreenWidthMultiplier;
+    final textScaleFactor = MediaQuery.of(context).textScaleFactor;
+    
+    // Apply a compensatory factor. Using a slightly higher mitigation here (0.85)
+    // as space is more constrained in a modal.
+    final mitigationFactor = 0.85;
+    
+    // Size = BaseSize / (1.0 + (ScaleFactor - 1.0) * MitigationFactor)
+    return baseSize / (1.0 + (textScaleFactor - 1.0) * mitigationFactor);
+  }
+
   // Custom Themed Input Decoration
   InputDecoration _inputDecoration({required String label, required IconData icon, bool enabled = true}) {
     final accent = primaryThemePurple;
@@ -1323,8 +1353,8 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                 Text(
                   isEditing ? 'Delete Session' : 'Add New Session',
                   style: TextStyle(
-                      // FLEXIBLE FONT SIZE
-                      fontSize: screenWidth * 0.055, fontWeight: FontWeight.bold, color: primaryTextDark),
+                      // MODIFIED: Use _adaptiveFontSize
+                      fontSize: _adaptiveFontSize(0.055), fontWeight: FontWeight.bold, color: primaryTextDark),
                   textAlign: TextAlign.center,
                 ),
                 IconButton(
@@ -1347,6 +1377,9 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                 icon: Icons.title,
                 enabled: !isEditing,
               ),
+             // Note: Flutter's default TextFormField text size automatically scales, 
+             // but custom labelStyle/helperStyle could be added using _adaptiveFontSize 
+             // if they were explicitly defined here.
               validator: (value) => value == null || value.isEmpty ? 'Title is required' : null,
               onSaved: (value) => _title = value!,
               readOnly: isEditing,
@@ -1357,8 +1390,8 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
             // Date Picker (Disabled when editing/deleting)
             ListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Date'),
-              trailing: Text(DateFormat('MMM dd, yyyy').format(_startDate), style: const TextStyle(fontWeight: FontWeight.w600)),
+              title: Text('Date', style: TextStyle(fontSize: _adaptiveFontSize(0.04))), // MODIFIED
+              trailing: Text(DateFormat('MMM dd, yyyy').format(_startDate), style: TextStyle(fontWeight: FontWeight.w600, fontSize: _adaptiveFontSize(0.04))), // MODIFIED
               leading: Icon(Icons.calendar_today, color: accent),
               onTap: isEditing ? null : () async {
                 final date = await showDatePicker(
@@ -1379,8 +1412,8 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                 Expanded(
                   child: ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Start Time'),
-                    trailing: Text(_startTime.format(context), style: const TextStyle(fontWeight: FontWeight.w600)),
+                    title: Text('Start Time', style: TextStyle(fontSize: _adaptiveFontSize(0.04))), // MODIFIED
+                    trailing: Text(_startTime.format(context), style: TextStyle(fontWeight: FontWeight.w600, fontSize: _adaptiveFontSize(0.04))), // MODIFIED
                     leading: Icon(Icons.schedule, color: accent),
                     onTap: isEditing ? null : () async {
                       final time = await showTimePicker(context: context, initialTime: _startTime);
@@ -1392,8 +1425,8 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                 Expanded(
                   child: ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('End Time'),
-                    trailing: Text(_endTime.format(context), style: const TextStyle(fontWeight: FontWeight.w600)),
+                    title: Text('End Time', style: TextStyle(fontSize: _adaptiveFontSize(0.04))), // MODIFIED
+                    trailing: Text(_endTime.format(context), style: TextStyle(fontWeight: FontWeight.w600, fontSize: _adaptiveFontSize(0.04))), // MODIFIED
                     leading: Icon(Icons.schedule, color: accent),
                     onTap: isEditing ? null : () async {
                       final time = await showTimePicker(context: context, initialTime: _endTime);
@@ -1422,7 +1455,7 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                     child: ElevatedButton.icon(
                       onPressed: _handleSave,
                       icon: const Icon(Icons.add, color: Colors.white),
-                      label: Text('Add Session', style: TextStyle(fontSize: screenWidth * 0.038)),
+                      label: Text('Add Session', style: TextStyle(fontSize: _adaptiveFontSize(0.038))), // MODIFIED
                       style: ElevatedButton.styleFrom(
                         backgroundColor: accent,
                         foregroundColor: Colors.white,
@@ -1439,7 +1472,7 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                     child: ElevatedButton.icon(
                       onPressed: _handleDelete,
                       icon: const Icon(Icons.delete, color: Colors.white),
-                      label: Text('Delete Session', style: TextStyle(color: Colors.white, fontSize: screenWidth * 0.038)),
+                      label: Text('Delete Session', style: TextStyle(color: Colors.white, fontSize: _adaptiveFontSize(0.038))), // MODIFIED
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red.shade600,
                         foregroundColor: Colors.white,
@@ -1456,7 +1489,7 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                 Expanded(
                   child: TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: Text(isEditing ? 'Close' : 'Cancel', style: TextStyle(color: secondaryTextGrey, fontSize: screenWidth * 0.038)),
+                    child: Text(isEditing ? 'Close' : 'Cancel', style: TextStyle(color: secondaryTextGrey, fontSize: _adaptiveFontSize(0.038))), // MODIFIED
                   ),
                 ),
               ],
