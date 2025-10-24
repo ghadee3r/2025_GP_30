@@ -6,8 +6,7 @@ import 'package:googleapis/calendar/v3.dart' as calendar;
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
-import 'package:rikazapp/pages/subscreens/SetSession.dart'; // SessionMode is now expected from here
-
+import 'package:rikazapp/pages/subscreens/SetSession.dart';
 // Enum to manage the user's schedule view preference
 enum ScheduleView { all, rikaz }
 
@@ -357,7 +356,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final initialMode = selectedModeIndex == 0 ? SessionMode.pomodoro : SessionMode.custom;
 
     // Navigate to SetSessionPage and pass the initialMode as an argument
-    // NOTE: The SetSession page logic is outside this file, but the intent is preserved.
     Navigator.of(context).pushNamed(
       '/SetSession',
       arguments: initialMode, // Pass the SessionMode enum value directly
@@ -502,12 +500,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       right: i == 0 ? screenWidth * 0.03 : 0,
                       left: i == 1 ? screenWidth * 0.03 : 0,
                     ),
-                    // FLEXIBLE HEIGHT - Use a fixed aspect ratio or soft height constraint
-                    // Replaced fixed height with Min/Max height for better control.
-                    constraints: BoxConstraints(
-                      minHeight: screenHeight * 0.1,
-                      maxHeight: screenHeight * 0.13,
-                    ),
+                    // FLEXIBLE HEIGHT
+                    height: screenHeight * 0.13,
                     // FLEXIBLE PADDING
                     padding: EdgeInsets.all(screenWidth * 0.03),
                     decoration: BoxDecoration(
@@ -526,7 +520,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.center, // Center text horizontally
                       children: [
                         Text(
                           mode['title']!,
@@ -652,7 +645,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
           // FLEXIBLE WIDTH
           SizedBox(width: screenWidth * 0.025),
-          // MODIFIED BUTTON TO USE PROPORTIONAL PADDING AND FONT SIZE
           _isCalendarConnected
               ? ElevatedButton.icon(
             onPressed: _handleCalendarSignOut,
@@ -677,8 +669,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               backgroundColor: localPrimaryThemePurple,
               foregroundColor: Colors.white,
               // FLEXIBLE PADDING
-              // Increased Vertical padding slightly for better tap target and appearance on larger screens
-              padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.02, vertical: screenHeight * 0.012),
+              padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.02, vertical: screenHeight * 0.015),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(cardBorderRadius/2)),
             ),
           ),
@@ -729,7 +720,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               SizedBox(height: screenHeight * 0.02),
               // Table Calendar Widget
               Container(
-                // REMOVED fixed height/width constraints on the calendar
                 decoration: BoxDecoration(
                   color: localCardBackground,
                   borderRadius: BorderRadius.circular(cardBorderRadius/2),
@@ -741,10 +731,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   lastDay: DateTime.utc(2030, 12, 31),
                   focusedDay: _focusedDay,
                   currentDay: DateTime.now(),
-                  // ADDED `onPageChanged` to update focusedDay to prevent calendar jumping
-                  onPageChanged: (focusedDay) {
-                    _focusedDay = focusedDay;
-                  },
                   headerStyle: HeaderStyle(
                     formatButtonVisible: false,
                     titleCentered: true,
@@ -874,7 +860,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   ),
                   trailing: IconButton(
                     // FLEXIBLE ICON SIZE
-                    icon: Icon(Icons.edit, color: primaryThemePurple, size: screenWidth * 0.055),
+                    icon: Icon(Icons.delete_forever, color: Colors.red, size: screenWidth * 0.055),
                     onPressed: () => _showEventOverlay(eventToEdit: event),
                   ),
                 ),
@@ -948,13 +934,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
 
-    // Define proportional horizontal padding (Reduced from 0.1 to 0.06 for better use of screen space)
-    final proportionalHorizontalPadding = screenWidth * 0.06;
+    // Define proportional horizontal padding
+    final proportionalHorizontalPadding = screenWidth * 0.1; // roughly 10% of screen width
 
     return Scaffold(
       extendBody: true,
       backgroundColor: localPrimaryBackground,
-      // NOTE: The original image shows a partial bottom navigation bar. I'll maintain the structure.
       body: Container(
         decoration: BoxDecoration(
           // Subtle purple glow on the white background
@@ -968,19 +953,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             end: Alignment.bottomRight,
           ),
         ),
-        // Use SafeArea to avoid collision with notches/status bar
         child: SafeArea(
-          // SingleChildScrollView fixes the "Bottom Overflowed" issue
           child: SingleChildScrollView(
             // APPLIED PROPORTIONAL HORIZONTAL AND TOP MARGINS
             padding: EdgeInsets.only(
                 left: proportionalHorizontalPadding,
                 right: proportionalHorizontalPadding,
-                // FLEXIBLE TOP PADDING - Reduced from 0.1 to 0.04 for a better layout
-                top: screenHeight * 0.04,
-                // FLEXIBLE BOTTOM PADDING - Crucial for fixing overflow at the bottom.
-                // Added extra height to account for the bottom navigation bar area.
-                bottom: screenHeight * 0.15 // Ensures content clears the bottom nav bar
+                // FLEXIBLE TOP PADDING
+                top: screenHeight * 0.1,
+                // FLEXIBLE BOTTOM PADDING
+                bottom: screenHeight * 0.025
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1007,33 +989,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 // 5. SCHEDULE SESSIONS SECTION
                 buildScheduleSectionLocal(cs),
 
-                // FINAL BUFFER SPACE
-                SizedBox(height: screenHeight * 0.01),
+                // FLEXIBLE HEIGHT
+                SizedBox(height: screenHeight * 0.05),
               ],
             ),
           ),
-        ),
-      ),
-      // Retaining the bottom navigation area container logic, assuming it's meant to be there.
-      bottomNavigationBar: Container(
-        height: screenHeight * 0.08,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 10,
-            ),
-          ],
-        ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            Icon(Icons.home, color: primaryThemePurple),
-            Icon(Icons.show_chart, color: secondaryTextGrey),
-            Icon(Icons.gamepad, color: secondaryTextGrey),
-            Icon(Icons.calendar_today, color: secondaryTextGrey),
-          ],
         ),
       ),
     );
@@ -1043,7 +1003,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 // -----------------------------------------------------------------------------
 // 5. Cute Overlay (Modal Bottom Sheet Widget for Add/Delete) - THEMED AND FLEXIBLE
 // -----------------------------------------------------------------------------
-// (The _EventManagementOverlay class has been included and reviewed for flexibility)
+// (The _EventManagementOverlay class is fully preserved and uses flexible sizing, so its code is omitted for brevity)
 
 class _EventManagementOverlay extends StatefulWidget {
   final CalendarClient client;
@@ -1325,9 +1285,6 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
       fillColor: enabled ? cardBackground : Colors.grey.shade100,
       filled: true,
       labelStyle: TextStyle(color: enabled ? primaryTextDark : secondaryTextGrey),
-      // Added a density for better vertical spacing control on smaller screens.
-      isDense: true,
-      contentPadding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 10.0),
     );
   }
 
@@ -1363,14 +1320,12 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
               children: [
                 // FLEXIBLE SPACE
                 SizedBox(width: screenWidth * 0.08),
-                Expanded( // Use expanded to allow the title to take available space
-                  child: Text(
-                    isEditing ? 'Delete Session' : 'Add New Session',
-                    style: TextStyle(
-                        // FLEXIBLE FONT SIZE
-                        fontSize: screenWidth * 0.055, fontWeight: FontWeight.bold, color: primaryTextDark),
-                    textAlign: TextAlign.center,
-                  ),
+                Text(
+                  isEditing ? 'Delete Session' : 'Add New Session',
+                  style: TextStyle(
+                      // FLEXIBLE FONT SIZE
+                      fontSize: screenWidth * 0.055, fontWeight: FontWeight.bold, color: primaryTextDark),
+                  textAlign: TextAlign.center,
                 ),
                 IconButton(
                   icon: const Icon(Icons.close, color: secondaryTextGrey),
