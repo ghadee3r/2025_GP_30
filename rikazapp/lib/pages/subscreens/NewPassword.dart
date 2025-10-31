@@ -355,7 +355,7 @@ class _NewPasswordState extends State<NewPassword> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Password Requirements:',
+                    'Password must contain:',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
@@ -364,8 +364,8 @@ class _NewPasswordState extends State<NewPassword> {
                   SizedBox(height: 4),
                   Text(
                     '• At least 8 characters\n'
-                    '•  Uppercase and lowercase letters\n'
-                    '• A Number and A special characters\n'
+                    '• Uppercase & lowercase letters\n'
+                    '• Number & special characters\n'
                     '• Different from your previous password',
                     style: TextStyle(fontSize: 12),
                   ),
