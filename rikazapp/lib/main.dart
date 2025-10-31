@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:fluid_bottom_nav_bar/fluid_bottom_nav_bar.dart';
 
 import 'pages/mainscreens/home.dart';
 import 'pages/mainscreens/progress.dart';
@@ -22,6 +21,9 @@ const String supabaseUrl = 'https://fbjxvlzhxsxiyxuuvefu.supabase.co';
 const String supabaseAnonKey =
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZianh2bHpoeHN4aXl4dXV2ZWZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1MTkxMzQsImV4cCI6MjA3NjA5NTEzNH0.3oSMgdkXhEl8peRyGvN1P6zlzxdd9fWXHcdXRuWqQLE';
 
+// Global navigation key for handling auth events
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
@@ -41,69 +43,59 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Rikaz',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: colorScheme.copyWith(
-          primary: primaryThemePurple,
-          secondary: primaryThemePurple,
-          surface: primaryBackground,
-          surfaceContainerHighest: primaryBackground,
-          onSurface: primaryTextDark,
-        ),
-        scaffoldBackgroundColor: primaryBackground,
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            foregroundColor: primaryBackground,
-            backgroundColor: primaryThemePurple,
-            padding:
-                const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(cardBorderRadius / 2),
-            ),
-            textStyle: const TextStyle(
-                fontWeight: FontWeight.w700, fontSize: 16),
-            elevation: 4,
-            shadowColor: primaryThemePurple.withValues(alpha: 0.5),
-          ),
-        ),
-        cardTheme: CardThemeData(
-          color: primaryBackground,
-          elevation: 8,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(cardBorderRadius),
-          ),
-          shadowColor: primaryThemePurple.withValues(alpha: 0.3),
-          margin: const EdgeInsets.symmetric(vertical: 10),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: primaryBackground,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(cardBorderRadius / 2),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(cardBorderRadius / 2),
-            borderSide: BorderSide(
-                color: primaryThemePurple.withValues(alpha: 0.3),
-                width: 1.5),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(cardBorderRadius / 2),
-            borderSide:
-                const BorderSide(color: primaryThemePurple, width: 2.0),
-          ),
-        ),
+      navigatorKey: navigatorKey,
+theme: ThemeData(
+  useMaterial3: true,
+  colorScheme: colorScheme.copyWith(
+    primary: primaryThemePurple,
+    secondary: primaryThemePurple,
+    surface: primaryBackground,
+    surfaceContainerHighest: primaryBackground,
+    onSurface: primaryTextDark,
+  ),
+  scaffoldBackgroundColor: primaryBackground,
+  elevatedButtonTheme: ElevatedButtonThemeData(
+    style: ElevatedButton.styleFrom(
+      foregroundColor: primaryBackground,
+      backgroundColor: primaryThemePurple,
+      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(cardBorderRadius / 2),
       ),
+      textStyle: const TextStyle(
+          fontWeight: FontWeight.w700, fontSize: 16),
+      elevation: 4,
+      shadowColor: primaryThemePurple.withOpacity(0.5),
+    ),
+  ),
+  inputDecorationTheme: InputDecorationTheme(
+    filled: true,
+    fillColor: primaryBackground,
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(cardBorderRadius / 2),
+      borderSide: BorderSide.none,
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(cardBorderRadius / 2),
+      borderSide: BorderSide(
+          color: primaryThemePurple.withOpacity(0.3),
+          width: 1.5),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(cardBorderRadius / 2),
+      borderSide:
+          const BorderSide(color: primaryThemePurple, width: 2.0),
+    ),
+  ),
+),
       routes: {
         '/signup': (context) => const SignupScreen(),
         '/login': (context) => const LoginScreen(),
         '/forgot-password': (context) => const ForgotPassword(),
         '/new-password': (context) => const NewPassword(),
         '/tabs': (context) {
-          final idx =
-              ModalRoute.of(context)!.settings.arguments as int? ?? 0;
-          return TabsScreen(initialIndex: idx);
+          final idx = ModalRoute.of(context)!.settings.arguments as int? ?? 0;
+          return MainTabsScreen(initialIndex: idx);
         },
         '/home': (context) => const HomePage(),
         '/SetSession': (context) {
@@ -113,9 +105,7 @@ class MyApp extends StatelessWidget {
         },
         '/session': (context) {
           final args =
-              ModalRoute.of(context)!.settings.arguments
-                      as Map<String, dynamic>? ??
-                  {};
+              ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>? ?? {};
           return SessionPage(
             sessionType: args['sessionType'] ?? 'pomodoro',
             duration: args['duration'] ?? '25min',
@@ -140,28 +130,53 @@ class AuthWrapper extends StatefulWidget {
 
 class _AuthWrapperState extends State<AuthWrapper> {
   final SupabaseClient supabase = Supabase.instance.client;
+  bool _isInitialAuthCheckComplete = false;
 
   @override
   void initState() {
     super.initState();
-    supabase.auth.onAuthStateChange.listen((data) {
-      final event = data.event;
-      debugPrint('Auth event detected: $event');
-      if (event == AuthChangeEvent.passwordRecovery) {
-        if (mounted) {
-          Navigator.of(context)
-              .pushNamedAndRemoveUntil('/new-password', (route) => false);
+    _setupAuthListener();
+    _checkInitialAuthState();
+  }
+
+void _setupAuthListener() {
+  supabase.auth.onAuthStateChange.listen((data) {
+    final event = data.event;
+    
+    if (event == AuthChangeEvent.passwordRecovery) {
+      debugPrint('PASSWORD RECOVERY EVENT - FORCING NAVIGATION');
+      
+      // Try multiple approaches
+      Future.delayed(Duration.zero, () {
+        // Approach 1: Using global key
+        if (navigatorKey.currentState != null) {
+          navigatorKey.currentState!.pushNamedAndRemoveUntil(
+            '/new-password', 
+            (route) => false
+          );
+        } else {
+          // Approach 2: Using context if mounted
+          if (mounted) {
+            Navigator.of(context).pushNamedAndRemoveUntil(
+              '/new-password', 
+              (route) => false
+            );
+          }
         }
-      } else if (event == AuthChangeEvent.signedOut) {
-        if (mounted) {
-          Navigator.of(context)
-              .pushNamedAndRemoveUntil('/login', (route) => false);
-        }
-      } else if (event == AuthChangeEvent.signedIn) {
-        if (mounted) {
-          Navigator.of(context)
-              .pushNamedAndRemoveUntil('/tabs', (route) => false);
-        }
+      });
+    }
+  });
+}
+
+  void _checkInitialAuthState() async {
+    final currentSession = supabase.auth.currentSession;
+    debugPrint('Initial auth check - Session: $currentSession');
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {
+          _isInitialAuthCheckComplete = true;
+        });
       }
     });
   }
@@ -171,16 +186,19 @@ class _AuthWrapperState extends State<AuthWrapper> {
     return FutureBuilder<Session?>(
       future: Future.value(Supabase.instance.client.auth.currentSession),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (!_isInitialAuthCheckComplete) {
           return Scaffold(
             body: Center(
               child: CircularProgressIndicator(color: primaryThemePurple),
             ),
           );
         }
+
         final session = snapshot.data;
+        debugPrint('FutureBuilder - Session: $session');
+
         if (session != null) {
-          return const TabsScreen();
+          return const MainTabsScreen();
         } else {
           return const LoginScreen();
         }
@@ -189,16 +207,16 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 }
 
-class TabsScreen extends StatefulWidget {
-  const TabsScreen({super.key, this.initialIndex = 0});
+class MainTabsScreen extends StatefulWidget {
+  const MainTabsScreen({super.key, this.initialIndex = 0});
   final int initialIndex;
 
   @override
-  State<TabsScreen> createState() => _TabsScreenState();
+  State<MainTabsScreen> createState() => _MainTabsScreenState();
 }
 
-class _TabsScreenState extends State<TabsScreen> {
-  late int _index;
+class _MainTabsScreenState extends State<MainTabsScreen> {
+  late int _currentIndex;
   final List<Widget> _tabs = [
     HomePage(),
     ProgressScreen(),
@@ -209,38 +227,44 @@ class _TabsScreenState extends State<TabsScreen> {
   @override
   void initState() {
     super.initState();
-    _index = widget.initialIndex;
+    _currentIndex = widget.initialIndex;
   }
 
-  void _onTabChange(int i) => setState(() => _index = i);
+  void _onTabTapped(int index) {
+    setState(() {
+      _currentIndex = index;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      extendBody: true,
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 250),
-        child: _tabs[_index],
-      ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: FluidNavBar(
-          icons: [
-            FluidNavBarIcon(icon: Icons.home),
-            FluidNavBarIcon(icon: Icons.trending_up),
-            FluidNavBarIcon(icon: Icons.sports_esports),
-            FluidNavBarIcon(icon: Icons.person),
-          ],
-          onChange: _onTabChange,
-          defaultIndex: _index,
-          style: FluidNavBarStyle(
-            barBackgroundColor: cs.surfaceContainerHighest,
-            iconSelectedForegroundColor: cs.primary,
-            iconUnselectedForegroundColor:
-                cs.onSurface.withValues(alpha: 0.5),
+      body: _tabs[_currentIndex],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: _onTabTapped,
+        type: BottomNavigationBarType.fixed,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: 'Home',
           ),
-        ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.trending_up),
+            label: 'Progress',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.sports_esports),
+            label: 'Games',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: 'Profile',
+          ),
+        ],
+        selectedItemColor: primaryThemePurple,
+        unselectedItemColor: primaryTextDark.withOpacity(0.5),
+        backgroundColor: primaryBackground,
       ),
     );
   }
