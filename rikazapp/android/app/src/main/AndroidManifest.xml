@@ -24,16 +24,17 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            
+            <!-- Removed the old io.rikaz.app filter to keep it simple -->
 
-            <!-- 🎯 SUPABASE DEEP LINK INTENT FILTER -->
-            <!-- This tells Android to open your app when a link matching the 'io.rikaz.app://reset-password' scheme is clicked. -->
+            <!-- 👇 NEW: Deep Link Filter for Signup Verification (rikazapp://login) 👇 -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="io.rikaz.app" android:host="reset-password" />
+                <data android:scheme="rikazapp" android:host="login" />
             </intent-filter>
-            <!-- 🎯 END SUPABASE DEEP LINK -->
+            <!-- 👆 END: Deep Link Filter for Signup Verification 👆 -->
 
         </activity>
         <!-- Don't delete the meta-data below.

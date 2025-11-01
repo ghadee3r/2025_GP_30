@@ -12,10 +12,6 @@ final supabase = sb.Supabase.instance.client;
 final RegExp _emailRegex = RegExp(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$");
 
 // Password complexity check:
-// - At least 8 characters long
-// - Contains at least one uppercase letter (A-Z)
-// - Contains at least one lowercase letter (a-z)
-// - Contains at least one number (0-9)
 final RegExp _passwordRegex = RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$');
 
 
@@ -50,6 +46,11 @@ class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
+  // State to hold the post-signup success/error message
+  String _postSignupMessage = ''; 
+  // State to control the message color (true for green, false for red)
+  bool _isSuccessMessage = true; 
+
   bool _isSubmitting = false;
 
   @override
@@ -60,24 +61,21 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
-  // 🚨 SUPABASE SIGN UP LOGIC WITH VALIDATION 🚨
+  // 🚨 SUPABASE SIGN UP LOGIC WITH ON-SCREEN ERROR 🚨
   Future<void> _handleSignup() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text;
 
+    // --- Validation Checks ---
     if (name.isEmpty || email.isEmpty || password.isEmpty) {
       _showAlert(context, "Missing Info", "Please fill in all fields.");
       return;
     }
-    
-    // 1. Email Validation Check
     if (!_emailRegex.hasMatch(email)) {
       _showAlert(context, "Invalid Email", "Please enter a valid email address.");
       return;
     }
-    
-    // 2. Password Complexity Check (Enhanced for 8+ chars, uppercase, lowercase, and number)
     if (!_passwordRegex.hasMatch(password)) {
       _showAlert(
         context,
@@ -90,33 +88,46 @@ class _SignupScreenState extends State<SignupScreen> {
       return;
     }
 
-    setState(() => _isSubmitting = true);
+    setState(() {
+      _isSubmitting = true;
+      _postSignupMessage = ''; // Clear previous messages
+    });
 
     try {
-      final sb.AuthResponse response = await supabase.auth.signUp(
+      // Sign up and specify the deep link redirect to the login screen
+      await supabase.auth.signUp(
         email: email,
         password: password,
         data: {'full_name': name},
+        // IMPORTANT: The verification link will redirect the user to your app's login page
+        emailRedirectTo: 'rikazapp://login', 
       );
-
-      if (response.user == null) {
-        // This case usually happens if email confirmation is enabled on Supabase
-        throw const sb.AuthException('Registration requires email confirmation. Please check your inbox.');
-      }
 
       if (!mounted) return;
-
-      _showAlert(context, "Account Created", "Welcome, $name! Logging you in...");
-
-      // After successful signup and session creation → navigate to Tabs 
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/tabs',
-        (route) => false,
-        arguments: 0, // 0 = Home tab
-      );
+      
+      // SUCCESS: Show green verification message
+      setState(() {
+        _postSignupMessage = 'A verification email has been sent to $email. Please click the link to confirm your account, then log in.';
+        _isSuccessMessage = true;
+      });
+      
     } on sb.AuthException catch (e) { 
       if (!mounted) return;
-      _showAlert(context, "Signup Error", e.message);
+      
+      String errorMessage = e.message;
+      
+      // FIX: Handle "User already registered" error and display ON-SCREEN in RED
+      if (errorMessage.contains('User already registered') || errorMessage.contains('already has an account')) {
+         setState(() {
+            _postSignupMessage = "This email is already registered. Please log in instead.";
+            _isSuccessMessage = false; // Set flag to display red text
+         });
+         
+      } else {
+         // Use the standard alert for all other errors (network, rate limit, etc.)
+         _showAlert(context, "Signup Error", errorMessage);
+      }
+      
     } catch (e) {
       if (!mounted) return;
       _showAlert(context, "Signup Error", "An unexpected error occurred: ${e.toString()}");
@@ -197,6 +208,22 @@ class _SignupScreenState extends State<SignupScreen> {
               ),
               const SizedBox(height: 20),
 
+              // Conditional message for successful signup or error
+              if (_postSignupMessage.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: Text(
+                    _postSignupMessage,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14, 
+                      fontWeight: FontWeight.w500,
+                      // Green for success, Red for error based on the state variable
+                      color: _isSuccessMessage ? Colors.green.shade700 : Colors.red.shade700, 
+                    ),
+                  ),
+                ),
+                
               // Log In link
               GestureDetector(
                 onTap: _isSubmitting ? null : () => Navigator.of(context).pushReplacementNamed('/login'),
@@ -209,8 +236,6 @@ class _SignupScreenState extends State<SignupScreen> {
                   ),
                 ),
               ),
-
-              // NOTE: The 'Skip for now (No DB)' link has been removed as requested.
               
             ],
           ),
