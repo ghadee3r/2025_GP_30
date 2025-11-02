@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Redirecting to Rikaz...</title>
+    <script>
+        function handleRedirect() {
+            // YOUR APP'S DEEP LINK SCHEME
+            const deepLinkScheme = 'io.rikaz.app';
+            
+            // Get the tokens from the current URL fragment (#access_token=...)
+            const hash = window.location.hash; 
+            
+            // Construct the final deep link: deep link + tokens
+            const finalDeepLink = `${deepLinkScheme}://reset-password${hash}`;
+            
+            // This forces the operating system to open your mobile app!
+            window.location.replace(finalDeepLink);
+
+            // Optional: Fallback for failed redirects 
+            setTimeout(() => {
+                const body = document.body;
+                body.innerHTML = '<h1>Redirect Failed</h1><p>The Rikaz app did not open. Click <a href="' + finalDeepLink + '">here</a> to open it manually.</p>';
+            }, 1500);
+        }
+        // Run the function when the page loads
+        window.onload = handleRedirect;
+    </script>
+</head>
+<body>
+    <h1>Processing password reset...</h1>
+    <p>Please wait while we securely redirect you to the Rikaz app.</p>
+</body>
+</html>
