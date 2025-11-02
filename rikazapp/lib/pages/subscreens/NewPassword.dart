@@ -17,42 +17,46 @@ class _NewPasswordState extends State<NewPassword> {
   bool _obscureNewPassword = true;
   bool _obscureConfirmPassword = true;
   String? _currentUserEmail;
+  bool _sessionChecked = false;
 
   @override
   void initState() {
     super.initState();
     debugPrint("NewPassword screen initialized");
-    _checkSession();
-    _getCurrentUserEmail();
+    _checkSessionAndGetEmail();
   }
 
-  void _checkSession() {
+  void _checkSessionAndGetEmail() async {
+    // Wait a bit for the session to be established (in case coming from deep link)
+    await Future.delayed(const Duration(milliseconds: 500));
+    
     final session = supabase.auth.currentSession;
     debugPrint("Session in NewPassword: ${session != null}");
-    if (session == null) {
-      _showErrorDialog("No valid session found. Please request a new password reset link.");
+    
+    if (session != null) {
+      _currentUserEmail = session.user?.email;
+      debugPrint("Current user email: $_currentUserEmail");
+    } else {
+      debugPrint("No session found - user might need to complete the reset flow");
+      // Don't show error immediately - wait to see if session gets established
     }
+    
+    setState(() {
+      _sessionChecked = true;
+    });
   }
 
-  void _getCurrentUserEmail() {
-    final session = supabase.auth.currentSession;
-    _currentUserEmail = session?.user?.email;
-    debugPrint("Current user email: $_currentUserEmail");
-  }
-
-  void _showErrorDialog(String message) {
+  void _showErrorDialog(String title, String message) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Error'),
+          title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
           content: Text(message),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('OK'),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("OK", style: TextStyle(color: Color(0xFF4f46e5))),
             ),
           ],
         ),
@@ -65,7 +69,7 @@ class _NewPasswordState extends State<NewPassword> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Success'),
+        title: const Text('Success', style: TextStyle(fontWeight: FontWeight.bold)),
         content: Text(message),
         actions: [
           TextButton(
@@ -73,80 +77,88 @@ class _NewPasswordState extends State<NewPassword> {
               Navigator.of(context).pop();
               Navigator.of(context).pushNamedAndRemoveUntil('/tabs', (route) => false);
             },
-            child: const Text('OK'),
+            child: const Text("OK", style: TextStyle(color: Color(0xFF4f46e5))),
           ),
         ],
       ),
     );
   }
 
-  // Check if the new password is different from the old password
-  Future<bool> _isPasswordDifferent(String newPassword) async {
-    try {
-      // Try to sign in with the new password to see if it's the same as old password
-      // This is a workaround since Supabase doesn't provide direct old password check in recovery flow
-      final currentUser = supabase.auth.currentUser;
-      if (currentUser != null && _currentUserEmail != null) {
-        // We can't directly check old password in recovery flow, so we'll rely on client-side validation
-        // and show a message encouraging users to use a different password
-        debugPrint("Password change requested for: $_currentUserEmail");
-        
-        // In a real implementation, you might want to store the last password change timestamp
-        // and warn users if they're reusing recent passwords
-        return true; // For now, we'll handle this in the UI validation
-      }
-      return true;
-    } catch (e) {
-      return true;
+  void _goBackToLogin() {
+    // Show confirmation dialog if user has started entering data
+    if (_newPasswordController.text.isNotEmpty || _confirmPasswordController.text.isNotEmpty) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Cancel Password Reset?', style: TextStyle(fontWeight: FontWeight.bold)),
+          content: const Text('Are you sure you want to cancel? Your password reset progress will be lost.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Continue Reset', style: TextStyle(color: Color(0xFF666666))),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _navigateToLogin();
+              },
+              child: const Text('Cancel Reset', style: TextStyle(color: Color(0xFF4f46e5))),
+            ),
+          ],
+        ),
+      );
+    } else {
+      _navigateToLogin();
     }
   }
 
+  void _navigateToLogin() {
+    Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+  }
+
   Future<void> _updatePassword() async {
+    // Final session check before updating password
+    final session = supabase.auth.currentSession;
+    if (session == null) {
+      _showErrorDialog("Session Error", "No valid session found. Please request a new password reset link and make sure you click the link in your email.");
+      return;
+    }
+
     final newPassword = _newPasswordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
 
     // Basic validations
     if (newPassword.isEmpty || confirmPassword.isEmpty) {
-      _showErrorDialog("Please fill in both password fields.");
+      _showErrorDialog("Missing Info", "Please fill in both password fields.");
       return;
     }
 
     if (newPassword != confirmPassword) {
-      _showErrorDialog("Passwords do not match.");
+      _showErrorDialog("Password Mismatch", "Passwords do not match.");
       return;
     }
 
-    if (newPassword.length < 6) {
-      _showErrorDialog("Password must be at least 6 characters long.");
+    // Updated password validation with specific error messages
+    if (newPassword.length < 12) {
+      _showErrorDialog("Weak Password", "Password must be at least 12 characters long.");
       return;
     }
-
-    // Check for common weak passwords
-    if (_isCommonPassword(newPassword)) {
-      _showErrorDialog("This password is too common. Please choose a more unique password.");
+    if (!RegExp(r'[A-Z]').hasMatch(newPassword)) {
+      _showErrorDialog("Weak Password", "Password must contain at least one uppercase letter.");
       return;
     }
-
-    // Check if password contains user email
-    if (_currentUserEmail != null && _containsEmail(newPassword, _currentUserEmail!)) {
-      _showErrorDialog("Password should not contain your email address.");
+    if (!RegExp(r'[a-z]').hasMatch(newPassword)) {
+      _showErrorDialog("Weak Password", "Password must contain at least one lowercase letter.");
       return;
     }
-
-    // Additional password strength checks
-    final passwordStrength = _checkPasswordStrength(newPassword);
-    if (!passwordStrength.isStrong) {
-      _showErrorDialog(passwordStrength.message);
+    if (!RegExp(r'\d').hasMatch(newPassword)) {
+      _showErrorDialog("Weak Password", "Password must contain at least one number.");
       return;
     }
-
-    // Warn user if they might be using the same password
-    final mightBeSamePassword = _mightBeSameOldPassword(newPassword);
-    if (mightBeSamePassword) {
-      final shouldContinue = await _showSamePasswordWarning();
-      if (!shouldContinue) {
-        return;
-      }
+    // Updated to allow any special character, not just @, &, _
+    if (!RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(newPassword)) {
+      _showErrorDialog("Weak Password", "Password must contain at least one special character (e.g., !@#\$%^&*).");
+      return;
     }
 
     setState(() => _isLoading = true);
@@ -158,7 +170,7 @@ class _NewPasswordState extends State<NewPassword> {
 
       if (response.user != null) {
         if (!mounted) return;
-        _showSuccessDialog('Your password has been updated successfully.');
+        _showSuccessDialog('Your password has been updated successfully. You can now log in with your new password.');
       }
     } on sb.AuthException catch (e) {
       if (!mounted) return;
@@ -166,13 +178,13 @@ class _NewPasswordState extends State<NewPassword> {
       if (e.message.contains('password should be different') || 
           e.message.contains('same as old') ||
           e.message.contains('password reuse')) {
-        _showErrorDialog("You cannot use the same password as your current one. Please choose a different password.");
+        _showErrorDialog("Password Error", "You cannot use the same password as your current one. Please choose a different password.");
       } else {
-        _showErrorDialog("Error updating password: ${e.message}");
+        _showErrorDialog("Update Error", "Error updating password: ${e.message}");
       }
     } catch (e) {
       if (!mounted) return;
-      _showErrorDialog("An unexpected error occurred.");
+      _showErrorDialog("Update Error", "An unexpected error occurred.");
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -180,83 +192,34 @@ class _NewPasswordState extends State<NewPassword> {
     }
   }
 
-  bool _isCommonPassword(String password) {
-    final commonPasswords = [
-      'password', '123456', '12345678', '123456789', '12345',
-      'qwerty', 'abc123', 'password1', '1234567', 'admin',
-      'welcome', 'monkey', '1234567890', '000000', '123123'
-    ];
-    return commonPasswords.contains(password.toLowerCase());
-  }
-
-  bool _containsEmail(String password, String email) {
-    final emailLocalPart = email.split('@').first.toLowerCase();
-    return password.toLowerCase().contains(emailLocalPart);
-  }
-
-  PasswordStrength _checkPasswordStrength(String password) {
-    if (password.length < 8) {
-      return PasswordStrength(
-        isStrong: false,
-        message: "Password should be at least 8 characters long."
-      );
-    }
-
-    bool hasUpper = false;
-    bool hasLower = false;
-    bool hasDigit = false;
-    bool hasSpecial = false;
-
-    for (var char in password.runes) {
-      if (char >= 65 && char <= 90) hasUpper = true; // A-Z
-      if (char >= 97 && char <= 122) hasLower = true; // a-z
-      if (char >= 48 && char <= 57) hasDigit = true; // 0-9
-      if ((char >= 33 && char <= 47) || 
-          (char >= 58 && char <= 64) ||
-          (char >= 91 && char <= 96) ||
-          (char >= 123 && char <= 126)) hasSpecial = true; // special chars
-    }
-
-    if (!hasUpper || !hasLower || !hasDigit || !hasSpecial) {
-      return PasswordStrength(
-        isStrong: false,
-        message: "Password should include uppercase letters, lowercase letters, numbers, and special characters."
-      );
-    }
-
-    return PasswordStrength(isStrong: true, message: "");
-  }
-
-  bool _mightBeSameOldPassword(String newPassword) {
-    // Simple heuristic: if password is very simple/short, it might be the old one
-    // You can enhance this with more sophisticated checks
-    return newPassword.length < 8 || _isCommonPassword(newPassword);
-  }
-
-  Future<bool> _showSamePasswordWarning() async {
-    return await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Password Warning'),
-        content: const Text(
-          'This password looks similar to commonly used passwords. '
-          'For security reasons, we recommend using a completely new password '
-          'that you haven\'t used before.\n\n'
-          'Do you want to continue with this password?'
+  Widget _buildTextInput({
+    required TextEditingController controller,
+    required String hintText,
+    required bool obscureText,
+    required VoidCallback onToggleVisibility,
+  }) {
+    return TextField(
+      controller: controller,
+      obscureText: obscureText,
+      style: const TextStyle(fontSize: 16),
+      decoration: InputDecoration(
+        hintText: hintText,
+        contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8.0),
+          borderSide: BorderSide.none,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Choose Different'),
+        filled: true,
+        fillColor: const Color(0xFFF3F4F6),
+        suffixIcon: IconButton(
+          icon: Icon(
+            obscureText ? Icons.visibility : Icons.visibility_off,
+            color: const Color(0xFF666666),
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Continue Anyway'),
-          ),
-        ],
+          onPressed: onToggleVisibility,
+        ),
       ),
-    ) ?? false;
+    );
   }
 
   @override
@@ -268,151 +231,168 @@ class _NewPasswordState extends State<NewPassword> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Set New Password'),
+    // Show loading while checking session
+    if (!_sessionChecked) {
+      return Scaffold(
         backgroundColor: Colors.white,
-        elevation: 0,
-        foregroundColor: Colors.black,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Create New Password',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Enter a new, secure password that you haven\'t used before.',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey,
-              ),
-            ),
-            const SizedBox(height: 32),
-            
-            // New Password Field
-            TextField(
-              controller: _newPasswordController,
-              obscureText: _obscureNewPassword,
-              decoration: InputDecoration(
-                labelText: 'New Password',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8.0),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: Color(0xFF4f46e5)),
+              SizedBox(height: 20),
+              Text(
+                'Setting up password reset...',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Color(0xFF666666),
                 ),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscureNewPassword ? Icons.visibility : Icons.visibility_off,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              // Back button with confirmation
+              Align(
+                alignment: Alignment.centerLeft,
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Color(0xFF4f46e5)),
+                  onPressed: _goBackToLogin,
+                ),
+              ),
+              
+              const SizedBox(height: 20),
+
+              // Logo
+              Image.asset(
+                "assets/images/RikazLogo.png",
+                height: 120,
+                width: 120,
+              ),
+              const SizedBox(height: 16),
+
+              // Title
+              const Text(
+                'Create New Password',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF222222),
+                ),
+              ),
+              
+              // Subtitle
+              Text(
+                _currentUserEmail != null 
+                  ? 'Enter a new password for $_currentUserEmail'
+                  : 'Enter a new, secure password for your account',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Color(0xFF666666),
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // New Password Field
+              _buildTextInput(
+                controller: _newPasswordController,
+                hintText: "New Password",
+                obscureText: _obscureNewPassword,
+                onToggleVisibility: () {
+                  setState(() {
+                    _obscureNewPassword = !_obscureNewPassword;
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+              
+              // Confirm Password Field
+              _buildTextInput(
+                controller: _confirmPasswordController,
+                hintText: "Confirm Password",
+                obscureText: _obscureConfirmPassword,
+                onToggleVisibility: () {
+                  setState(() {
+                    _obscureConfirmPassword = !_obscureConfirmPassword;
+                  });
+                },
+              ),
+
+              // Password requirements note - UPDATED
+              const Padding(
+                padding: EdgeInsets.only(top: 16.0, bottom: 24.0),
+                child: Text(
+                  'Password must be at least 12 characters long and contain:\n• One uppercase letter • One lowercase letter\n• One number • One special character (!@#\$%^&*)',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF666666),
                   ),
-                  onPressed: () {
-                    setState(() {
-                      _obscureNewPassword = !_obscureNewPassword;
-                    });
-                  },
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            
-            // Confirm Password Field
-            TextField(
-              controller: _confirmPasswordController,
-              obscureText: _obscureConfirmPassword,
-              decoration: InputDecoration(
-                labelText: 'Confirm Password',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8.0),
-                ),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscureConfirmPassword ? Icons.visibility : Icons.visibility_off,
+
+              // Update Button
+              ElevatedButton(
+                onPressed: _isLoading ? null : _updatePassword,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF4f46e5),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8.0),
                   ),
-                  onPressed: () {
-                    setState(() {
-                      _obscureConfirmPassword = !_obscureConfirmPassword;
-                    });
-                  },
+                  elevation: 5,
+                ),
+                child: Text(
+                  _isLoading ? "Updating..." : "Update Password",
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
-            ),
-            
-            // Password requirements
-            Container(
-              margin: const EdgeInsets.only(top: 16),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey[300]!),
-              ),
-              child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Password must contain:',
+              const SizedBox(height: 20),
+
+              // Session status message
+              if (_currentUserEmail == null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(
+                    'Note: Make sure you clicked the reset link from your email to set up your session.',
+                    textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
+                      fontSize: 12,
+                      color: Colors.orange[700],
                     ),
                   ),
-                  SizedBox(height: 4),
-                  Text(
-                    '• At least 8 characters\n'
-                    '• Uppercase & lowercase letters\n'
-                    '• Number & special characters\n'
-                    '• Different from your previous password',
-                    style: TextStyle(fontSize: 12),
+                ),
+
+              // Cancel option
+              TextButton(
+                onPressed: _goBackToLogin,
+                child: const Text(
+                  'Cancel and return to login',
+                  style: TextStyle(
+                    color: Color(0xFF666666),
+                    fontSize: 14,
                   ),
-                ],
-              ),
-            ),
-            
-            const SizedBox(height: 24),
-            
-            // Update Button
-            ElevatedButton(
-              onPressed: _isLoading ? null : _updatePassword,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4f46e5),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8.0),
                 ),
               ),
-              child: _isLoading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Color.fromARGB(255, 178, 203, 226)),
-                      ),
-                    )
-                  : const Text(
-                      'Update Password',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
-}
-
-class PasswordStrength {
-  final bool isStrong;
-  final String message;
-
-  PasswordStrength({required this.isStrong, required this.message});
 }
