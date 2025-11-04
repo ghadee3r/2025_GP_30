@@ -182,83 +182,110 @@ class _SessionPageState extends State<SessionPage>
 // -------------------------------------------------------------------
 // 💡 SUPABASE LOGIC START - (Functionality Untouched)
 // -------------------------------------------------------------------
+// دالة تسجيل بداية الجلسة (INSERT)
+Future<void> _startSessionInDB() async {
+  final supabase = Supabase.instance.client;
+  final currentUserId = supabase.auth.currentUser?.id;
 
-   // دالة تسجيل بداية الجلسة (INSERT)
-   Future<void> _startSessionInDB() async {
-      final supabase = Supabase.instance.client;
-      final currentUserId = supabase.auth.currentUser?.id;
+  if (currentUserId == null) {
+    print('Error: User not authenticated. Cannot start session.');
+    return;
+  }
 
-      if (currentUserId == null) {
-         print('Error: User not authenticated. Cannot start session.');
-         return;
+  // 🔹 1. Planned duration (set_duration_minutes)
+  // Ensures the correct planned duration is calculated based on blocks/minutes.
+  final int plannedDuration = isPomodoro
+      ? (focusMinutes * totalBlocks) + (breakMinutes * (totalBlocks - 1)) // Correct total break blocks
+      : focusMinutes;
+
+  // Correction: If it's a Pomodoro, total blocks includes breaks between focus sessions.
+  // For '4' blocks (4 focus, 3 breaks) -> (4*F) + (3*B)
+  // Your previous calculation (focusMinutes * totalBlocks) + (breakMinutes * totalBlocks) was slightly off 
+  // as it included an extra break. The logic below corrects this, assuming the break is between blocks.
+
+  final int finalPlannedDuration = isPomodoro 
+    ? (focusMinutes * totalBlocks) + (totalBlocks > 1 ? breakMinutes * (totalBlocks - 1) : 0)
+    : focusMinutes;
+
+
+  // 🔹 2. Pomodoro type ('25-5' or '50-10') - Matches your new DB column
+final String? pomodoroType =
+    isPomodoro ? '${focusMinutes}-${breakMinutes}' : null;
+
+_sessionStartTime = DateTime.now();
+
+try {
+  final response = await supabase.from('Focus_Session').insert({
+    'user_id': currentUserId,
+    'session_type': widget.sessionType,
+    'start_time': _sessionStartTime!.toIso8601String(),
+    'set_duration_minutes': finalPlannedDuration,
+    // 'duration_minutes' is intentionally OMITTED here, 
+    // allowing it to default to NULL in the DB.
+    'pomodoro_type': pomodoroType, 
+    'camera_monitored': widget.isCameraDetectionEnabled ?? false,
+  }).select('session_id');
+
+    if (response.isNotEmpty) {
+      if (mounted) {
+        setState(() {
+          _currentSessionId = response.first['session_id'].toString();
+        });
       }
-      
-      final int plannedDuration = isPomodoro 
-         ? (focusMinutes * totalBlocks) + (breakMinutes * totalBlocks)
-         : focusMinutes; 
+      print('✅ Session Started in DB with ID: $_currentSessionId, Planned Duration: $finalPlannedDuration min');
+    }
+  } catch (e) {
+    print('❌ Error starting session in DB: $e');
+  }
+}
 
-      _sessionStartTime = DateTime.now(); 
+// دالة تسجيل نهاية الجلسة (UPDATE or DELETE)
+Future<void> _endSessionInDB({bool completed = false}) async {
+  final supabase = Supabase.instance.client;
 
-      try {
-         final response = await supabase
-               .from('Focus_Session') 
-               .insert({
-                  'user_id': currentUserId,
-                  'session_type': widget.sessionType, 
-                  'start_time': _sessionStartTime!.toIso8601String(),
-                  'duration_minutes': plannedDuration, 
-                  'camera_monitored': widget.isCameraDetectionEnabled ?? false,
-               }).select('session_id'); 
-               
-         if (response.isNotEmpty) {
-            if (mounted) {
-               setState(() {
-                  _currentSessionId = response.first['session_id'].toString(); 
-               });
-            }
-            print('✅ Session Started in DB with ID: $_currentSessionId');
-         }
-      } catch (e) {
-         print('❌ Error starting session in DB: $e');
-         print('DEBUG: RLS check, Table Name, or an unhandled NOT NULL constraint remains (e.g., progress_level, distraction_level).');
-      }
-   }
+  if (_currentSessionId == null) {
+    print('Error: Cannot end session. Session ID is missing.');
+    return;
+  }
 
-   // دالة تسجيل نهاية الجلسة (UPDATE)
-   Future<void> _endSessionInDB({bool completed = false}) async {
-      final supabase = Supabase.instance.client;
+  // Calculate actual focus duration
+  final int actualFocusDurationMinutes = (_totalFocusSeconds ~/ 60);
 
-      if (_currentSessionId == null) {
-         print('Error: Cannot end session. Session ID is missing.');
-         return;
-      }
-      
-      final int actualFocusDurationMinutes = (_totalFocusSeconds ~/ 60);
+  // 🛑 Logic to delete short sessions (< 1 minute focus)
+  if (actualFocusDurationMinutes < 1) {
+    print(
+        '❌ Session duration too short (less than 1 minute focus). Data not saved.');
+    // Delete the incomplete record to prevent a row with end_time=null
+    try {
+      await supabase
+          .from('Focus_Session')
+          .delete()
+          .eq('session_id', _currentSessionId!);
+      print('🗑️ Short session (<1 min) deleted successfully from DB.');
+    } catch (e) {
+      print('⚠️ Error deleting short session: $e');
+      // If the delete fails, the row remains with end_time=null. 
+      // RLS policy is the most likely cause if this happens.
+    }
+    // STOP execution here so end_time is NOT updated
+    return; 
+  }
+  
+  // If actualFocusDurationMinutes >= 1, proceed to update the existing record
+  final endDateTime = DateTime.now().toIso8601String();
 
-      // 🛑 شرط الحفظ: يجب أن يكون أكثر من دقيقة تركيز فعلي
-      if (actualFocusDurationMinutes < 1) {
-            print('❌ Session duration too short (less than 1 minute focus). Data not saved.');
-            return; 
-      }
-      
-      final endDateTime = DateTime.now().toIso8601String();
-      
-      try {
-         // 💡 تحديث البيانات
-         await supabase
-               .from('Focus_Session') 
-               .update({
-                  'end_time': endDateTime,
-                  'duration_minutes': actualFocusDurationMinutes, 
-               })
-               .eq('session_id', _currentSessionId!); 
+  try {
+    await supabase.from('Focus_Session').update({
+      'end_time': endDateTime,
+      'duration_minutes': actualFocusDurationMinutes,
+    }).eq('session_id', _currentSessionId!);
 
-         print('✅ Session ID: $_currentSessionId Ended and recorded successfully. Focus Time: $actualFocusDurationMinutes min');
-      } catch (e) {
-         print('❌ Error ending session in DB: $e');
-      }
-   }
-
+    print(
+        '✅ Session ID: $_currentSessionId Ended successfully. Focus Time: $actualFocusDurationMinutes min');
+  } catch (e) {
+    print('❌ Error ending session in DB: $e');
+  }
+}
 // -------------------------------------------------------------------
 // 💡 SUPABASE LOGIC END
 // -------------------------------------------------------------------

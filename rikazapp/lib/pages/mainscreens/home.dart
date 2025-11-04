@@ -522,28 +522,28 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   // REMOVED: buildRikazConnectLocal widget
 
-  Widget buildFocusSessionLocal() {
-    final screenHeight = MediaQuery.of(context).size.height;
-    final screenWidth = MediaQuery.of(context).size.width;
-    final hasSelectedMode = selectedModeIndex != null;
+Widget buildFocusSessionLocal() {
+  final screenHeight = MediaQuery.of(context).size.height;
+  final screenWidth = MediaQuery.of(context).size.width;
+  final hasSelectedMode = selectedModeIndex != null;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Start Focus Session',
-          style: TextStyle(
-            // MODIFIED: Use _adaptiveFontSize
-            fontSize: _adaptiveFontSize(0.045),
-            fontWeight: FontWeight.bold,
-            color: localPrimaryTextDark,
-          ),
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        'Start Focus Session',
+        style: TextStyle(
+          fontSize: _adaptiveFontSize(0.045),
+          fontWeight: FontWeight.bold,
+          color: localPrimaryTextDark,
         ),
-        // FLEXIBLE HEIGHT
-        SizedBox(height: screenHeight * 0.02),
+      ),
+      // FLEXIBLE HEIGHT
+      SizedBox(height: screenHeight * 0.02),
 
-        // Mode Selection Cards - Refactored to use Flexible sizing
-        Row(
+      // 🎯 FIX: IntrinsicHeight forces all children of the Row to match the height of the tallest child.
+      IntrinsicHeight(
+        child: Row(
           children: List.generate(modes.length, (i) {
             final mode = modes[i];
             final selected = selectedModeIndex == i;
@@ -552,34 +552,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             final Color selectedTextColor = hpDeepBlue;
             final Color defaultTextColor = hpDeepBlue;
 
-            return Expanded( // Ensures cards share horizontal space
+            return Expanded(
               child: GestureDetector(
                 onTap: () => setState(() => selectedModeIndex = i),
                 child: AnimatedScale(
-                  scale: selected ? 1.08 : 1.0, // Slight enlargement when selected
+                  scale: selected ? 1.08 : 1.0,
                   duration: const Duration(milliseconds: 250),
                   curve: Curves.easeInOut,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 250),
-                    // FLEXIBLE MARGIN
                     margin: EdgeInsets.only(
                       right: i == 0 ? screenWidth * 0.03 : 0,
                       left: i == 1 ? screenWidth * 0.03 : 0,
                     ),
-                    // REMOVED FIXED HEIGHT TO PREVENT OVERFLOW
-
-                    // FLEXIBLE PADDING
-                    padding: EdgeInsets.symmetric(
-                        vertical: screenHeight * 0.02, 
-                        horizontal: screenWidth * 0.03
-                    ),
+                    
+                    // You can remove the constraints here, as IntrinsicHeight handles it
+                    // but keeping it as a minimum is harmless.
                     constraints: BoxConstraints(
-                        minHeight: screenHeight * 0.12, 
+                      minHeight: screenHeight * 0.12, 
                     ),
+                    
                     decoration: BoxDecoration(
                       color: selected ? modeBgColor : localCardBackground,
                       borderRadius:
-                      BorderRadius.circular(cardBorderRadius / 2),
+                          BorderRadius.circular(cardBorderRadius / 2),
                       border: Border.all(color: Colors.transparent, width: 0),
                       boxShadow: [
                         BoxShadow(
@@ -588,33 +584,32 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                           offset: const Offset(0, 8),
                         ),
                       ],
-
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min, // Ensure minimal height usage
+                      // The combination of IntrinsicHeight on the Row
+                      // and MainAxisAlignment.center on the Column ensures
+                      // the content is centered vertically within the now-equal height.
+                      mainAxisSize: MainAxisSize.max, // <--- Change to max to fill the expanded height
                       children: [
                         Text(
                           mode['title']!,
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            // MODIFIED: Use _adaptiveFontSize
                             fontSize: _adaptiveFontSize(0.04),
                             color: selected
                                 ? selectedTextColor
                                 : defaultTextColor,
                           ),
                         ),
-                        // FLEXIBLE HEIGHT
                         SizedBox(height: screenHeight * 0.008),
                         Text(
                           mode['desc']!,
                           textAlign: TextAlign.center,
-                            overflow: TextOverflow.ellipsis, // Added fallback
-                            maxLines: 2, // Added fallback
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 2,
                           style: TextStyle(
-                            // MODIFIED: Use _adaptiveFontSize
                             fontSize: _adaptiveFontSize(0.03),
                             color: selected
                                 ? selectedTextColor.withOpacity(0.7)
@@ -625,9 +620,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                     ),
                   ),
                 ),
-              ));
+              ),
+            );
           }),
         ),
+      ),
         // FLEXIBLE HEIGHT
         SizedBox(height: screenHeight * 0.03),
 
