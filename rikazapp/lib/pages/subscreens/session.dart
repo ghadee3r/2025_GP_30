@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'; 
 import 'dart:ui'; 
+import 'package:audioplayers/audioplayers.dart';
 
 // ------------------------------------------------------------
 // FrostedGlassContainer (Utility Widget - Made Flexible)
@@ -906,9 +907,9 @@ class Sound {
 
 const List<Sound> kAvailableSounds = [
    Sound(id: 'off', name: 'No Sound', color: Color(0xFF64748B), icon: Icons.volume_off_rounded),
-   Sound(id: 'rain', name: 'Rain', color: Color(0xFF6366F1), icon: Icons.water_drop_outlined),
-   Sound(id: 'forest', name: 'Forest', color: Color(0xFF10B981), icon: Icons.forest_outlined),
-   Sound(id: 'lofi', name: 'Lofi Beat', color: Color(0xFF7C3AED), icon: Icons.music_note_outlined),
+   Sound(id: 'Brown-Noise', name: 'Brown Sound', color: Color.fromARGB(255, 159, 80, 48), icon: Icons.waves_rounded),
+   Sound(id: 'Rain', name: 'Rain', color: Color.fromARGB(255, 104, 114, 223), icon: Icons.water_drop_outlined),
+   Sound(id: 'River', name: 'River', color: Color.fromARGB(255, 110, 247, 149), icon: Icons.water_rounded),
 ];
 
 // ------------------------------------------------------------
@@ -923,41 +924,88 @@ class SoundSection extends StatefulWidget {
 
 class _SoundSectionState extends State<SoundSection> {
    // Mock state data for UI presentation (Logic untouched)
+   final AudioPlayer _audioPlayer = AudioPlayer();
    String _currentSoundId = 'off';
    bool _isSoundPlaying = false;
    bool _isExpanded = false;
 
-   void _onSoundSelected(String id) {
-      if (!mounted) return;
-      setState(() {
-         _currentSoundId = id;
-         _isExpanded = false; // Collapse the dropdown
-         
-         if (id == 'off') {
-            _isSoundPlaying = false;
-         } else {
-            _isSoundPlaying = true;
-         }
-         print('Sound selected: $id, Playing: $_isSoundPlaying');
-      });
-   }
-
-   void _onPlayPauseTapped() {
-      if (_currentSoundId != 'off') {
-            if (!mounted) return;
-         setState(() {
-            _isSoundPlaying = !_isSoundPlaying;
-            print('Toggled Play/Pause. Playing: $_isSoundPlaying');
-         });
-      }
+@override
+   void initState() {
+      super.initState();
+      // Configure the player to loop
+      _audioPlayer.setReleaseMode(ReleaseMode.loop);
    }
 
    @override
+   void dispose() {
+      // ✅ Stop and release the player when the widget is removed
+      _audioPlayer.stop();
+      _audioPlayer.dispose();
+      super.dispose();
+   }
+   
+Future<void> _onSoundSelected(String id) async {
+      if (!mounted) return;
+
+      // Stop any currently playing sound
+      await _audioPlayer.stop();
+
+      if (id == 'off') {
+         // User selected "No Sound"
+         setState(() {
+            _currentSoundId = id;
+            _isSoundPlaying = false;
+            _isExpanded = false;
+         });
+      } else {
+         // User selected a new sound
+         try {
+            // Construct the asset path: 'sounds/rain.mp3', etc.
+            await _audioPlayer.play(AssetSource('sounds/$id.mp3'));
+            setState(() {
+               _currentSoundId = id;
+               _isSoundPlaying = true;
+               _isExpanded = false;
+            });
+         } catch (e) {
+            print('Error playing sound: $e');
+            // Handle error (e.g., file not found)
+            setState(() {
+               _currentSoundId = 'off';
+               _isSoundPlaying = false;
+               _isExpanded = false;
+            });
+         }
+      }
+   }
+
+  Future<void> _onPlayPauseTapped() async {
+      if (_currentSoundId == 'off') return;
+
+      if (_isSoundPlaying) {
+         await _audioPlayer.pause();
+         if (mounted) {
+            setState(() => _isSoundPlaying = false);
+         }
+      } else {
+         await _audioPlayer.resume();
+         if (mounted) {
+            setState(() => _isSoundPlaying = true);
+         }
+      }
+   }
+
+  @override
    Widget build(BuildContext context) {
       final screenWidth = MediaQuery.of(context).size.width;
       final currentSound = kAvailableSounds.firstWhere((s) => s.id == _currentSoundId);
+      
+      // ✅ Use _isSoundPlaying to determine state, not just id
       final displayIcon = _isSoundPlaying ? currentSound.icon : Icons.volume_off_rounded;
       final displayColor = _isSoundPlaying ? currentSound.color : const Color(0xFF64748B);
+      final String displayText = _isSoundPlaying 
+            ? 'Playing: ${currentSound.name}' 
+            : (_currentSoundId == 'off' ? 'Background Sound' : 'Paused: ${currentSound.name}');
 
       return FrostedGlassContainer(
          child: Column(
@@ -992,9 +1040,7 @@ class _SoundSectionState extends State<SoundSection> {
                            // Title
                            Expanded(
                               child: Text(
-                                 _isSoundPlaying 
-                                    ? 'Playing: ${currentSound.name}' 
-                                    : 'Background Sound',
+                                 displayText, // ✅ Use updated display text
                                  style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                     color: const Color(0xFF0F172A),
@@ -1013,7 +1059,7 @@ class _SoundSectionState extends State<SoundSection> {
                                        color: displayColor,
                                        size: screenWidth * 0.08, 
                                     ),
-                                    onPressed: _onPlayPauseTapped,
+                                    onPressed: _onPlayPauseTapped, // ✅ Use new function
                                  ),
                               ),
 
@@ -1040,12 +1086,12 @@ class _SoundSectionState extends State<SoundSection> {
                   secondChild: Column( 
                      children: [
                         const Divider(height: 1, color: Color.fromRGBO(255, 255, 255, 0.4), thickness: 1),
+                        // ✅ Updated logic to show all options
                         ...kAvailableSounds.map((sound) {
-                           if (sound.id != 'off' && sound.id == _currentSoundId && _isSoundPlaying) return const SizedBox.shrink();
-                           
+                           final bool isThisOneSelected = sound.id == _currentSoundId && _isSoundPlaying;
                            return _SoundRow(
                               sound: sound,
-                              isSelected: sound.id == _currentSoundId && _isSoundPlaying,
+                              isSelected: isThisOneSelected,
                               onTap: () => _onSoundSelected(sound.id),
                            );
                         }).toList(),
@@ -1057,7 +1103,6 @@ class _SoundSectionState extends State<SoundSection> {
       );
    }
 }
-
 // ------------------------------------------------------------
 // _SoundRow (Internal Widget for the list items - Modified for Flexibility)
 // ------------------------------------------------------------
@@ -1071,8 +1116,7 @@ class _SoundRow extends StatelessWidget {
       required this.isSelected,
       required this.onTap,
    });
-
-   @override
+@override
    Widget build(BuildContext context) {
       final screenWidth = MediaQuery.of(context).size.width;
       final rowHorizontalPadding = screenWidth * 0.04; 
