@@ -11,8 +11,8 @@ final supabase = sb.Supabase.instance.client;
 // Basic email format check: e.g., 'user@domain.com'
 final RegExp _emailRegex = RegExp(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$");
 
-// Updated Password complexity check for 12 characters with all requirements
-final RegExp _passwordRegex = RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*(),.?":{}|<>]).{12,}$');
+// Password complexity check:
+final RegExp _passwordRegex = RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$');
 
 
 void _showAlert(BuildContext context, String title, String message) {
@@ -61,7 +61,7 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
-  // 🚨 SUPABASE SIGN UP LOGIC WITH ON-SCREEN ERROR 🚨
+// 🚨 SUPABASE SIGN UP LOGIC WITH ON-SCREEN ERROR 🚨
   Future<void> _handleSignup() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
@@ -94,7 +94,6 @@ class _SignupScreenState extends State<SignupScreen> {
       _showAlert(context, "Weak Password", "Password must contain at least one number.");
       return;
     }
-    // Updated to allow any special character, not just @, &, _
     if (!RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(password)) {
       _showAlert(context, "Weak Password", "Password must contain at least one special character (e.g., !@#\$%^&*).");
       return;
@@ -106,7 +105,7 @@ class _SignupScreenState extends State<SignupScreen> {
     });
 
     try {
-      // Attempt to sign up - Supabase handles user existence internally
+      // Attempt to sign up
       final sb.AuthResponse response = await supabase.auth.signUp(
         email: email,
         password: password,
@@ -116,36 +115,52 @@ class _SignupScreenState extends State<SignupScreen> {
 
       if (!mounted) return;
       
-      // Since Supabase doesn't provide a reliable way to distinguish between
-      // new and existing users during signup, we'll use a simple approach:
-      // Always show the verification message, but make it clear what happened
-      
-      if (response.user != null) {
+      // --- START OF NEW "IDENTITIES" LOGIC ---
+
+      // Check if the user object and identities list exist.
+      // A fake user object (for an existing user) will have response.user.identities as an empty list [].
+      // A real new user will have one identity in the list.
+      if (response.user != null && (response.user!.identities == null || response.user!.identities!.isEmpty)) {
+        
+        // --- CASE 1: USER ALREADY EXISTS ---
+        // Supabase returned a fake user with no identities.
         setState(() {
-          _postSignupMessage = 'A verification email has been sent to $email. Please click the link to confirm your account, then log in.\n\nIf you already have an account, please check your email for the verification link or use the login page.';
+          _postSignupMessage = "This email is already registered. Please log in instead.";
+          _isSuccessMessage = false; // This is an "error" for the signup form
+        });
+
+      } else if (response.user != null) {
+        
+        // --- CASE 2: USER IS NEW ---
+        // We got a user AND they have an identity. Send the verification email.
+        setState(() {
+          _postSignupMessage = 'A verification email has been sent to $email. Please click the link to confirm your account, then log in.';
           _isSuccessMessage = true;
         });
+
+      } else {
+        // Fallback for any other unexpected null response
+        setState(() {
+          _postSignupMessage = 'An error occurred. Please try again.';
+          _isSuccessMessage = false;
+        });
       }
+      // --- END OF NEW LOGIC ---
       
     } on sb.AuthException catch (e) { 
       if (!mounted) return;
       
+      // This catch block is still a good fallback
       String errorMessage = e.message;
-      
-      // Handle any auth errors that might indicate user exists
       if (errorMessage.contains('User already registered') || 
-          errorMessage.contains('already has an account') ||
-          errorMessage.contains('user_already_exists') ||
-          errorMessage.contains('email_taken') ||
-          errorMessage.contains('already in use')) {
+          errorMessage.contains('already has an account')) {
          
         setState(() {
-          _postSignupMessage = "This email is already registered. Please log in instead.";
+          _postSignupMessage = "This email is in use. Please log in.";
           _isSuccessMessage = false;
         });
          
       } else {
-         // Use the standard alert for all other errors
          _showAlert(context, "Signup Error", errorMessage);
       }
       
@@ -173,12 +188,6 @@ class _SignupScreenState extends State<SignupScreen> {
       decoration: InputDecoration(
         hintText: hintText,
         contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8.0),
-          borderSide: BorderSide.none,
-        ),
-        filled: true,
-        fillColor: const Color(0xFFF3F4F6), // Light gray background for input
       ),
     );
   }
@@ -194,21 +203,13 @@ class _SignupScreenState extends State<SignupScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
               // Logo
-              Image.asset(_rikazLogoPath, height: 120, width: 120),
-              const SizedBox(height: 16),
+              Image.asset(_rikazLogoPath, height: 150, width: 150),
+              const SizedBox(height: 10),
 
               const Text(
                 'Create Account',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF222222)),
-              ),
-              const Text(
-                'Join Rikaz to start your journey',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF666666),
-                ),
               ),
               const SizedBox(height: 24),
 
@@ -232,32 +233,13 @@ class _SignupScreenState extends State<SignupScreen> {
                 obscureText: true,
                 autocorrect: false,
               ),
-              
-              // Password requirements note - UPDATED
-              const Padding(
-                padding: EdgeInsets.only(top: 8.0, bottom: 16.0),
-                child: Text(
-                  'Password must be at least 12 characters long and contain:\n• One uppercase letter • One lowercase letter\n• One number • One special character (!@#\$%^&*)',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF666666),
-                  ),
-                ),
-              ),
+              const SizedBox(height: 16),
 
               ElevatedButton(
                 onPressed: _isSubmitting ? null : _handleSignup,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF4f46e5), // Primary button color
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8.0),
-                  ),
-                  elevation: 5,
-                ),
                 child: Text(
                   _isSubmitting ? "Creating..." : "Sign Up",
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                 ),
               ),
               const SizedBox(height: 20),
@@ -283,24 +265,10 @@ class _SignupScreenState extends State<SignupScreen> {
                 onTap: _isSubmitting ? null : () => Navigator.of(context).pushReplacementNamed('/login'),
                 child: const Padding(
                   padding: EdgeInsets.symmetric(vertical: 10, horizontal: 20),
-                  child: Text.rich(
-                    TextSpan(
-                      text: 'Already have an account? ',
-                      style: TextStyle(
-                        color: Color(0xFF666666),
-                        fontSize: 15,
-                      ),
-                      children: [
-                        TextSpan(
-                          text: 'Log In',
-                          style: TextStyle(
-                            color: Color(0xFF4f46e5), // Highlighted link text
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
+                  child: Text(
+                    'Already have an account? Log in',
                     textAlign: TextAlign.center,
+                    style: TextStyle(color: Color(0xFF4f46e5), fontSize: 15),
                   ),
                 ),
               ),
