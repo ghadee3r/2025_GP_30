@@ -181,9 +181,10 @@ class _SessionPageState extends State<SessionPage>
 
 
 // -------------------------------------------------------------------
-// 💡 SUPABASE LOGIC START - (Functionality Untouched)
+// 💡 SUPABASE LOGIC START
 // -------------------------------------------------------------------
-// دالة تسجيل بداية الجلسة (INSERT)
+
+// ✅ دالة تسجيل بداية الجلسة (INSERT) - مصححة
 Future<void> _startSessionInDB() async {
   final supabase = Supabase.instance.client;
   final currentUserId = supabase.auth.currentUser?.id;
@@ -193,39 +194,25 @@ Future<void> _startSessionInDB() async {
     return;
   }
 
-  // 🔹 1. Planned duration (set_duration_minutes)
-  // Ensures the correct planned duration is calculated based on blocks/minutes.
-  final int plannedDuration = isPomodoro
-      ? (focusMinutes * totalBlocks) + (breakMinutes * (totalBlocks - 1)) // Correct total break blocks
-      : focusMinutes;
-
-  // Correction: If it's a Pomodoro, total blocks includes breaks between focus sessions.
-  // For '4' blocks (4 focus, 3 breaks) -> (4*F) + (3*B)
-  // Your previous calculation (focusMinutes * totalBlocks) + (breakMinutes * totalBlocks) was slightly off 
-  // as it included an extra break. The logic below corrects this, assuming the break is between blocks.
-
+  // حساب المدة المخططة (بدون تكرار)
   final int finalPlannedDuration = isPomodoro 
-    ? (focusMinutes * totalBlocks) + (totalBlocks > 1 ? breakMinutes * (totalBlocks - 1) : 0)
+    ? (focusMinutes * totalBlocks) 
     : focusMinutes;
+    // نوع البومودورو
+  final String? pomodoroType =
+    isPomodoro ? '$focusMinutes-$breakMinutes' : null;
 
+  _sessionStartTime = DateTime.now();
 
-  // 🔹 2. Pomodoro type ('25-5' or '50-10') - Matches your new DB column
-final String? pomodoroType =
-    isPomodoro ? '${focusMinutes}-${breakMinutes}' : null;
-
-_sessionStartTime = DateTime.now();
-
-try {
-  final response = await supabase.from('Focus_Session').insert({
-    'user_id': currentUserId,
-    'session_type': widget.sessionType,
-    'start_time': _sessionStartTime!.toIso8601String(),
-    'set_duration_minutes': finalPlannedDuration,
-    // 'duration_minutes' is intentionally OMITTED here, 
-    // allowing it to default to NULL in the DB.
-    'pomodoro_type': pomodoroType, 
-    'camera_monitored': widget.isCameraDetectionEnabled ?? false,
-  }).select('session_id');
+  try {
+    final response = await supabase.from('Focus_Session').insert({
+      'user_id': currentUserId,
+      'session_type': widget.sessionType,
+      'start_time': _sessionStartTime!.toIso8601String(),
+      'set_duration_minutes': finalPlannedDuration,
+      'pomodoro_type': pomodoroType, 
+      'camera_monitored': widget.isCameraDetectionEnabled ?? false,
+    }).select('session_id');
 
     if (response.isNotEmpty) {
       if (mounted) {
@@ -240,7 +227,159 @@ try {
   }
 }
 
-// دالة تسجيل نهاية الجلسة (UPDATE or DELETE)
+// 🆕 دالة عرض popup اختيار مستوى التقدم
+Future<String?> _showProgressLevelDialog() async {
+  return showDialog<String>(
+    context: context,
+    barrierDismissible: false, // لازم يختار
+    builder: (BuildContext context) {
+      final screenWidth = MediaQuery.of(context).size.width;
+      
+      return Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(screenWidth * 0.05),
+        ),
+        child: Container(
+          padding: EdgeInsets.all(screenWidth * 0.06),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFFF3F6FF), Color(0xFFEEF2FF)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            borderRadius: BorderRadius.circular(screenWidth * 0.05),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // الأيقونة
+              Icon(
+                Icons.track_changes,
+                size: screenWidth * 0.15,
+                color: const Color(0xFF6366F1),
+              ),
+              SizedBox(height: screenWidth * 0.04),
+              
+              // السؤال الرئيسي
+              Text(
+                'How much of your goal did you achieve in this session?',
+                style: TextStyle(
+                  fontSize: screenWidth * 0.048,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF0F172A),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: screenWidth * 0.06),
+              
+              // الخيارات الثلاثة
+              _buildProgressOption(
+                context,
+                level: 'fully',
+                title: 'Fully',
+                subtitle: 'I accomplished everything I set out to do',
+                icon: Icons.verified,
+                color: const Color(0xFF10B981),
+              ),
+              SizedBox(height: screenWidth * 0.03),
+              _buildProgressOption(
+                context,
+                level: 'partially',
+                title: 'Partially',
+                subtitle: 'I made good progress but didn\'t finish',
+                icon: Icons.trending_up,
+                color: const Color(0xFFF59E0B),
+              ),
+              SizedBox(height: screenWidth * 0.03),
+              _buildProgressOption(
+                context,
+                level: 'barely',
+                title: 'Barely',
+                subtitle: 'I struggled to stay focused',
+                icon: Icons.sentiment_dissatisfied,
+                color: const Color(0xFFEF4444),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+// دالة مساعدة لبناء كل خيار في الـ popup
+Widget _buildProgressOption(
+  BuildContext context, {
+  required String level,
+  required String title,
+  required String subtitle,
+  required IconData icon,
+  required Color color,
+}) {
+  final screenWidth = MediaQuery.of(context).size.width;
+  
+  return InkWell(
+    onTap: () => Navigator.of(context).pop(level),
+    borderRadius: BorderRadius.circular(screenWidth * 0.035),
+    child: Container(
+      padding: EdgeInsets.all(screenWidth * 0.04),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(screenWidth * 0.035),
+        border: Border.all(color: color.withOpacity(0.3), width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(screenWidth * 0.03),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(screenWidth * 0.025),
+            ),
+            child: Icon(icon, color: color, size: screenWidth * 0.07),
+          ),
+          SizedBox(width: screenWidth * 0.04),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: screenWidth * 0.045,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF0F172A),
+                  ),
+                ),
+                SizedBox(height: screenWidth * 0.01),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: screenWidth * 0.033,
+                    color: const Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.arrow_forward_ios, 
+            color: color, 
+            size: screenWidth * 0.04
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+// ✅ دالة تسجيل نهاية الجلسة (UPDATE or DELETE) مع إضافة progress_level
 Future<void> _endSessionInDB({bool completed = false}) async {
   final supabase = Supabase.instance.client;
 
@@ -249,14 +388,12 @@ Future<void> _endSessionInDB({bool completed = false}) async {
     return;
   }
 
-  // Calculate actual focus duration
+  // حساب وقت التركيز الفعلي
   final int actualFocusDurationMinutes = (_totalFocusSeconds ~/ 60);
 
-  // 🛑 Logic to delete short sessions (< 1 minute focus)
+  // 🛑 حذف الجلسات القصيرة (أقل من دقيقة)
   if (actualFocusDurationMinutes < 1) {
-    print(
-        '❌ Session duration too short (less than 1 minute focus). Data not saved.');
-    // Delete the incomplete record to prevent a row with end_time=null
+    print('❌ Session duration too short (less than 1 minute focus). Data not saved.');
     try {
       await supabase
           .from('Focus_Session')
@@ -265,28 +402,32 @@ Future<void> _endSessionInDB({bool completed = false}) async {
       print('🗑️ Short session (<1 min) deleted successfully from DB.');
     } catch (e) {
       print('⚠️ Error deleting short session: $e');
-      // If the delete fails, the row remains with end_time=null. 
-      // RLS policy is the most likely cause if this happens.
     }
-    // STOP execution here so end_time is NOT updated
     return; 
   }
   
-  // If actualFocusDurationMinutes >= 1, proceed to update the existing record
+  // 🆕 عرض popup لاختيار مستوى التقدم
+  String? progressLevel = await _showProgressLevelDialog();
+  
+  // إذا المستخدم ما اختار (نادر), نحط قيمة افتراضية
+  progressLevel ??= 'partially';
+  
   final endDateTime = DateTime.now().toIso8601String();
 
   try {
+    // ✅ حفظ كل البيانات مع مستوى التقدم
     await supabase.from('Focus_Session').update({
       'end_time': endDateTime,
       'duration_minutes': actualFocusDurationMinutes,
+      'progress_level': progressLevel, // 🆕 حفظ مستوى التقدم
     }).eq('session_id', _currentSessionId!);
 
-    print(
-        '✅ Session ID: $_currentSessionId Ended successfully. Focus Time: $actualFocusDurationMinutes min');
+    print('✅ Session ID: $_currentSessionId Ended successfully. Focus Time: $actualFocusDurationMinutes min, Progress: $progressLevel');
   } catch (e) {
     print('❌ Error ending session in DB: $e');
   }
 }
+
 // -------------------------------------------------------------------
 // 💡 SUPABASE LOGIC END
 // -------------------------------------------------------------------
@@ -297,7 +438,6 @@ Future<void> _endSessionInDB({bool completed = false}) async {
       super.initState();
       isPomodoro = widget.sessionType == 'pomodoro';
 
-    // Initialization logic preserved exactly
       if (isPomodoro) {
          if (widget.duration == '25min') {
             focusMinutes = 25;
@@ -317,7 +457,7 @@ Future<void> _endSessionInDB({bool completed = false}) async {
       timeLeft = focusMinutes * 60;
       startTimer();
 
-      // 1. ✅ استدعاء دالة البدء
+      // ✅ بداية الجلسة
       _startSessionInDB(); 
 
       pulseController = AnimationController(
@@ -326,7 +466,6 @@ Future<void> _endSessionInDB({bool completed = false}) async {
       )..repeat(reverse: true);
    }
 
-   // Timer logic preserved exactly
    void startTimer() {
       _timer?.cancel();
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -349,14 +488,13 @@ Future<void> _endSessionInDB({bool completed = false}) async {
       });
    }
 
-   // Phase transition logic preserved exactly
    void onPhaseEnd() {
       if (!mounted) return;
       
       if (!isPomodoro) {
          setState(() => status = 'idle');
          _timer?.cancel();
-         // 2. ✅ إنهاء الجلسة المخصصة المكتملة
+         // ✅ إنهاء الجلسة المخصصة المكتملة
          _endSessionInDB(completed: true); 
          return;
       }
@@ -380,7 +518,7 @@ Future<void> _endSessionInDB({bool completed = false}) async {
                status = 'idle';
             });
             _timer?.cancel();
-            // 2. ✅ إنهاء جلسة البومودورو المكتملة
+            // ✅ إنهاء جلسة البومودورو المكتملة
             _endSessionInDB(completed: true); 
          } else {
             setState(() {
@@ -392,7 +530,6 @@ Future<void> _endSessionInDB({bool completed = false}) async {
       }
    }
 
-   // Pause/Resume logic preserved exactly
    void onPauseResume() {
       if (!mounted) return;
       setState(() {
@@ -405,7 +542,6 @@ Future<void> _endSessionInDB({bool completed = false}) async {
       }
    }
 
-   // Quit logic preserved exactly
    void onQuit() {
       final String previousStatus = status;
       setState(() => status = 'paused');
@@ -436,16 +572,17 @@ Future<void> _endSessionInDB({bool completed = false}) async {
                   child: const Text('Cancel'),
                ),
                TextButton(
-                  onPressed: () {
+                  onPressed: () async {
                      _timer?.cancel(); 
                      
                      try {
                         pulseController.dispose(); 
                      } catch(_) { }
                      
-                     _endSessionInDB(completed: false); 
-
                      Navigator.pop(dialogContext); 
+                     
+                     // 🆕 هنا يطلع popup مستوى التقدم قبل الحفظ
+                     await _endSessionInDB(completed: false); 
 
                      if (mounted) { 
                         Navigator.pushNamedAndRemoveUntil(
@@ -465,9 +602,7 @@ Future<void> _endSessionInDB({bool completed = false}) async {
       );
    }
 
-   // Game navigation logic preserved exactly
    void onGames() {
-      // Navigate to games page
       Navigator.of(context).pushNamed('/games');
    }
 
@@ -503,7 +638,6 @@ Future<void> _endSessionInDB({bool completed = false}) async {
       final bool isPaused = status == 'paused';
       final bool isBreak = mode == 'break';
 
-      // Gradients and Shadows (Logic untouched)
       final gradientColors = isPaused
             ? const [Color.fromARGB(255, 225, 227, 230), Color.fromARGB(255, 185, 196, 207)]
             : isBreak
@@ -516,7 +650,6 @@ Future<void> _endSessionInDB({bool completed = false}) async {
                   ? const Color.fromARGB(160, 255, 172, 64).withOpacity(0.3)
                   : const Color.fromARGB(78, 78, 52, 194).withOpacity(0.3));
 
-      // Proportional Timer Dimensions
       final timerOuterDiameter = screenWidth * 0.75; 
       final timerInnerDiameter = screenWidth * 0.62; 
       final controlContainerRadius = screenWidth * 0.045; 
@@ -532,14 +665,11 @@ Future<void> _endSessionInDB({bool completed = false}) async {
             ),
             child: SafeArea(
                child: SingleChildScrollView(
-                  // FLEXIBLE PADDING
                   padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: screenHeight * 0.02),
                   child: Column(
                      crossAxisAlignment: CrossAxisAlignment.center,
                      children: [
-                        // Header
                         Container(
-                           // FLEXIBLE PADDING
                            padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.03, vertical: screenHeight * 0.008),
                            decoration: BoxDecoration(
                               color: (isBreak ? Colors.orange : Colors.blue).withOpacity(0.2),
@@ -572,7 +702,6 @@ Future<void> _endSessionInDB({bool completed = false}) async {
                         ),
                         SizedBox(height: screenHeight * 0.04),
 
-                        // Timer
                         Stack(
                            alignment: Alignment.center,
                            children: [
@@ -632,7 +761,6 @@ Future<void> _endSessionInDB({bool completed = false}) async {
                         ),
                         SizedBox(height: screenHeight * 0.05),
 
-                        // Controls
                         Container(
                            decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.7),
@@ -710,7 +838,6 @@ Future<void> _endSessionInDB({bool completed = false}) async {
                         ),
                         SizedBox(height: screenHeight * 0.05),
 
-                        // Pomodoro Blocks
                         if (isPomodoro)
                            Column(
                               children: [
@@ -746,11 +873,7 @@ Future<void> _endSessionInDB({bool completed = false}) async {
    }
 }
 
-// ------------------------------------------------------------
-// Gradient Ring Painter (No fixed size changes needed here, relies on parent size)
-// ------------------------------------------------------------
 class _GradientRingPainter extends CustomPainter {
-// ... (Logic untouched)
   final double progress;
   final bool isBreak;
   _GradientRingPainter({required this.progress, required this.isBreak});
@@ -801,9 +924,6 @@ class _GradientRingPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
-// ------------------------------------------------------------
-// Pomodoro Block (Modified for Flexibility)
-// ------------------------------------------------------------
 class _PomodoroBlock extends StatelessWidget {
    final int blockNum;
    final bool isActive;
@@ -888,9 +1008,6 @@ class _PomodoroBlock extends StatelessWidget {
    }
 }
 
-// ------------------------------------------------------------
-// Sound Model and Mock Data (Unchanged)
-// ------------------------------------------------------------
 class Sound {
    final String id;
    final String name;
@@ -912,9 +1029,6 @@ const List<Sound> kAvailableSounds = [
    Sound(id: 'River', name: 'River', color: Color.fromARGB(255, 110, 247, 149), icon: Icons.water_rounded),
 ];
 
-// ------------------------------------------------------------
-// SoundSection (Refactored Glassy Dropdown Widget - Modified for Flexibility)
-// ------------------------------------------------------------
 class SoundSection extends StatefulWidget {
    const SoundSection({super.key});
 
@@ -923,44 +1037,37 @@ class SoundSection extends StatefulWidget {
 }
 
 class _SoundSectionState extends State<SoundSection> {
-   // Mock state data for UI presentation (Logic untouched)
    final AudioPlayer _audioPlayer = AudioPlayer();
    String _currentSoundId = 'off';
    bool _isSoundPlaying = false;
    bool _isExpanded = false;
 
-@override
+   @override
    void initState() {
       super.initState();
-      // Configure the player to loop
       _audioPlayer.setReleaseMode(ReleaseMode.loop);
    }
 
    @override
    void dispose() {
-      // ✅ Stop and release the player when the widget is removed
       _audioPlayer.stop();
       _audioPlayer.dispose();
       super.dispose();
    }
    
-Future<void> _onSoundSelected(String id) async {
+   Future<void> _onSoundSelected(String id) async {
       if (!mounted) return;
 
-      // Stop any currently playing sound
       await _audioPlayer.stop();
 
       if (id == 'off') {
-         // User selected "No Sound"
          setState(() {
             _currentSoundId = id;
             _isSoundPlaying = false;
             _isExpanded = false;
          });
       } else {
-         // User selected a new sound
          try {
-            // Construct the asset path: 'sounds/rain.mp3', etc.
             await _audioPlayer.play(AssetSource('sounds/$id.mp3'));
             setState(() {
                _currentSoundId = id;
@@ -969,7 +1076,6 @@ Future<void> _onSoundSelected(String id) async {
             });
          } catch (e) {
             print('Error playing sound: $e');
-            // Handle error (e.g., file not found)
             setState(() {
                _currentSoundId = 'off';
                _isSoundPlaying = false;
@@ -979,7 +1085,7 @@ Future<void> _onSoundSelected(String id) async {
       }
    }
 
-  Future<void> _onPlayPauseTapped() async {
+   Future<void> _onPlayPauseTapped() async {
       if (_currentSoundId == 'off') return;
 
       if (_isSoundPlaying) {
@@ -995,12 +1101,11 @@ Future<void> _onSoundSelected(String id) async {
       }
    }
 
-  @override
+   @override
    Widget build(BuildContext context) {
       final screenWidth = MediaQuery.of(context).size.width;
       final currentSound = kAvailableSounds.firstWhere((s) => s.id == _currentSoundId);
       
-      // ✅ Use _isSoundPlaying to determine state, not just id
       final displayIcon = _isSoundPlaying ? currentSound.icon : Icons.volume_off_rounded;
       final displayColor = _isSoundPlaying ? currentSound.color : const Color(0xFF64748B);
       final String displayText = _isSoundPlaying 
@@ -1010,10 +1115,9 @@ Future<void> _onSoundSelected(String id) async {
       return FrostedGlassContainer(
          child: Column(
             children: [
-               // 1. Header (Always Visible / Tap Target)
                InkWell(
                   onTap: () {
-                        if (!mounted) return;
+                     if (!mounted) return;
                      setState(() {
                         _isExpanded = !_isExpanded;
                      });
@@ -1022,7 +1126,6 @@ Future<void> _onSoundSelected(String id) async {
                      padding: EdgeInsets.all(screenWidth * 0.04),
                      child: Row(
                         children: [
-                           // Current Sound Icon
                            Container(
                               width: screenWidth * 0.09,
                               height: screenWidth * 0.09,
@@ -1037,10 +1140,9 @@ Future<void> _onSoundSelected(String id) async {
                               ),
                            ),
                            SizedBox(width: screenWidth * 0.03),
-                           // Title
                            Expanded(
                               child: Text(
-                                 displayText, // ✅ Use updated display text
+                                 displayText,
                                  style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                     color: const Color(0xFF0F172A),
@@ -1049,7 +1151,6 @@ Future<void> _onSoundSelected(String id) async {
                               ),
                            ),
                            
-                           // Pause/Play Button
                            if (_currentSoundId != 'off')
                               Padding(
                                  padding: EdgeInsets.only(right: screenWidth * 0.03),
@@ -1059,11 +1160,10 @@ Future<void> _onSoundSelected(String id) async {
                                        color: displayColor,
                                        size: screenWidth * 0.08, 
                                     ),
-                                    onPressed: _onPlayPauseTapped, // ✅ Use new function
+                                    onPressed: _onPlayPauseTapped,
                                  ),
                               ),
 
-                           // Dropdown Indicator
                            Icon(
                               _isExpanded 
                                     ? Icons.keyboard_arrow_up_rounded 
@@ -1076,7 +1176,6 @@ Future<void> _onSoundSelected(String id) async {
                   ),
                ),
 
-               // 2. Dropdown List
                AnimatedCrossFade(
                   duration: const Duration(milliseconds: 300),
                   crossFadeState: _isExpanded 
@@ -1086,7 +1185,6 @@ Future<void> _onSoundSelected(String id) async {
                   secondChild: Column( 
                      children: [
                         const Divider(height: 1, color: Color.fromRGBO(255, 255, 255, 0.4), thickness: 1),
-                        // ✅ Updated logic to show all options
                         ...kAvailableSounds.map((sound) {
                            final bool isThisOneSelected = sound.id == _currentSoundId && _isSoundPlaying;
                            return _SoundRow(
@@ -1103,9 +1201,7 @@ Future<void> _onSoundSelected(String id) async {
       );
    }
 }
-// ------------------------------------------------------------
-// _SoundRow (Internal Widget for the list items - Modified for Flexibility)
-// ------------------------------------------------------------
+
 class _SoundRow extends StatelessWidget {
    final Sound sound;
    final bool isSelected;
@@ -1116,7 +1212,8 @@ class _SoundRow extends StatelessWidget {
       required this.isSelected,
       required this.onTap,
    });
-@override
+
+   @override
    Widget build(BuildContext context) {
       final screenWidth = MediaQuery.of(context).size.width;
       final rowHorizontalPadding = screenWidth * 0.04; 
@@ -1127,7 +1224,6 @@ class _SoundRow extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: rowHorizontalPadding, vertical: screenWidth * 0.03),
             child: Row(
                children: [
-                  // Row Thumbnail (Icon)
                   Container(
                      width: screenWidth * 0.08,
                      height: screenWidth * 0.08,
@@ -1142,7 +1238,6 @@ class _SoundRow extends StatelessWidget {
                      ),
                   ),
                   const SizedBox(width: 12),
-                  // Sound Name
                   Expanded(
                      child: Text(
                         sound.name,
@@ -1153,7 +1248,6 @@ class _SoundRow extends StatelessWidget {
                         ),
                      ),
                   ),
-                  // Selection Checkmark (if selected)
                   if (isSelected)
                      Icon(
                         Icons.check,
