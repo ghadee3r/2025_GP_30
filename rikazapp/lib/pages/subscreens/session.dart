@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'; 
 import 'dart:ui'; 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:rikazapp/services/wled_service.dart';
 
 // ------------------------------------------------------------
 // FrostedGlassContainer (Utility Widget - Made Flexible)
@@ -142,6 +143,7 @@ class SessionPage extends StatefulWidget {
       final bool? isCameraDetectionEnabled; 
       final double? sensitivity;
       final String? notificationStyle;
+      final bool? isRikazToolConnected;
 
    const SessionPage({
       super.key,
@@ -151,6 +153,7 @@ class SessionPage extends StatefulWidget {
             this.isCameraDetectionEnabled, 
             this.sensitivity,
             this.notificationStyle,
+            this.isRikazToolConnected,
    });
 
    @override
@@ -159,7 +162,11 @@ class SessionPage extends StatefulWidget {
 
 class _SessionPageState extends State<SessionPage>
       with SingleTickerProviderStateMixin {
-   
+     // WLED Integration: Service Instance and Status Flag
+   final WledService _wledService = WledService(); 
+   late bool _isToolConnected; 
+
+
    late bool isPomodoro;
    late int focusMinutes;
    late int breakMinutes;
@@ -405,6 +412,7 @@ Future<void> _endSessionInDB({bool completed = false}) async {
     }
     return; 
   }
+  _stopWledSession();
   
   // 🆕 عرض popup لاختيار مستوى التقدم
   String? progressLevel = await _showProgressLevelDialog();
@@ -425,6 +433,25 @@ Future<void> _endSessionInDB({bool completed = false}) async {
     print('✅ Session ID: $_currentSessionId Ended successfully. Focus Time: $actualFocusDurationMinutes min, Progress: $progressLevel');
   } catch (e) {
     print('❌ Error ending session in DB: $e');
+  }
+}
+
+// --- WLED CONTROL METHODS ---
+void _startWledSession() {
+  if (_isToolConnected) {
+    // True = sends Preset 1 ON command (Focus Light)
+    _wledService.sendCommand(true); 
+    print('WLED Command: FOCUS_START sent (Preset 1).');
+  } else {
+    print('WLED Command: Tool not connected, skipping light start.');
+  }
+}
+
+void _stopWledSession() {
+  if (_isToolConnected) {
+    // False = sends OFF command
+    _wledService.sendCommand(false); 
+    print('WLED Command: FOCUS_STOP sent.');
   }
 }
 
@@ -454,6 +481,9 @@ Future<void> _endSessionInDB({bool completed = false}) async {
          totalBlocks = 1;
       }
 
+      _isToolConnected = widget.isRikazToolConnected ?? false; // <--- GET STATUS
+      _startWledSession(); // <--- START LIGHTS
+ 
       timeLeft = focusMinutes * 60;
       startTimer();
 
@@ -574,6 +604,7 @@ Future<void> _endSessionInDB({bool completed = false}) async {
                TextButton(
                   onPressed: () async {
                      _timer?.cancel(); 
+                     _stopWledSession();
                      
                      try {
                         pulseController.dispose(); 
@@ -620,6 +651,7 @@ Future<void> _endSessionInDB({bool completed = false}) async {
    @override
    void dispose() {
       _timer?.cancel();
+      _stopWledSession();
       
       try {
             if (pulseController.isAnimating) pulseController.stop();

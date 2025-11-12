@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:slide_to_act/slide_to_act.dart';
-
+import 'package:rikazapp/services/wled_service.dart';
 // =============================================================================
 // RECREATED THEME DEFINITIONS FOR SCOPE (Centralized Constants)
 // =============================================================================
@@ -63,6 +63,8 @@ class SetSessionPage extends StatefulWidget {
 }
 
 class _SetSessionPageState extends State<SetSessionPage> {
+    // 1. Initialize WLED Service
+  final WledService _wledService = WledService();
   // --- STATE VARIABLES ---
   late SessionMode sessionMode;
 
@@ -165,6 +167,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
         'isCameraDetectionEnabled': isCameraDetectionEnabled,
         'sensitivity': sensitivity,
         'notificationStyle': notificationStyle,
+        'isRikazToolConnected': isRikazToolConnected,
       },
     );
   }
@@ -173,23 +176,29 @@ class _SetSessionPageState extends State<SetSessionPage> {
     if (isRikazToolConnected) return;
 
     setState(() => isLoading = true);
-    // FIX: Increased delay slightly for better UX, but protected by mounted check
-    await Future.delayed(const Duration(milliseconds: 1500)); 
+    
+    // REPLACE fake delay with actual connection test
+    final bool success = await _wledService.testConnection(); 
 
     if (!mounted) return; // FIX: Protects setState after await
     setState(() {
-      isRikazToolConnected = true;
+      isRikazToolConnected = success; // Use the actual network result
       isLoading = false;
-      _showRikazConfirmation = true;
+      _showRikazConfirmation = success; // Only show confirmation on true success
     });
 
-    // Delay for confirmation visibility
-    await Future.delayed(const Duration(seconds: 2));
+    // Use the success status to determine the confirmation delay
+    if (success) {
+      await Future.delayed(const Duration(seconds: 2));
+    } else {
+      // Short delay for the UI to register the connection attempt failure
+      await Future.delayed(const Duration(milliseconds: 500)); 
+    }
     
-    if (mounted) { // FIX: Protects final setState
+    if (mounted) { 
       setState(() {
         _showRikazConfirmation = false;
-        isConfigurationOpen = true; 
+        isConfigurationOpen = success; // Only open config if connection succeeded
       });
     }
   }
@@ -230,8 +239,8 @@ class _SetSessionPageState extends State<SetSessionPage> {
               style: TextStyle(
                   fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: statusColor)), // MODIFIED
           SizedBox(height: screenHeight * 0.01),
-          Text('Tool connected. Configuration is available below.',
-              style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: localSecondaryTextGrey)), // MODIFIED
+          Text('Tool connected on ${WledService.WLED_STATIC_IP}. Configuration is available below.', // <--- EDITED TEXT
+              style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: localSecondaryTextGrey)), 
         ],
       );
     } else {
@@ -245,8 +254,8 @@ class _SetSessionPageState extends State<SetSessionPage> {
                   fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: darkText)), // MODIFIED
           SizedBox(height: screenHeight * 0.008),
           Text(
-              'Slide to connect the Rikaz focus tools and unlock settings.',
-              style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: localSecondaryTextGrey)), // MODIFIED
+              'Slide to test connection to the WLED tool at ${WledService.WLED_STATIC_IP}.', // <--- EDITED TEXT
+              style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: localSecondaryTextGrey)), 
           SizedBox(height: screenHeight * 0.02),
           SlideAction(
             text: isLoading ? "Connecting..." : "Slide to Connect",
