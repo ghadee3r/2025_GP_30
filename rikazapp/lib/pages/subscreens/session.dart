@@ -1056,7 +1056,7 @@ class Sound {
 
 const List<Sound> kAvailableSounds = [
    Sound(id: 'off', name: 'No Sound', color: Color(0xFF64748B), icon: Icons.volume_off_rounded),
-   Sound(id: 'Brown-Noise', name: 'Brown Sound', color: Color.fromARGB(255, 159, 80, 48), icon: Icons.waves_rounded),
+   Sound(id: 'White-Noise', name: 'White Noise', color: Color.fromARGB(255, 151, 146, 144), icon: Icons.waves_rounded),
    Sound(id: 'Rain', name: 'Rain', color: Color.fromARGB(255, 104, 114, 223), icon: Icons.water_drop_outlined),
    Sound(id: 'River', name: 'River', color: Color.fromARGB(255, 110, 247, 149), icon: Icons.water_rounded),
 ];
