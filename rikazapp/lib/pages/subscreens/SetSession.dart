@@ -1,24 +1,31 @@
+// ============================================================================
+// FILE: SetSession.dart (COMPLETE - Fixed Version)
+// ============================================================================
+
 import 'package:flutter/material.dart';
 import 'package:slide_to_act/slide_to_act.dart';
-import 'package:rikazapp/services/wled_service.dart';
+import '/services/wled_service.dart';
+
+// Import the global connection state from main.dart
+// If you get import errors, use this instead:
+// import '../../main.dart' show WledConnectionState;
+
 // =============================================================================
-// RECREATED THEME DEFINITIONS FOR SCOPE (Centralized Constants)
+// THEME DEFINITIONS
 // =============================================================================
 
-// Base Colors
-const Color primaryThemePurple = Color(0xFF7A68FF); // Main action color
-const Color hpDeepBlue = Color.fromARGB(255, 24, 114, 150); // Header/Key Text (Target Blue)
+const Color primaryThemePurple = Color(0xFF7A68FF);
+const Color hpDeepBlue = Color.fromARGB(255, 24, 114, 150);
 const Color primaryTextDark = Color(0xFF30304D);
 const Color secondaryTextGrey = Color(0xFF8C8C99);
-const Color softAccentHighlight = Color(0xFFE9E5FF); // Lightest purple for selections/backgrounds
-const Color softLavender = Color(0xFFE9E5FF); // Used for UI element backgrounds
+const Color softAccentHighlight = Color(0xFFE9E5FF);
+const Color softLavender = Color(0xFFE9E5FF);
 const Color softCyan = Color(0xFFE8F8FF);
 const Color primaryBackground = Color(0xFFFFFFFF);
 const Color cardBackground = Color(0xFFFFFFFF);
 
 const double cardBorderRadius = 24.0;
 
-// Subtle shadow for the floating effect (Purple-tinted) - Original subtleShadow kept for Rikaz Connect Card
 List<BoxShadow> get subtleShadow => [
       BoxShadow(
         color: const Color.fromARGB(255, 155, 141, 255).withOpacity(0.4),
@@ -27,7 +34,6 @@ List<BoxShadow> get subtleShadow => [
       ),
     ];
 
-// Shadow for unselected/inner cards
 List<BoxShadow> get cardShadow => [
       BoxShadow(
         color: Colors.black.withOpacity(0.05),
@@ -36,7 +42,6 @@ List<BoxShadow> get cardShadow => [
       ),
     ];
 
-// Define Presets for the Dropdown
 const List<String> toolPresets = [
       'Select a Preset',
       'Aggressive Focus (High Sensitivity)',
@@ -44,16 +49,30 @@ const List<String> toolPresets = [
       'Quiet Office (Light only)',
     ];
 
-// Enum to manage the session configuration mode (MUST BE DEFINED HERE OR IMPORTED)
 enum SessionMode { pomodoro, custom }
 
+// ADDED: Import this class from main.dart or define it here if needed
+class WledConnectionState {
+  static bool _isConnected = false;
+  
+  static bool get isConnected => _isConnected;
+  
+  static void setConnected(bool value) {
+    _isConnected = value;
+    debugPrint('🔌 WLED Global State: ${value ? "CONNECTED" : "DISCONNECTED"}');
+  }
+  
+  static void reset() {
+    _isConnected = false;
+    debugPrint('🔌 WLED Global State: RESET');
+  }
+}
+
 // =============================================================================
-// FOCUS CONFIGURATION PAGE (SetSessionPage) - MODIFIED INITIALIZATION
+// SET SESSION PAGE
 // =============================================================================
 
 class SetSessionPage extends StatefulWidget {
-  // MODIFIED: The constructor now expects the initialMode to be passed.
-  // We make it required for clarity, although null handling is in initState.
   final SessionMode? initialMode;
 
   const SetSessionPage({super.key, this.initialMode});
@@ -63,8 +82,6 @@ class SetSessionPage extends StatefulWidget {
 }
 
 class _SetSessionPageState extends State<SetSessionPage> {
-    // 1. Initialize WLED Service
-  final WledService _wledService = WledService();
   // --- STATE VARIABLES ---
   late SessionMode sessionMode;
 
@@ -75,17 +92,23 @@ class _SetSessionPageState extends State<SetSessionPage> {
   // Custom State
   double customDuration = 70;
 
-  // Configuration State (Shared)
+  // Configuration State
   bool isConfigurationOpen = false; 
   bool isCameraDetectionEnabled = true;
   double sensitivity = 0.5;
   String notificationStyle = 'Both';
   String selectedPreset = toolPresets.first;
 
-  // RIKAZ CONNECT STATE
-  bool isRikazToolConnected = false;
+  // RIKAZ CONNECT STATE - MODIFIED to use global state
+  bool get isRikazToolConnected => WledConnectionState.isConnected;
   bool isLoading = false;
   bool _showRikazConfirmation = false;
+
+  // WLED SERVICE
+  final WledService _wledService = WledService();
+
+  // ADDED: Slider key to reset animation
+  final GlobalKey<SlideActionState> _slideKey = GlobalKey<SlideActionState>();
 
   // Local theme variables
   final Color primaryColor = primaryThemePurple;
@@ -97,13 +120,17 @@ class _SetSessionPageState extends State<SetSessionPage> {
   final double radius = cardBorderRadius / 2;
   final Color blueText = hpDeepBlue;
 
-
   @override
   void initState() {
     super.initState();
-    // MODIFIED: Use the value passed in the constructor (which should come from navigation arguments).
     sessionMode = widget.initialMode ?? SessionMode.pomodoro;
     _applyPreset(selectedPreset);
+    
+    // ADDED: If already connected, show the configuration immediately
+    if (WledConnectionState.isConnected) {
+      debugPrint('🔌 Restored connection state from previous session');
+      isConfigurationOpen = true;
+    }
   }
 
   @override
@@ -111,21 +138,14 @@ class _SetSessionPageState extends State<SetSessionPage> {
     super.dispose();
   }
 
-    // NEW HELPER: Adaptive Font Size function
-    // Adjusts the proportional font size based on the system's text scale factor to prevent overflow
-    double _adaptiveFontSize(double baseScreenWidthMultiplier) {
-        final screenWidth = MediaQuery.of(context).size.width;
-        final baseSize = screenWidth * baseScreenWidthMultiplier;
-        final textScaleFactor = MediaQuery.of(context).textScaleFactor;
-        
-        // Mitigation factor to prevent excessive scaling on devices with large system fonts
-        final mitigationFactor = 0.8; 
-        
-        // Size = BaseSize / (1.0 + (ScaleFactor - 1.0) * MitigationFactor)
-        return baseSize / (1.0 + (textScaleFactor - 1.0) * mitigationFactor);
-    }
+  double _adaptiveFontSize(double baseScreenWidthMultiplier) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final baseSize = screenWidth * baseScreenWidthMultiplier;
+    final textScaleFactor = MediaQuery.of(context).textScaleFactor;
+    final mitigationFactor = 0.8; 
+    return baseSize / (1.0 + (textScaleFactor - 1.0) * mitigationFactor);
+  }
 
-  // --- LOGIC (Functionality Unchanged) ---
   void _applyPreset(String preset) {
     if (preset == 'Aggressive Focus (High Sensitivity)') {
       isCameraDetectionEnabled = true;
@@ -167,44 +187,81 @@ class _SetSessionPageState extends State<SetSessionPage> {
         'isCameraDetectionEnabled': isCameraDetectionEnabled,
         'sensitivity': sensitivity,
         'notificationStyle': notificationStyle,
-        'isRikazToolConnected': isRikazToolConnected,
+        'wledConnected': WledConnectionState.isConnected, // FIXED: Use global state
       },
     );
   }
 
+  // MODIFIED: Fixed animation controller error and uses global state
   Future<void> _handleRikazConnect() async {
-    if (isRikazToolConnected) return;
+    if (WledConnectionState.isConnected) return;
 
     setState(() => isLoading = true);
-    
-    // REPLACE fake delay with actual connection test
-    final bool success = await _wledService.testConnection(); 
 
-    if (!mounted) return; // FIX: Protects setState after await
-    setState(() {
-      isRikazToolConnected = success; // Use the actual network result
-      isLoading = false;
-      _showRikazConfirmation = success; // Only show confirmation on true success
-    });
-
-    // Use the success status to determine the confirmation delay
-    if (success) {
-      await Future.delayed(const Duration(seconds: 2));
-    } else {
-      // Short delay for the UI to register the connection attempt failure
-      await Future.delayed(const Duration(milliseconds: 500)); 
-    }
+    // Test WLED connection
+    final bool wledConnected = await _wledService.testConnection();
     
-    if (mounted) { 
+    if (!mounted) return;
+    
+    if (wledConnected) {
+      // FIXED: Set global connection state BEFORE showing confirmation
+      WledConnectionState.setConnected(true);
+      
       setState(() {
-        _showRikazConfirmation = false;
-        isConfigurationOpen = success; // Only open config if connection succeeded
+        isLoading = false;
+        _showRikazConfirmation = true;
       });
+      
+      print('✅ Rikaz Tools: WLED connected successfully');
+      
+      // Wait for confirmation display
+      await Future.delayed(const Duration(seconds: 2));
+      
+      if (mounted) {
+        setState(() {
+          _showRikazConfirmation = false;
+          isConfigurationOpen = true;
+        });
+      }
+    } else {
+      setState(() {
+        isLoading = false;
+      });
+      
+      // FIXED: Reset slide animation BEFORE showing error dialog
+      try {
+        _slideKey.currentState?.reset();
+      } catch (e) {
+        debugPrint('Slider reset error (safe to ignore): $e');
+      }
+      
+      // Show error dialog
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Connection Failed'),
+            content: const Text(
+              'Could not connect to WLED device.\n\n'
+              'Please check:\n'
+              '• WLED device is powered on\n'
+              '• Device IP matches in code\n'
+              '• Both devices are on same network'
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
     }
   }
 
-
-  // --- FLEXIBLE UI Component Builders ---
+  // --- UI COMPONENTS ---
 
   Widget _buildRikazConnect() {
     final screenHeight = MediaQuery.of(context).size.height;
@@ -214,7 +271,6 @@ class _SetSessionPageState extends State<SetSessionPage> {
     Widget content;
 
     if (isRikazToolConnected && _showRikazConfirmation) {
-      // 1. Confirmation State
       content = Column(
         key: const ValueKey('RikazConfirmation'),
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -223,44 +279,43 @@ class _SetSessionPageState extends State<SetSessionPage> {
           SizedBox(height: screenHeight * 0.01),
           Text('Connection Successful! 🎉',
               style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: statusColor)), // MODIFIED
+                  fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: statusColor)),
           SizedBox(height: screenHeight * 0.008),
           Text('You can now monitor your focus and apply custom configurations to your sessions.',
-              style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: localSecondaryTextGrey)), // MODIFIED
+              style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: localSecondaryTextGrey)),
         ],
       );
     } else if (isRikazToolConnected) {
-      // 2. Connected State (Simple message when not confirming)
       content = Column(
         key: const ValueKey('RikazConnectedHidden'),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Rikaz Tools Active',
               style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: statusColor)), // MODIFIED
+                  fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: statusColor)),
           SizedBox(height: screenHeight * 0.01),
-          Text('Tool connected on ${WledService.WLED_STATIC_IP}. Configuration is available below.', // <--- EDITED TEXT
-              style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: localSecondaryTextGrey)), 
+          Text('Tool connected. Configuration is available below.',
+              style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: localSecondaryTextGrey)),
         ],
       );
     } else {
-      // 3. Disconnected State (The Slide to Connect Action)
       content = Column(
         key: const ValueKey('RikazDisconnected'),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Connect Rikaz Tools',
               style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: darkText)), // MODIFIED
+                  fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: darkText)),
           SizedBox(height: screenHeight * 0.008),
           Text(
-              'Slide to test connection to the WLED tool at ${WledService.WLED_STATIC_IP}.', // <--- EDITED TEXT
-              style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: localSecondaryTextGrey)), 
+              'Slide to connect the Rikaz focus tools and unlock settings.',
+              style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: localSecondaryTextGrey)),
           SizedBox(height: screenHeight * 0.02),
           SlideAction(
+            key: _slideKey, // ADDED: Key for resetting animation
             text: isLoading ? "Connecting..." : "Slide to Connect",
             textStyle: TextStyle(
-                fontSize: _adaptiveFontSize(0.038), // MODIFIED
+                fontSize: _adaptiveFontSize(0.038),
                 fontWeight: FontWeight.w600,
                 color: Colors.white),
             innerColor: localCardBackground,
@@ -313,7 +368,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
           color: isSelected ? softLavender.withOpacity(0.8) : cardBackground,
           borderRadius: BorderRadius.circular(radius),
           border: Border.all(color: isSelected ? primaryColor : Colors.grey.shade200, width: 1.5),
-          boxShadow: cardShadow, // Subtle shadow is kept for options but removed the heavy purple tint one
+          boxShadow: cardShadow,
         ),
         child: Row(
           children: [
@@ -326,10 +381,10 @@ class _SetSessionPageState extends State<SetSessionPage> {
             Expanded(
               child: Text(label,
                   style: TextStyle(
-                      fontSize: _adaptiveFontSize(0.04), fontWeight: FontWeight.w600, color: darkText)), // MODIFIED
+                      fontSize: _adaptiveFontSize(0.04), fontWeight: FontWeight.w600, color: darkText)),
             ),
             Text(breakText, style: TextStyle(
-                fontSize: _adaptiveFontSize(0.035), color: lightText)), // MODIFIED
+                fontSize: _adaptiveFontSize(0.035), color: lightText)),
           ],
         ),
       ),
@@ -345,7 +400,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
       children: [
         Text('Number of Blocks',
             style: TextStyle(
-                fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: darkText)), // MODIFIED
+                fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: darkText)),
         SizedBox(height: screenHeight * 0.02),
         Container(
           padding: EdgeInsets.symmetric(vertical: screenHeight * 0.025),
@@ -361,7 +416,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                 child: Text(
                   numberOfBlocks.toInt().toString(),
                   style: TextStyle(
-                      fontSize: _adaptiveFontSize(0.12), fontWeight: FontWeight.bold, color: blueText), // MODIFIED
+                      fontSize: _adaptiveFontSize(0.12), fontWeight: FontWeight.bold, color: blueText),
                 ),
               ),
               Slider(
@@ -380,7 +435,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                   'One block = one focus session followed by its break.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                      fontSize: _adaptiveFontSize(0.035), color: lightText), // MODIFIED
+                      fontSize: _adaptiveFontSize(0.035), color: lightText),
                 ),
               ),
             ],
@@ -399,7 +454,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
       children: [
         Text('Session Duration',
             style: TextStyle(
-                fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: darkText)), // MODIFIED
+                fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: darkText)),
         SizedBox(height: screenHeight * 0.02),
         Container(
           padding: EdgeInsets.symmetric(vertical: screenHeight * 0.025),
@@ -415,18 +470,18 @@ class _SetSessionPageState extends State<SetSessionPage> {
                 child: Text(
                   '${customDuration.toInt()}:00',
                   style: TextStyle(
-                      fontSize: _adaptiveFontSize(0.12), fontWeight: FontWeight.bold, color: hpDeepBlue), // MODIFIED
+                      fontSize: _adaptiveFontSize(0.12), fontWeight: FontWeight.bold, color: hpDeepBlue),
                 ),
               ),
               Text('No Breaks',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                      fontSize: _adaptiveFontSize(0.04), color: lightText)), // MODIFIED
+                      fontSize: _adaptiveFontSize(0.04), color: lightText)),
               Slider(
                 value: customDuration,
                 min: 25,
                 max: 120,
-                divisions: (120 - 25), // 95 divisions
+                divisions: (120 - 25),
                 label: '${customDuration.toInt()} min',
                 onChanged: (v) => setState(() => customDuration = v),
                 activeColor: hpDeepBlue,
@@ -438,9 +493,9 @@ class _SetSessionPageState extends State<SetSessionPage> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text('25 Minutes', style: TextStyle(
-                        fontSize: _adaptiveFontSize(0.03), color: lightText)), // MODIFIED
+                        fontSize: _adaptiveFontSize(0.03), color: lightText)),
                     Text('120 Minutes', style: TextStyle(
-                        fontSize: _adaptiveFontSize(0.03), color: lightText)), // MODIFIED
+                        fontSize: _adaptiveFontSize(0.03), color: lightText)),
                   ],
                 ),
               ),
@@ -451,12 +506,10 @@ class _SetSessionPageState extends State<SetSessionPage> {
     );
   }
 
-  // Themed Configuration Menu Widget (MODIFIED FOR DISABLED STATE)
   Widget _configurationMenu() {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
 
-    // Disabled state styling
     final isConfigurationDisabled = !isRikazToolConnected;
     final disabledColor = Colors.grey.shade200;
     final disabledBorderColor = Colors.grey.shade300;
@@ -465,7 +518,6 @@ class _SetSessionPageState extends State<SetSessionPage> {
     final activeMenuBorderColor = Colors.grey.shade200;
 
     return Container(
-      // FLEXIBLE PADDING
       padding: EdgeInsets.all(screenWidth * 0.05),
       decoration: BoxDecoration(
         color: isConfigurationDisabled ? disabledColor : activeMenuColor,
@@ -473,31 +525,28 @@ class _SetSessionPageState extends State<SetSessionPage> {
         borderRadius: BorderRadius.circular(radius),
         boxShadow: cardShadow,
       ),
-      // Use IgnorePointer when disabled to prevent accidental interaction
       child: IgnorePointer(
         ignoring: isConfigurationDisabled,
         child: Column(
           children: [
-            // This message is only shown *inside* the menu when the menu is open, and is disabled.
             if (isConfigurationDisabled)
               Padding(
                 padding: EdgeInsets.only(bottom: screenHeight * 0.015),
                 child: Text(
                   'Connection Required to edit settings.',
                   style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.038), // MODIFIED
+                    fontSize: _adaptiveFontSize(0.038),
                     fontWeight: FontWeight.bold,
                     color: Colors.red.shade700,
                   ),
                 ),
               ),
             
-            // Rikaz Tool Preset Dropdown
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Rikaz Tools Preset', style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.035), color: isConfigurationDisabled ? disabledTextColor : darkText, fontWeight: FontWeight.bold)), // MODIFIED
+                    fontSize: _adaptiveFontSize(0.035), color: isConfigurationDisabled ? disabledTextColor : darkText, fontWeight: FontWeight.bold)),
                 SizedBox(height: screenHeight * 0.01),
                 Container(
                   padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.03),
@@ -512,7 +561,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                       isExpanded: true,
                       icon: Icon(Icons.arrow_drop_down, color: isConfigurationDisabled ? disabledTextColor : primaryColor),
                       style: TextStyle(color: isConfigurationDisabled ? disabledTextColor : darkText,
-                          fontSize: _adaptiveFontSize(0.04)), // MODIFIED
+                          fontSize: _adaptiveFontSize(0.04)),
                       dropdownColor: cardBackground,
                       onChanged: isConfigurationDisabled ? null : (String? newValue) {
                         if (newValue != null) {
@@ -522,7 +571,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                       items: toolPresets.map<DropdownMenuItem<String>>((String value) {
                         return DropdownMenuItem<String>(
                           value: value,
-                          child: Text(value, style: TextStyle(color: darkText, fontSize: _adaptiveFontSize(0.04))), // MODIFIED
+                          child: Text(value, style: TextStyle(color: darkText, fontSize: _adaptiveFontSize(0.04))),
                         );
                       }).toList(),
                     ),
@@ -532,12 +581,11 @@ class _SetSessionPageState extends State<SetSessionPage> {
             ),
             SizedBox(height: screenHeight * 0.025),
 
-            // Camera Switch (Themed)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Camera Detection', style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.04), color: isConfigurationDisabled ? disabledTextColor : darkText)), // MODIFIED
+                    fontSize: _adaptiveFontSize(0.04), color: isConfigurationDisabled ? disabledTextColor : darkText)),
                 Switch(
                   value: isCameraDetectionEnabled,
                   onChanged: isConfigurationDisabled ? null : (v) {
@@ -546,7 +594,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                       selectedPreset = toolPresets.first;
                     });
                   },
-                  activeColor: primaryColor.withOpacity(isConfigurationDisabled ? 0.4 : 1.0),
+                  activeThumbColor: primaryColor.withOpacity(isConfigurationDisabled ? 0.4 : 1.0),
                   inactiveTrackColor: Colors.grey.shade300,
                   inactiveThumbColor: isConfigurationDisabled ? disabledTextColor : null,
                 ),
@@ -554,12 +602,11 @@ class _SetSessionPageState extends State<SetSessionPage> {
             ),
             SizedBox(height: screenHeight * 0.02),
             
-            // Triggers (Themed)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Triggers', style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.04), color: isConfigurationDisabled ? disabledTextColor : darkText)), // MODIFIED
+                    fontSize: _adaptiveFontSize(0.04), color: isConfigurationDisabled ? disabledTextColor : darkText)),
                 Row(
                   children: List.generate(
                     3,
@@ -579,16 +626,15 @@ class _SetSessionPageState extends State<SetSessionPage> {
             ),
             SizedBox(height: screenHeight * 0.02),
             
-            // Sensitivity Slider (Themed)
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Sensitivity', style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.04), color: isConfigurationDisabled ? disabledTextColor : darkText)), // MODIFIED
+                    fontSize: _adaptiveFontSize(0.04), color: isConfigurationDisabled ? disabledTextColor : darkText)),
                 Row(
                   children: [
                     Text('Low', style: TextStyle(
-                        fontSize: _adaptiveFontSize(0.03), color: isConfigurationDisabled ? disabledTextColor : lightText)), // MODIFIED
+                        fontSize: _adaptiveFontSize(0.03), color: isConfigurationDisabled ? disabledTextColor : lightText)),
                     Expanded(
                       child: Slider(
                         value: sensitivity,
@@ -607,19 +653,18 @@ class _SetSessionPageState extends State<SetSessionPage> {
                       ),
                     ),
                     Text('High', style: TextStyle(
-                        fontSize: _adaptiveFontSize(0.03), color: isConfigurationDisabled ? disabledTextColor : lightText)), // MODIFIED
+                        fontSize: _adaptiveFontSize(0.03), color: isConfigurationDisabled ? disabledTextColor : lightText)),
                   ],
                 ),
               ],
             ),
             SizedBox(height: screenHeight * 0.015),
 
-            // Notification Style Radios (Themed)
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Notification Style', style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.04), color: isConfigurationDisabled ? disabledTextColor : darkText)), // MODIFIED
+                    fontSize: _adaptiveFontSize(0.04), color: isConfigurationDisabled ? disabledTextColor : darkText)),
                 SizedBox(height: screenHeight * 0.015),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -648,7 +693,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                                 ),
                               ),
                               Text(option, style: TextStyle(color: isConfigurationDisabled ? disabledTextColor : darkText,
-                                  fontSize: _adaptiveFontSize(0.035))), // MODIFIED
+                                  fontSize: _adaptiveFontSize(0.035))),
                             ],
                           ),
                         ),
@@ -664,7 +709,6 @@ class _SetSessionPageState extends State<SetSessionPage> {
     );
   }
 
-  // Mode Toggle and Helper Buttons (Unchanged)
   Widget _buildModeToggle() {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -714,7 +758,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
               Text(
                 text,
                 style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.035), // MODIFIED
+                  fontSize: _adaptiveFontSize(0.035),
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                   color: isSelected ? selectedColor : unselectedColor,
                 ),
@@ -726,15 +770,12 @@ class _SetSessionPageState extends State<SetSessionPage> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
-    
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
     final proportionalHorizontalPadding = screenWidth * 0.1;
 
-    // Determine Start Button style
     final bool isStartButtonEnabled = !isLoading;
     final Color startButtonColor = isStartButtonEnabled ? primaryColor : Colors.grey.shade400;
 
@@ -744,12 +785,12 @@ class _SetSessionPageState extends State<SetSessionPage> {
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: primaryTextDark),
-          onPressed: () => Navigator.of(context).pop(), // CORRECT pop command
+          onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
           'Set Session',
           style: TextStyle(
-              fontSize: _adaptiveFontSize(0.05), fontWeight: FontWeight.bold, color: primaryTextDark), // MODIFIED
+              fontSize: _adaptiveFontSize(0.05), fontWeight: FontWeight.bold, color: primaryTextDark),
         ),
         centerTitle: true,
       ),
@@ -762,7 +803,6 @@ class _SetSessionPageState extends State<SetSessionPage> {
                 left: proportionalHorizontalPadding,
                 right: proportionalHorizontalPadding,
                 top: 0,
-                // Adjust bottom padding to accommodate the fixed bottom bar
                 bottom: screenHeight * 0.18, 
               ),
               child: Column(
@@ -770,25 +810,21 @@ class _SetSessionPageState extends State<SetSessionPage> {
                 children: [
                   SizedBox(height: screenHeight * 0.015),
                   
-                  // Dynamic Header based on selected mode
                   Text(
                     sessionMode == SessionMode.pomodoro ? 'Pomodoro Session' : 'Custom Session',
                     style: TextStyle(
-                        fontSize: _adaptiveFontSize(0.07), fontWeight: FontWeight.bold, color: hpDeepBlue)), // MODIFIED
+                        fontSize: _adaptiveFontSize(0.07), fontWeight: FontWeight.bold, color: hpDeepBlue)),
                   Text(
                     sessionMode == SessionMode.pomodoro ? 'Configure your structured focus routine' : 'Set your own uninterrupted timing',
                     style: TextStyle(
-                        fontSize: _adaptiveFontSize(0.04), color: secondaryTextGrey)), // MODIFIED
+                        fontSize: _adaptiveFontSize(0.04), color: secondaryTextGrey)),
                   SizedBox(height: screenHeight * 0.035),
 
-                  // MODE TOGGLE BUTTONS
                   _buildModeToggle(),
                   SizedBox(height: screenHeight * 0.035),
 
-                  // === RIKAZ CONNECT COMPONENT (Placed after mode toggle, before duration) ===
                   _buildRikazConnect(),
 
-                  // CONDITIONAL DURATION SECTION
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
                     transitionBuilder: (Widget child, Animation<double> animation) {
@@ -801,7 +837,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                       children: [
                         Text('Duration Options',
                             style: TextStyle(
-                                fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: darkText)), // MODIFIED
+                                fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: darkText)),
                         SizedBox(height: screenHeight * 0.02),
                         _pomodoroDurationOption('25min', '+ 5 min break'),
                         _pomodoroDurationOption('50min', '+ 10 min break'),
@@ -817,15 +853,12 @@ class _SetSessionPageState extends State<SetSessionPage> {
 
                   SizedBox(height: screenHeight * 0.035),
 
-                  // === CONFIGURATION TOGGLE/MENU HEADER ===
                   if (!_showRikazConfirmation)
                     GestureDetector(
-                      // Toggle button is interactive only if connected
                       onTap: isRikazToolConnected ? () => setState(() => isConfigurationOpen = !isConfigurationOpen) : null,
                       child: Container(
                         padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.05, vertical: screenHeight * 0.02),
                         decoration: BoxDecoration(
-                          // If connected, use cardBackground (white). If not connected, use Colors.grey.shade200.
                           color: isRikazToolConnected ? cardBackground : Colors.grey.shade200, 
                           borderRadius: BorderRadius.circular(radius),
                           border: Border.all(color: isRikazToolConnected ? primaryColor.withOpacity(0.5) : Colors.grey.shade400),
@@ -838,7 +871,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                                 style: TextStyle(
                                     color: isRikazToolConnected ? darkText : Colors.grey.shade600,
                                     fontWeight: FontWeight.bold,
-                                    fontSize: _adaptiveFontSize(0.04))), // MODIFIED
+                                    fontSize: _adaptiveFontSize(0.04))),
                             Icon(isConfigurationOpen && isRikazToolConnected ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
                                 color: isRikazToolConnected ? primaryColor : Colors.grey.shade600,
                                 size: screenWidth * 0.06),
@@ -847,7 +880,6 @@ class _SetSessionPageState extends State<SetSessionPage> {
                       ),
                     ),
 
-                  // Configuration Content
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
                     transitionBuilder: (Widget child, Animation<double> animation) {
@@ -858,9 +890,9 @@ class _SetSessionPageState extends State<SetSessionPage> {
                     },
                     child: isConfigurationOpen 
                         ? Padding(
-                      key: ValueKey('ConfigOpen_${isRikazToolConnected}'), 
+                      key: ValueKey('ConfigOpen_$isRikazToolConnected'), 
                       padding: EdgeInsets.only(top: screenHeight * 0.015),
-                      child: _configurationMenu(), // Renders grayed-out content if disconnected
+                      child: _configurationMenu(),
                     )
                         : const SizedBox.shrink(key: ValueKey('ConfigClosed')),
                   ),
@@ -868,15 +900,13 @@ class _SetSessionPageState extends State<SetSessionPage> {
               ),
             ),
 
-            // FIXED BOTTOM SECTION FOR START BUTTON (FADED BACKGROUND)
             Positioned(
               left: 0,
               right: 0,
               bottom: 0,
               child: Container(
-                // ADDED: Faded background to separate the fixed button from content
                 decoration: BoxDecoration(
-                  color: primaryBackground.withOpacity(0.95), // Slightly less transparent for better fade
+                  color: primaryBackground.withOpacity(0.95),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.08),
@@ -889,12 +919,11 @@ class _SetSessionPageState extends State<SetSessionPage> {
                   left: proportionalHorizontalPadding,
                   right: proportionalHorizontalPadding,
                   top: screenHeight * 0.02,
-                  bottom: screenHeight * 0.03, // Adjusted to position button at bottom
+                  bottom: screenHeight * 0.03,
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Note for Start Session button
                     if (!isRikazToolConnected)
                       Padding(
                         padding: EdgeInsets.only(bottom: screenHeight * 0.01),
@@ -902,7 +931,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                           child: Text(
                             'Rikaz tools offline. Session tracking will be limited.',
                             style: TextStyle(
-                              fontSize: _adaptiveFontSize(0.03), // MODIFIED
+                              fontSize: _adaptiveFontSize(0.03),
                               color: Colors.grey.shade600,
                               fontStyle: FontStyle.italic,
                             ),
@@ -910,7 +939,6 @@ class _SetSessionPageState extends State<SetSessionPage> {
                         ),
                       ),
                       
-                    // Start button
                     ElevatedButton(
                       onPressed: isStartButtonEnabled ? handleStartSessionPress : null,
                       style: ElevatedButton.styleFrom(
@@ -921,7 +949,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                         elevation: 8,
                         shadowColor: startButtonColor.withOpacity(0.6),
                       ),
-                      child: SizedBox( // Enforce max width for button text area
+                      child: SizedBox(
                         width: double.infinity,
                         child: Center(
                           child: isStartButtonEnabled
@@ -929,7 +957,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                                 'Start Session',
                                 style: TextStyle(
                                     color: Colors.white,
-                                    fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold), // MODIFIED
+                                    fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold),
                               )
                             : SizedBox(
                                 width: screenWidth * 0.055, 

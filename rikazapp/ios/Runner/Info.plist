@@ -27,20 +27,23 @@
     <key>LSRequiresIPhoneOS</key>
 	<true/>
 
-    <!-- 🎯 SUPABASE DEEP LINK URL SCHEME -->
-    <!-- This registers the custom scheme 'io.rikaz.app' with iOS -->
-    <key>CFBundleURLTypes</key>
-    <array>
-        <dict>
-            <key>CFBundleTypeRole</key>
-            <string>Editor</string>
-            <key>CFBundleURLSchemes</key>
-            <array>
-                <string>io.rikaz.app</string>
-            </array>
-        </dict>
-    </array>
-    <!-- 🎯 END SUPABASE DEEP LINK -->
+    <!-- 🎯 CUSTOM URL SCHEMES for DEEP LINKS -->
+<key>CFBundleURLTypes</key>
+<array>
+    <dict>
+        <key>CFBundleTypeRole</key>
+        <string>Editor</string>
+        <key>CFBundleURLSchemes</key>
+        <array>
+            <string>io.rikaz.app</string>
+            <string>rikazapp</string>
+            <string>com.googleusercontent.apps.464258371961-sk013ngtpvprvtru88hh4m3h52i80q21</string>
+            <!-- 👆 this line is your REVERSED_CLIENT_ID -->
+        </array>
+    </dict>
+</array>
+
+    <!-- 🎯 END DEEP LINKS -->
 
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>

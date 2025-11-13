@@ -24,6 +24,23 @@ const String supabaseAnonKey =
 // Global navigation key for handling auth events
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+// ADDED: Global state for WLED connection (persists across navigation)
+class WledConnectionState {
+  static bool _isConnected = false;
+  
+  static bool get isConnected => _isConnected;
+  
+  static void setConnected(bool value) {
+    _isConnected = value;
+    debugPrint('🔌 WLED Global State: ${value ? "CONNECTED" : "DISCONNECTED"}');
+  }
+  
+  static void reset() {
+    _isConnected = false;
+    debugPrint('🔌 WLED Global State: RESET');
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
@@ -44,50 +61,50 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Rikaz',
       navigatorKey: navigatorKey,
-theme: ThemeData(
-  useMaterial3: true,
-  colorScheme: colorScheme.copyWith(
-    primary: primaryThemePurple,
-    secondary: primaryThemePurple,
-    surface: primaryBackground,
-    surfaceContainerHighest: primaryBackground,
-    onSurface: primaryTextDark,
-  ),
-  scaffoldBackgroundColor: primaryBackground,
-  elevatedButtonTheme: ElevatedButtonThemeData(
-    style: ElevatedButton.styleFrom(
-      foregroundColor: primaryBackground,
-      backgroundColor: primaryThemePurple,
-      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(cardBorderRadius / 2),
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: colorScheme.copyWith(
+          primary: primaryThemePurple,
+          secondary: primaryThemePurple,
+          surface: primaryBackground,
+          surfaceContainerHighest: primaryBackground,
+          onSurface: primaryTextDark,
+        ),
+        scaffoldBackgroundColor: primaryBackground,
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            foregroundColor: primaryBackground,
+            backgroundColor: primaryThemePurple,
+            padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(cardBorderRadius / 2),
+            ),
+            textStyle: const TextStyle(
+                fontWeight: FontWeight.w700, fontSize: 16),
+            elevation: 4,
+            shadowColor: primaryThemePurple.withOpacity(0.5),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: primaryBackground,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(cardBorderRadius / 2),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(cardBorderRadius / 2),
+            borderSide: BorderSide(
+                color: primaryThemePurple.withOpacity(0.3),
+                width: 1.5),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(cardBorderRadius / 2),
+            borderSide:
+                const BorderSide(color: primaryThemePurple, width: 2.0),
+          ),
+        ),
       ),
-      textStyle: const TextStyle(
-          fontWeight: FontWeight.w700, fontSize: 16),
-      elevation: 4,
-      shadowColor: primaryThemePurple.withOpacity(0.5),
-    ),
-  ),
-  inputDecorationTheme: InputDecorationTheme(
-    filled: true,
-    fillColor: primaryBackground,
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(cardBorderRadius / 2),
-      borderSide: BorderSide.none,
-    ),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(cardBorderRadius / 2),
-      borderSide: BorderSide(
-          color: primaryThemePurple.withOpacity(0.3),
-          width: 1.5),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(cardBorderRadius / 2),
-      borderSide:
-          const BorderSide(color: primaryThemePurple, width: 2.0),
-    ),
-  ),
-),
       routes: {
         '/signup': (context) => const SignupScreen(),
         '/login': (context) => const LoginScreen(),
@@ -113,6 +130,7 @@ theme: ThemeData(
             isCameraDetectionEnabled: args['isCameraDetectionEnabled'],
             sensitivity: args['sensitivity'],
             notificationStyle: args['notificationStyle'],
+            wledConnected: args['wledConnected'] ?? false, // FIXED: Added this line
           );
         },
       },
@@ -139,34 +157,36 @@ class _AuthWrapperState extends State<AuthWrapper> {
     _checkInitialAuthState();
   }
 
-void _setupAuthListener() {
-  supabase.auth.onAuthStateChange.listen((data) {
-    final event = data.event;
-    
-    if (event == AuthChangeEvent.passwordRecovery) {
-      debugPrint('PASSWORD RECOVERY EVENT - FORCING NAVIGATION');
+  void _setupAuthListener() {
+    supabase.auth.onAuthStateChange.listen((data) {
+      final event = data.event;
       
-      // Try multiple approaches
-      Future.delayed(Duration.zero, () {
-        // Approach 1: Using global key
-        if (navigatorKey.currentState != null) {
-          navigatorKey.currentState!.pushNamedAndRemoveUntil(
-            '/new-password', 
-            (route) => false
-          );
-        } else {
-          // Approach 2: Using context if mounted
-          if (mounted) {
-            Navigator.of(context).pushNamedAndRemoveUntil(
+      if (event == AuthChangeEvent.passwordRecovery) {
+        debugPrint('PASSWORD RECOVERY EVENT - FORCING NAVIGATION');
+        
+        Future.delayed(Duration.zero, () {
+          if (navigatorKey.currentState != null) {
+            navigatorKey.currentState!.pushNamedAndRemoveUntil(
               '/new-password', 
               (route) => false
             );
+          } else {
+            if (mounted) {
+              Navigator.of(context).pushNamedAndRemoveUntil(
+                '/new-password', 
+                (route) => false
+              );
+            }
           }
-        }
-      });
-    }
-  });
-}
+        });
+      }
+      
+      // ADDED: Reset WLED connection on logout
+      if (event == AuthChangeEvent.signedOut) {
+        WledConnectionState.reset();
+      }
+    });
+  }
 
   void _checkInitialAuthState() async {
     final currentSession = supabase.auth.currentSession;

@@ -238,6 +238,9 @@
 				Base,
 			);
 			mainGroup = 97C146E51CF9000F007C117D;
+			packageReferences = (
+				364A4AD42EC5232A00702B06 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
 			productRefGroup = 97C146EF1CF9000F007C117D /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -453,6 +456,7 @@
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
@@ -461,6 +465,7 @@
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = SFL6GTZQJC;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -475,6 +480,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALIDATE_PRODUCT = YES;
@@ -488,8 +494,25 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
-				DEVELOPMENT_TEAM = SFL6GTZQJC;
 				ENABLE_BITCODE = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/AppAuth\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/AppCheckCore\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/GTMAppAuth\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/GTMSessionFetcher\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/GoogleSignIn\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/GoogleUtilities\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/PromisesObjC\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/app_links\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/audioplayers_darwin\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/google_sign_in_ios\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/path_provider_foundation\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/shared_preferences_foundation\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/url_launcher_ios\"",
+					"$(FLUTTER_FRAMEWORK_DIR)",
+					"$(PROJECT_DIR)/Flutter",
+				);
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -511,7 +534,6 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = SFL6GTZQJC;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.rikazapp.RunnerTests;
@@ -531,7 +553,6 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = SFL6GTZQJC;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.rikazapp.RunnerTests;
@@ -549,7 +570,6 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = SFL6GTZQJC;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.rikazapp.RunnerTests;
@@ -583,6 +603,7 @@
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
@@ -591,6 +612,7 @@
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = SFL6GTZQJC;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -612,6 +634,7 @@
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
@@ -640,6 +663,7 @@
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
@@ -648,6 +672,7 @@
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = SFL6GTZQJC;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -662,6 +687,7 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
@@ -677,8 +703,25 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
-				DEVELOPMENT_TEAM = SFL6GTZQJC;
 				ENABLE_BITCODE = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/AppAuth\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/AppCheckCore\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/GTMAppAuth\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/GTMSessionFetcher\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/GoogleSignIn\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/GoogleUtilities\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/PromisesObjC\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/app_links\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/audioplayers_darwin\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/google_sign_in_ios\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/path_provider_foundation\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/shared_preferences_foundation\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/url_launcher_ios\"",
+					"$(PROJECT_DIR)/Flutter",
+					"$(FLUTTER_FRAMEWORK_DIR)",
+				);
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -700,8 +743,25 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
-				DEVELOPMENT_TEAM = SFL6GTZQJC;
 				ENABLE_BITCODE = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/AppAuth\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/AppCheckCore\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/GTMAppAuth\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/GTMSessionFetcher\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/GoogleSignIn\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/GoogleUtilities\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/PromisesObjC\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/app_links\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/audioplayers_darwin\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/google_sign_in_ios\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/path_provider_foundation\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/shared_preferences_foundation\"",
+					"\"${PODS_CONFIGURATION_BUILD_DIR}/url_launcher_ios\"",
+					"$(FLUTTER_FRAMEWORK_DIR)",
+					"$(PROJECT_DIR)/Flutter",
+				);
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -749,6 +809,17 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		364A4AD42EC5232A00702B06 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.5.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
 	};
 	rootObject = 97C146E61CF9000F007C117D /* Project object */;
 }
