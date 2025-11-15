@@ -27,6 +27,11 @@
     <key>LSRequiresIPhoneOS</key>
 	<true/>
 
+	<key>NSBluetoothAlwaysUsageDescription</key>
+    <string>We need Bluetooth to connect to your Rikaz focus device</string>
+    <key>NSBluetoothPeripheralUsageDescription</key>
+    <string>We need Bluetooth to control your smart lights</string>
+
     <!-- 🎯 CUSTOM URL SCHEMES for DEEP LINKS -->
 <key>CFBundleURLTypes</key>
 <array>

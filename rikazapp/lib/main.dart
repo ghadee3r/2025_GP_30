@@ -24,20 +24,20 @@ const String supabaseAnonKey =
 // Global navigation key for handling auth events
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-// ADDED: Global state for WLED connection (persists across navigation)
-class WledConnectionState {
+// Global state for Rikaz BLE connection (persists across navigation)
+class RikazConnectionState {
   static bool _isConnected = false;
   
   static bool get isConnected => _isConnected;
   
   static void setConnected(bool value) {
     _isConnected = value;
-    debugPrint('🔌 WLED Global State: ${value ? "CONNECTED" : "DISCONNECTED"}');
+    debugPrint('🔌 RIKAZ ESP32 Tools: ${value ? "CONNECTED" : "DISCONNECTED"}');
   }
   
   static void reset() {
     _isConnected = false;
-    debugPrint('🔌 WLED Global State: RESET');
+    debugPrint('🔌 RIKAZ ESP32 Tools: RESET');
   }
 }
 
@@ -130,7 +130,7 @@ class MyApp extends StatelessWidget {
             isCameraDetectionEnabled: args['isCameraDetectionEnabled'],
             sensitivity: args['sensitivity'],
             notificationStyle: args['notificationStyle'],
-            wledConnected: args['wledConnected'] ?? false, // FIXED: Added this line
+            rikazConnected: args['rikazConnected'] ?? false,
           );
         },
       },
@@ -181,9 +181,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
         });
       }
       
-      // ADDED: Reset WLED connection on logout
+      // Reset Rikaz ESP32 hardware connection on logout
       if (event == AuthChangeEvent.signedOut) {
-        WledConnectionState.reset();
+        RikazConnectionState.reset();
       }
     });
   }

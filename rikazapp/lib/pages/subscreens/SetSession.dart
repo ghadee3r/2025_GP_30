@@ -1,14 +1,13 @@
 // ============================================================================
-// FILE: SetSession.dart (COMPLETE - Fixed Version)
+// FILE: SetSession.dart
+// PURPOSE: Session configuration page with BLE device connection
 // ============================================================================
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:slide_to_act/slide_to_act.dart';
-import '/services/wled_service.dart';
-
-// Import the global connection state from main.dart
-// If you get import errors, use this instead:
-// import '../../main.dart' show WledConnectionState;
+import '/services/rikaz_light_service.dart';
+import '/widgets/rikaz_device_picker.dart';
 
 // =============================================================================
 // THEME DEFINITIONS
@@ -42,29 +41,33 @@ List<BoxShadow> get cardShadow => [
       ),
     ];
 
+// Configuration presets for quick setup
 const List<String> toolPresets = [
-      'Select a Preset',
-      'Aggressive Focus (High Sensitivity)',
-      'Study Chill (Low Sensitivity)',
-      'Quiet Office (Light only)',
-    ];
+  'Select a Preset',
+  'Aggressive Focus (High Sensitivity)',
+  'Study Chill (Low Sensitivity)',
+  'Quiet Office (Light only)',
+];
 
 enum SessionMode { pomodoro, custom }
 
-// ADDED: Import this class from main.dart or define it here if needed
-class WledConnectionState {
+// =============================================================================
+// GLOBAL CONNECTION STATE
+// Tracks BLE connection across app lifecycle
+// =============================================================================
+class RikazConnectionState {
   static bool _isConnected = false;
   
   static bool get isConnected => _isConnected;
   
   static void setConnected(bool value) {
     _isConnected = value;
-    debugPrint('🔌 WLED Global State: ${value ? "CONNECTED" : "DISCONNECTED"}');
+    debugPrint('🔌 RIKAZ Global State: ${value ? "CONNECTED" : "DISCONNECTED"}');
   }
   
   static void reset() {
     _isConnected = false;
-    debugPrint('🔌 WLED Global State: RESET');
+    debugPrint('🔌 RIKAZ Global State: RESET');
   }
 }
 
@@ -82,35 +85,38 @@ class SetSessionPage extends StatefulWidget {
 }
 
 class _SetSessionPageState extends State<SetSessionPage> {
-  // --- STATE VARIABLES ---
+  // --- SESSION MODE STATE ---
   late SessionMode sessionMode;
 
-  // Pomodoro State
+  // Pomodoro configuration
   String pomodoroDuration = '25min';
   double numberOfBlocks = 4;
 
-  // Custom State
+  // Custom session configuration
   double customDuration = 70;
 
-  // Configuration State
+  // --- CONFIGURATION STATE ---
   bool isConfigurationOpen = false; 
-  bool isCameraDetectionEnabled = true;
-  double sensitivity = 0.5;
-  String notificationStyle = 'Both';
+  bool isCameraDetectionEnabled = true; // Future sprint: camera detection
+  double sensitivity = 0.5; // Future sprint: detection sensitivity
+  String notificationStyle = 'Both'; // Future sprint: alert type
   String selectedPreset = toolPresets.first;
 
-  // RIKAZ CONNECT STATE - MODIFIED to use global state
-  bool get isRikazToolConnected => WledConnectionState.isConnected;
-  bool isLoading = false;
-  bool _showRikazConfirmation = false;
+  // --- RIKAZ BLE CONNECTION STATE ---
+  bool get isRikazToolConnected => RikazConnectionState.isConnected;
+  bool isLoading = false; // Scanning/connecting in progress
+  bool _showRikazConfirmation = false; // Show success message after connection
 
-  // WLED SERVICE
-  final WledService _wledService = WledService();
+  // --- BLE CONNECTION MONITORING ---
+  String? _connectedDeviceName;
+  Timer? _connectionCheckTimer;
+  bool _deviceWasConnected = false;
+  bool _hasShownDisconnectWarning = false;
 
-  // ADDED: Slider key to reset animation
+  // Slider reset key
   final GlobalKey<SlideActionState> _slideKey = GlobalKey<SlideActionState>();
 
-  // Local theme variables
+  // Theme colors (local references for readability)
   final Color primaryColor = primaryThemePurple;
   final Color darkText = primaryTextDark;
   final Color lightText = secondaryTextGrey;
@@ -126,18 +132,21 @@ class _SetSessionPageState extends State<SetSessionPage> {
     sessionMode = widget.initialMode ?? SessionMode.pomodoro;
     _applyPreset(selectedPreset);
     
-    // ADDED: If already connected, show the configuration immediately
-    if (WledConnectionState.isConnected) {
+    // Restore connection state if already connected
+    if (RikazConnectionState.isConnected) {
       debugPrint('🔌 Restored connection state from previous session');
       isConfigurationOpen = true;
+      _startConnectionMonitoring();
     }
   }
 
   @override
   void dispose() {
+    _connectionCheckTimer?.cancel();
     super.dispose();
   }
 
+  // Adaptive font sizing for different screen sizes
   double _adaptiveFontSize(double baseScreenWidthMultiplier) {
     final screenWidth = MediaQuery.of(context).size.width;
     final baseSize = screenWidth * baseScreenWidthMultiplier;
@@ -146,6 +155,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
     return baseSize / (1.0 + (textScaleFactor - 1.0) * mitigationFactor);
   }
 
+  // Apply configuration preset
   void _applyPreset(String preset) {
     if (preset == 'Aggressive Focus (High Sensitivity)') {
       isCameraDetectionEnabled = true;
@@ -172,7 +182,43 @@ class _SetSessionPageState extends State<SetSessionPage> {
     }
   }
 
+  // Handle session start button press
   void handleStartSessionPress() {
+    // Warn if device was connected but is now unplugged
+    if (RikazConnectionState.isConnected && !_deviceWasConnected && _hasShownDisconnectWarning) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          icon: Icon(Icons.warning_amber_rounded, color: Colors.orange.shade600, size: 48),
+          title: const Text('Device Unplugged'),
+          content: const Text(
+            'Rikaz Tools device appears to be unplugged.\n\n'
+            'The session will start without hardware control. '
+            'Plug in the device to enable lights.'
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _navigateToSession();
+              },
+              child: const Text('Start Anyway'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    
+    _navigateToSession();
+  }
+  
+  // Navigate to session page with configuration
+  void _navigateToSession() {
     final String sessionType = sessionMode == SessionMode.pomodoro ? 'pomodoro' : 'custom';
     final String durationValue = sessionMode == SessionMode.pomodoro ? pomodoroDuration : customDuration.toInt().toString();
     final String? blocks = sessionMode == SessionMode.pomodoro ? numberOfBlocks.toInt().toString() : null;
@@ -187,34 +233,46 @@ class _SetSessionPageState extends State<SetSessionPage> {
         'isCameraDetectionEnabled': isCameraDetectionEnabled,
         'sensitivity': sensitivity,
         'notificationStyle': notificationStyle,
-        'wledConnected': WledConnectionState.isConnected, // FIXED: Use global state
+        'rikazConnected': RikazConnectionState.isConnected,
       },
     );
   }
 
-  // MODIFIED: Fixed animation controller error and uses global state
+  // =============================================================================
+  // BLE CONNECTION HANDLING
+  // =============================================================================
+
+  // Show device picker and establish BLE connection
   Future<void> _handleRikazConnect() async {
-    if (WledConnectionState.isConnected) return;
+    if (RikazConnectionState.isConnected) return;
 
     setState(() => isLoading = true);
 
-    // Test WLED connection
-    final bool wledConnected = await _wledService.testConnection();
-    
+    // Show device picker dialog
+    final RikazDevice? selectedDevice = await showDialog<RikazDevice>( 
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const RikazDevicePicker(), 
+    );
+
     if (!mounted) return;
-    
-    if (wledConnected) {
-      // FIXED: Set global connection state BEFORE showing confirmation
-      WledConnectionState.setConnected(true);
+
+    if (selectedDevice != null) {
+      // Connection successful
+      RikazConnectionState.setConnected(true);
+      _connectedDeviceName = selectedDevice.name;
       
       setState(() {
         isLoading = false;
         _showRikazConfirmation = true;
       });
       
-      print('✅ Rikaz Tools: WLED connected successfully');
+      print('✅ Rikaz Tools: Connected to ${selectedDevice.name}');
       
-      // Wait for confirmation display
+      // Start monitoring BLE connection
+      _startConnectionMonitoring();
+      
+      // Show success message briefly, then expand configuration
       await Future.delayed(const Duration(seconds: 2));
       
       if (mounted) {
@@ -224,45 +282,200 @@ class _SetSessionPageState extends State<SetSessionPage> {
         });
       }
     } else {
+      // User cancelled or connection failed
       setState(() {
         isLoading = false;
       });
       
-      // FIXED: Reset slide animation BEFORE showing error dialog
+      // Reset slider animation
       try {
-        _slideKey.currentState?.reset();
+        if (_slideKey.currentState != null && mounted) {
+          _slideKey.currentState!.reset();
+        }
       } catch (e) {
         debugPrint('Slider reset error (safe to ignore): $e');
       }
-      
-      // Show error dialog
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Connection Failed'),
-            content: const Text(
-              'Could not connect to WLED device.\n\n'
-              'Please check:\n'
-              '• WLED device is powered on\n'
-              '• Device IP matches in code\n'
-              '• Both devices are on same network'
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-      }
-      return;
     }
   }
 
-  // --- UI COMPONENTS ---
+  // Monitor BLE connection health
+  void _startConnectionMonitoring() {
+    _connectionCheckTimer?.cancel();
+    _deviceWasConnected = true;
+    _hasShownDisconnectWarning = false;
+    
+    // Check connection every 5 seconds
+    _connectionCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      if (!mounted || !RikazConnectionState.isConnected) {
+        timer.cancel();
+        return;
+      }
+      
+      final bool stillConnected = await RikazLightService.isConnected();
+      
+      if (!stillConnected) {
+        // Connection lost
+        timer.cancel();
+        
+        await RikazLightService.disconnect();
+        RikazConnectionState.reset();
 
+        if (mounted) {
+          setState(() {
+            isConfigurationOpen = false;
+            _connectedDeviceName = null;
+            _deviceWasConnected = false; 
+          });
+        }
+        
+        _showDeviceLostWarning();
+        
+      } else if (stillConnected && !_deviceWasConnected) {
+        // Device reconnected
+        _deviceWasConnected = true;
+        _hasShownDisconnectWarning = false;
+        _showDeviceReconnectedNotification();
+      }
+    });
+  }
+
+  // Show warning when BLE connection is lost
+  void _showDeviceLostWarning() {
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        icon: Icon(Icons.link_off, color: Colors.red.shade700, size: 48),
+        title: const Text('Rikaz Tools Disconnected'),
+        content: const Text(
+          'The Bluetooth connection to your Rikaz device was lost (unplugged or out of range).\n\n'
+          'Please ensure the device is powered on and try reconnecting.'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _handleRikazConnect(); 
+            },
+            child: const Text('Reconnect Now'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+    
+    debugPrint('⚠️ RIKAZ: Connection lost. Resetting global state.');
+  }
+
+  // Show notification when device reconnects
+  void _showDeviceReconnectedNotification() {
+    if (!mounted) return;
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.white),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text('Rikaz device reconnected! Hardware features active.'),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.green.shade600,
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    
+    debugPrint('✅ RIKAZ: Device reconnected');
+  }
+
+  // Handle manual disconnect
+  Future<void> _handleRikazDisconnect() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Disconnect Rikaz Tools?'),
+        content: const Text(
+          'This will disable hardware control (lights) for your sessions.\n\n'
+          'You can reconnect anytime.'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Disconnect'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      _connectionCheckTimer?.cancel();
+      
+      // Turn off light and disconnect BLE
+      await RikazLightService.turnOff(); 
+      await RikazLightService.disconnect(); 
+      
+      RikazConnectionState.reset();
+      
+      setState(() {
+        isConfigurationOpen = false;
+        _connectedDeviceName = null;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Rikaz Tools disconnected'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      
+      debugPrint('🔌 Rikaz Tools: Disconnected by user');
+    }
+  }
+
+  // =============================================================================
+  // UI COMPONENTS
+  // =============================================================================
+
+  // Disconnect button (power icon)
+  Widget _buildDisconnectButton({required double screenWidth, required double screenHeight}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.red.shade50.withOpacity(0.0),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _handleRikazDisconnect,
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: EdgeInsets.all(screenHeight * 0.01),
+            child: Icon(Icons.power_settings_new, 
+                color: Colors.red.shade700, 
+                size: screenWidth * 0.055
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Rikaz BLE connection section
   Widget _buildRikazConnect() {
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
@@ -270,35 +483,75 @@ class _SetSessionPageState extends State<SetSessionPage> {
 
     Widget content;
 
+    // Show success confirmation after connection
     if (isRikazToolConnected && _showRikazConfirmation) {
       content = Column(
         key: const ValueKey('RikazConfirmation'),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.check_circle_outline, color: Colors.green.shade600, size: screenWidth * 0.08),
-          SizedBox(height: screenHeight * 0.01),
-          Text('Connection Successful! 🎉',
-              style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: statusColor)),
-          SizedBox(height: screenHeight * 0.008),
-          Text('You can now monitor your focus and apply custom configurations to your sessions.',
-              style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: localSecondaryTextGrey)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.check_circle_outline, color: Colors.green.shade600, size: screenWidth * 0.08),
+                    SizedBox(height: screenHeight * 0.01),
+                    Text('Connection Successful! 🎉',
+                        style: TextStyle(
+                            fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: statusColor)),
+                    SizedBox(height: screenHeight * 0.008),
+                    Text('You can now monitor your focus and apply custom configurations to your sessions.',
+                        style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: localSecondaryTextGrey)),
+                  ],
+                ),
+              ),
+              _buildDisconnectButton(screenWidth: screenWidth, screenHeight: screenHeight),
+            ],
+          ),
         ],
       );
-    } else if (isRikazToolConnected) {
+    } 
+    // Show active connection status
+    else if (isRikazToolConnected) {
       content = Column(
-        key: const ValueKey('RikazConnectedHidden'),
+        key: const ValueKey('RikazConnectedWithDisconnect'),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Rikaz Tools Active',
-              style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: statusColor)),
-          SizedBox(height: screenHeight * 0.01),
-          Text('Tool connected. Configuration is available below.',
-              style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: localSecondaryTextGrey)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.green.shade600, size: screenWidth * 0.06),
+                        SizedBox(width: screenWidth * 0.02),
+                        Text('Rikaz Tools Active',
+                            style: TextStyle(
+                                fontSize: _adaptiveFontSize(0.045), 
+                                fontWeight: FontWeight.bold, 
+                                color: statusColor)),
+                      ],
+                    ),
+                    SizedBox(height: screenHeight * 0.008),
+                    Text('Hardware connected. Configuration available below.',
+                        style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: localSecondaryTextGrey)),
+                  ],
+                ),
+              ),
+              _buildDisconnectButton(screenWidth: screenWidth, screenHeight: screenHeight),
+            ],
+          ),
         ],
       );
-    } else {
+    } 
+    // Show connection slider
+    else {
       content = Column(
         key: const ValueKey('RikazDisconnected'),
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -308,12 +561,12 @@ class _SetSessionPageState extends State<SetSessionPage> {
                   fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: darkText)),
           SizedBox(height: screenHeight * 0.008),
           Text(
-              'Slide to connect the Rikaz focus tools and unlock settings.',
+              'Slide to scan and connect via Bluetooth.',
               style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: localSecondaryTextGrey)),
           SizedBox(height: screenHeight * 0.02),
           SlideAction(
-            key: _slideKey, // ADDED: Key for resetting animation
-            text: isLoading ? "Connecting..." : "Slide to Connect",
+            key: _slideKey,
+            text: isLoading ? "Scanning..." : "Slide to Scan",
             textStyle: TextStyle(
                 fontSize: _adaptiveFontSize(0.038),
                 fontWeight: FontWeight.w600,
@@ -321,7 +574,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
             innerColor: localCardBackground,
             outerColor: primaryColor.withOpacity(0.9),
             sliderButtonIcon:
-            Icon(Icons.wifi, color: darkText, size: screenWidth * 0.05),
+            Icon(Icons.bluetooth_searching, color: darkText, size: screenWidth * 0.05),
             height: screenHeight * 0.055,
             borderRadius: cardBorderRadius,
             onSubmit: isLoading ? null : () async {
@@ -353,6 +606,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
     );
   }
 
+  // Pomodoro duration option (25min or 50min)
   Widget _pomodoroDurationOption(String label, String breakText) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -391,6 +645,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
     );
   }
 
+  // Pomodoro blocks slider (1-8 blocks)
   Widget _pomodoroBlocksSlider() {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -445,6 +700,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
     );
   }
 
+  // Custom duration slider (25-120 minutes)
   Widget _customDurationSlider() {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -506,6 +762,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
     );
   }
 
+  // Configuration menu (sensitivity, notification style) - Future sprint features
   Widget _configurationMenu() {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -542,90 +799,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                 ),
               ),
             
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Rikaz Tools Preset', style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.035), color: isConfigurationDisabled ? disabledTextColor : darkText, fontWeight: FontWeight.bold)),
-                SizedBox(height: screenHeight * 0.01),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.03),
-                  decoration: BoxDecoration(
-                    color: softAccentHighlight.withOpacity(isConfigurationDisabled ? 0.2 : 0.5),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: primaryColor.withOpacity(isConfigurationDisabled ? 0.1 : 0.3)),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: selectedPreset,
-                      isExpanded: true,
-                      icon: Icon(Icons.arrow_drop_down, color: isConfigurationDisabled ? disabledTextColor : primaryColor),
-                      style: TextStyle(color: isConfigurationDisabled ? disabledTextColor : darkText,
-                          fontSize: _adaptiveFontSize(0.04)),
-                      dropdownColor: cardBackground,
-                      onChanged: isConfigurationDisabled ? null : (String? newValue) {
-                        if (newValue != null) {
-                          _applyPreset(newValue);
-                        }
-                      },
-                      items: toolPresets.map<DropdownMenuItem<String>>((String value) {
-                        return DropdownMenuItem<String>(
-                          value: value,
-                          child: Text(value, style: TextStyle(color: darkText, fontSize: _adaptiveFontSize(0.04))),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: screenHeight * 0.025),
-
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Camera Detection', style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.04), color: isConfigurationDisabled ? disabledTextColor : darkText)),
-                Switch(
-                  value: isCameraDetectionEnabled,
-                  onChanged: isConfigurationDisabled ? null : (v) {
-                    setState(() {
-                      isCameraDetectionEnabled = v;
-                      selectedPreset = toolPresets.first;
-                    });
-                  },
-                  activeThumbColor: primaryColor.withOpacity(isConfigurationDisabled ? 0.4 : 1.0),
-                  inactiveTrackColor: Colors.grey.shade300,
-                  inactiveThumbColor: isConfigurationDisabled ? disabledTextColor : null,
-                ),
-              ],
-            ),
-            SizedBox(height: screenHeight * 0.02),
-            
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Triggers', style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.04), color: isConfigurationDisabled ? disabledTextColor : darkText)),
-                Row(
-                  children: List.generate(
-                    3,
-                    (index) => Container(
-                      margin: EdgeInsets.symmetric(horizontal: screenWidth * 0.015),
-                      width: screenWidth * 0.05,
-                      height: screenWidth * 0.05,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: primaryColor.withOpacity(isConfigurationDisabled ? 0.2 : 0.8), width: 2),
-                        borderRadius: BorderRadius.circular(5),
-                        color: softAccentHighlight.withOpacity(isConfigurationDisabled ? 0.1 : 0.5),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: screenHeight * 0.02),
-            
+            // Sensitivity slider (Future sprint)
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -660,6 +834,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
             ),
             SizedBox(height: screenHeight * 0.015),
 
+            // Notification style (Future sprint)
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -709,6 +884,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
     );
   }
 
+  // Session mode toggle (Pomodoro vs Custom)
   Widget _buildModeToggle() {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -729,6 +905,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
     );
   }
 
+  // Mode toggle button
   Widget _toggleButton(SessionMode mode, String text, IconData icon) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -770,6 +947,10 @@ class _SetSessionPageState extends State<SetSessionPage> {
     );
   }
 
+  // =============================================================================
+  // MAIN BUILD
+  // =============================================================================
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -798,6 +979,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
       body: SafeArea(
         child: Stack(
           children: [
+            // Main scrollable content
             SingleChildScrollView(
               padding: EdgeInsets.only(
                 left: proportionalHorizontalPadding,
@@ -810,6 +992,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                 children: [
                   SizedBox(height: screenHeight * 0.015),
                   
+                  // Page title
                   Text(
                     sessionMode == SessionMode.pomodoro ? 'Pomodoro Session' : 'Custom Session',
                     style: TextStyle(
@@ -820,11 +1003,14 @@ class _SetSessionPageState extends State<SetSessionPage> {
                         fontSize: _adaptiveFontSize(0.04), color: secondaryTextGrey)),
                   SizedBox(height: screenHeight * 0.035),
 
+                  // Session mode toggle
                   _buildModeToggle(),
                   SizedBox(height: screenHeight * 0.035),
 
+                  // Rikaz BLE connection section
                   _buildRikazConnect(),
 
+                  // Session configuration (Pomodoro or Custom)
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
                     transitionBuilder: (Widget child, Animation<double> animation) {
@@ -853,6 +1039,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
 
                   SizedBox(height: screenHeight * 0.035),
 
+                  // Configuration menu toggle
                   if (!_showRikazConfirmation)
                     GestureDetector(
                       onTap: isRikazToolConnected ? () => setState(() => isConfigurationOpen = !isConfigurationOpen) : null,
@@ -880,6 +1067,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                       ),
                     ),
 
+                  // Expandable configuration menu
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
                     transitionBuilder: (Widget child, Animation<double> animation) {
@@ -900,6 +1088,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
               ),
             ),
 
+            // Sticky start button at bottom
             Positioned(
               left: 0,
               right: 0,
@@ -924,6 +1113,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Warning when hardware is offline
                     if (!isRikazToolConnected)
                       Padding(
                         padding: EdgeInsets.only(bottom: screenHeight * 0.01),
@@ -939,6 +1129,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
                         ),
                       ),
                       
+                    // Start session button
                     ElevatedButton(
                       onPressed: isStartButtonEnabled ? handleStartSessionPress : null,
                       style: ElevatedButton.styleFrom(
