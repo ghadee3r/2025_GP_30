@@ -7,7 +7,7 @@
     
 
     <application
-        android:label="rikazapp"
+        android:label="Rikaz"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 
