@@ -1414,42 +1414,54 @@ class _PomodoroBlock extends StatelessWidget {
 // SOUND OPTIONS
 // Defines available background sounds
 // ============================================================================
-class Sound {
-  final String id;
+class SoundOption {
+  final String id; // We'll use the sound_name or 'off' as a unique ID
   final String name;
-  final Color color;
-  final IconData icon;
+  final String? filePathUrl; // Nullable, because "No Sound" has no file
+  final String iconName;
+  final String colorHex;
 
-  const Sound({
+  // Constructor for sounds from Supabase
+  SoundOption({
     required this.id,
     required this.name,
-    required this.color,
-    required this.icon,
+    required this.filePathUrl,
+    required this.iconName,
+    required this.colorHex,
   });
-}
 
-const List<Sound> kAvailableSounds = [
-  Sound(
+  // A special "factory" constructor for our "No Sound" option
+  factory SoundOption.off() {
+    return SoundOption(
       id: 'off',
       name: 'No Sound',
-      color: Color(0xFF64748B),
-      icon: Icons.volume_off_rounded),
-  Sound(
-      id: 'White-Noise',
-      name: 'White Noise',
-      color: Color.fromARGB(255, 151, 146, 144),
-      icon: Icons.waves_rounded),
-  Sound(
-      id: 'Rain',
-      name: 'Rain',
-      color: Color.fromARGB(255, 104, 114, 223),
-      icon: Icons.water_drop_outlined),
-  Sound(
-      id: 'River',
-      name: 'River',
-      color: Color.fromARGB(255, 110, 247, 149),
-      icon: Icons.water_rounded),
-];
+      filePathUrl: null,
+      iconName: 'volume_off_rounded',
+      colorHex: '#64748B',
+    );
+  }
+
+  // Helper function to get the real IconData from the icon_name string
+  // You may need to add more icons here if you add them to the database
+  IconData get icon {
+    switch (iconName) {
+      case 'water_drop_outlined':
+        return Icons.water_drop_outlined;
+      case 'water_rounded':
+        return Icons.water_rounded;
+      case 'waves_rounded':
+        return Icons.waves_rounded;
+      default:
+        return Icons.volume_off_rounded;
+    }
+  }
+
+  // Helper function to get the real Color from the color_hex string
+  Color get color {
+    final hexCode = colorHex.replaceAll('#', '');
+    return Color(int.parse('FF$hexCode', radix: 16));
+  }
+}
 
 // ============================================================================
 // SOUND CONTROL SECTION
@@ -1464,7 +1476,13 @@ class SoundSection extends StatefulWidget {
 
 class _SoundSectionState extends State<SoundSection> {
   final AudioPlayer _audioPlayer = AudioPlayer();
-  String _currentSoundId = 'off';
+  
+  // ✅ NEW: This will hold our list of sounds fetched from Supabase
+  late Future<List<SoundOption>> _soundsFuture;
+
+  // This now holds the *entire* SoundOption object, not just an ID
+  late SoundOption _currentSound; 
+  
   bool _isSoundPlaying = false;
   bool _isExpanded = false;
 
@@ -1472,6 +1490,12 @@ class _SoundSectionState extends State<SoundSection> {
   void initState() {
     super.initState();
     _audioPlayer.setReleaseMode(ReleaseMode.loop);
+    
+    // ✅ NEW: Set the default sound to "off"
+    _currentSound = SoundOption.off();
+
+    // ✅ NEW: Call the function to fetch sounds when the widget first loads
+    _soundsFuture = _fetchSoundsFromDB();
   }
 
   @override
@@ -1481,29 +1505,62 @@ class _SoundSectionState extends State<SoundSection> {
     super.dispose();
   }
 
-  Future<void> _onSoundSelected(String id) async {
+  // ✅ NEW: The function that fetches data from Supabase
+  Future<List<SoundOption>> _fetchSoundsFromDB() async {
+    try {
+      final supabase = Supabase.instance.client;
+      final response = await supabase
+          .from('Sound_Option')
+          .select('sound_name, sound_file_path, icon_name, color_hex');
+
+      // Add the "No Sound" option to the beginning of our list
+      final List<SoundOption> fetchedSounds = [SoundOption.off()];
+
+      // Convert the database map data into our SoundOption objects
+      for (var item in response) {
+        fetchedSounds.add(SoundOption(
+          id: item['sound_name'], // Use name as the ID
+          name: item['sound_name'],
+          filePathUrl: item['sound_file_path'],
+          iconName: item['icon_name'],
+          colorHex: item['color_hex'],
+        ));
+      }
+
+      return fetchedSounds;
+
+    } catch (e) {
+      print('❌ Error fetching sounds: $e');
+      // If it fails, just return the "No Sound" option
+      return [SoundOption.off()];
+    }
+  }
+
+  // ✅ UPDATED: Logic to play, pause, and stop sounds
+  Future<void> _onSoundSelected(SoundOption selectedSound) async {
     if (!mounted) return;
 
     await _audioPlayer.stop();
 
-    if (id == 'off') {
+    if (selectedSound.id == 'off' || selectedSound.filePathUrl == null) {
       setState(() {
-        _currentSoundId = id;
+        _currentSound = SoundOption.off(); // Set to the "off" object
         _isSoundPlaying = false;
         _isExpanded = false;
       });
     } else {
       try {
-        await _audioPlayer.play(AssetSource('sounds/$id.mp3'));
+        // ✅ UPDATED: Play from a URL, not a local Asset
+        await _audioPlayer.play(UrlSource(selectedSound.filePathUrl!));
         setState(() {
-          _currentSoundId = id;
+          _currentSound = selectedSound;
           _isSoundPlaying = true;
           _isExpanded = false;
         });
       } catch (e) {
-        print('Error playing sound: $e');
+        print('Error playing sound from URL: $e');
         setState(() {
-          _currentSoundId = 'off';
+          _currentSound = SoundOption.off();
           _isSoundPlaying = false;
           _isExpanded = false;
         });
@@ -1512,7 +1569,7 @@ class _SoundSectionState extends State<SoundSection> {
   }
 
   Future<void> _onPlayPauseTapped() async {
-    if (_currentSoundId == 'off') return;
+    if (_currentSound.id == 'off') return;
 
     if (_isSoundPlaying) {
       await _audioPlayer.pause();
@@ -1530,23 +1587,17 @@ class _SoundSectionState extends State<SoundSection> {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final currentSound =
-        kAvailableSounds.firstWhere((s) => s.id == _currentSoundId);
 
-    final displayIcon =
-        _isSoundPlaying ? currentSound.icon : Icons.volume_off_rounded;
-    final displayColor =
-        _isSoundPlaying ? currentSound.color : const Color(0xFF64748B);
+    // ✅ UPDATED: Get display info from the _currentSound object
+    final displayIcon = _isSoundPlaying ? _currentSound.icon : Icons.volume_off_rounded;
+    final displayColor = _isSoundPlaying ? _currentSound.color : const Color(0xFF64748B);
     final String displayText = _isSoundPlaying
-        ? 'Playing: ${currentSound.name}'
-        : (_currentSoundId == 'off'
-            ? 'Background Sound'
-            : 'Paused: ${currentSound.name}');
+        ? 'Playing: ${_currentSound.name}'
+        : (_currentSound.id == 'off' ? 'Background Sound' : 'Paused: ${_currentSound.name}');
 
     return FrostedGlassContainer(
       child: Column(
         children: [
-          // Header - tap to expand/collapse
           InkWell(
             onTap: () {
               if (!mounted) return;
@@ -1582,24 +1633,18 @@ class _SoundSectionState extends State<SoundSection> {
                       ),
                     ),
                   ),
-
-                  // Play/pause button (only shown if sound is selected)
-                  if (_currentSoundId != 'off')
+                  if (_currentSound.id != 'off')
                     Padding(
                       padding: EdgeInsets.only(right: screenWidth * 0.03),
                       child: IconButton(
                         icon: Icon(
-                          _isSoundPlaying
-                              ? Icons.pause_circle_filled
-                              : Icons.play_circle_filled,
+                          _isSoundPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
                           color: displayColor,
                           size: screenWidth * 0.08,
                         ),
                         onPressed: _onPlayPauseTapped,
                       ),
                     ),
-
-                  // Expand/collapse icon
                   Icon(
                     _isExpanded
                         ? Icons.keyboard_arrow_up_rounded
@@ -1612,28 +1657,53 @@ class _SoundSectionState extends State<SoundSection> {
             ),
           ),
 
-          // Sound options list (shown when expanded)
+          // ✅ NEW: This section now builds itself based on the database call
           AnimatedCrossFade(
             duration: const Duration(milliseconds: 300),
-            crossFadeState: _isExpanded
-                ? CrossFadeState.showSecond
-                : CrossFadeState.showFirst,
+            crossFadeState:
+                _isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
             firstChild: const SizedBox.shrink(),
             secondChild: Column(
               children: [
-                const Divider(
-                    height: 1,
-                    color: Color.fromRGBO(255, 255, 255, 0.4),
-                    thickness: 1),
-                ...kAvailableSounds.map((sound) {
-                  final bool isThisOneSelected =
-                      sound.id == _currentSoundId && _isSoundPlaying;
-                  return _SoundRow(
-                    sound: sound,
-                    isSelected: isThisOneSelected,
-                    onTap: () => _onSoundSelected(sound.id),
-                  );
-                }),
+                const Divider(height: 1, color: Color.fromRGBO(255, 255, 255, 0.4), thickness: 1),
+                
+                // ✅ NEW: Use a FutureBuilder to handle loading/error/data
+                FutureBuilder<List<SoundOption>>(
+                  future: _soundsFuture,
+                  builder: (context, snapshot) {
+                    // 1. Loading State
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+                    // 2. Error State
+                    if (snapshot.hasError) {
+                      return const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Center(child: Text('Could not load sounds')),
+                      );
+                    }
+                    // 3. Data Loaded Successfully
+                    if (snapshot.hasData) {
+                      final sounds = snapshot.data!;
+                      return Column(
+                        children: sounds.map((sound) {
+                          final bool isThisOneSelected =
+                              sound.id == _currentSound.id && _isSoundPlaying;
+                          return _SoundRow(
+                            sound: sound, // Pass the whole object
+                            isSelected: isThisOneSelected,
+                            onTap: () => _onSoundSelected(sound),
+                          );
+                        }).toList(),
+                      );
+                    }
+                    // 4. Default case (shouldn't be reached)
+                    return const SizedBox.shrink();
+                  },
+                ),
               ],
             ),
           ),
@@ -1643,9 +1713,11 @@ class _SoundSectionState extends State<SoundSection> {
   }
 }
 
-// Individual sound option row
+// -------------------------------------------------------------------
+// 💡 UPDATED _SoundRow WIDGET
+// -------------------------------------------------------------------
 class _SoundRow extends StatelessWidget {
-  final Sound sound;
+  final SoundOption sound; // ✅ UPDATED: Use the new SoundOption model
   final bool isSelected;
   final VoidCallback onTap;
 
@@ -1663,8 +1735,7 @@ class _SoundRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: EdgeInsets.symmetric(
-            horizontal: rowHorizontalPadding, vertical: screenWidth * 0.03),
+        padding: EdgeInsets.symmetric(horizontal: rowHorizontalPadding, vertical: screenWidth * 0.03),
         child: Row(
           children: [
             Container(
@@ -1672,18 +1743,19 @@ class _SoundRow extends StatelessWidget {
               height: screenWidth * 0.08,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(screenWidth * 0.02),
-                color: sound.color.withOpacity(0.15),
+                // ✅ UPDATED: Get color from the object
+                color: sound.color.withOpacity(0.15), 
               ),
               child: Icon(
-                sound.icon,
-                color: sound.color,
+                sound.icon, // ✅ UPDATED: Get icon from the object
+                color: sound.color, // ✅ UPDATED: Get color from the object
                 size: screenWidth * 0.045,
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                sound.name,
+                sound.name, // ✅ UPDATED: Get name from the object
                 style: TextStyle(
                   fontWeight: FontWeight.w500,
                   color: const Color(0xFF0F172A),
