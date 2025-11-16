@@ -48,15 +48,22 @@
 	<string>We need Bluetooth to connect to your Rikaz focus device</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>We need Bluetooth to control your smart lights</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>We need location access to scan for nearby Rikaz devices via Bluetooth</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>We need location access to scan for nearby Rikaz devices via Bluetooth</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>We need location access to scan for nearby Rikaz devices via Bluetooth</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
+		<string>bluetooth-peripheral</string>
+		<string>fetch</string>
+		<string>processing</string>
+		<string>external-accessory</string>
+		<string>location</string>
+		<string>remote-notification</string>
+		<string>bluetooth-central</string>
 	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
