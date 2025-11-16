@@ -1489,6 +1489,7 @@ class _SoundSectionState extends State<SoundSection> {
   @override
   void initState() {
     super.initState();
+
     _audioPlayer.setReleaseMode(ReleaseMode.loop);
     
     // ✅ NEW: Set the default sound to "off"
