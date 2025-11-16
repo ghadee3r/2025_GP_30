@@ -22,36 +22,42 @@
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>io.rikaz.app</string>
+				<string>rikazapp</string>
+				<string>com.googleusercontent.apps.464258371961-sk013ngtpvprvtru88hh4m3h52i80q21</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
-    <key>LSRequiresIPhoneOS</key>
+	<key>LSRequiresIPhoneOS</key>
 	<true/>
-
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-    <string>We need Bluetooth to connect to your Rikaz focus device</string>
-    <key>NSBluetoothPeripheralUsageDescription</key>
-    <string>We need Bluetooth to control your smart lights</string>
-
-    <!-- 🎯 CUSTOM URL SCHEMES for DEEP LINKS -->
-<key>CFBundleURLTypes</key>
-<array>
-    <dict>
-        <key>CFBundleTypeRole</key>
-        <string>Editor</string>
-        <key>CFBundleURLSchemes</key>
-        <array>
-            <string>io.rikaz.app</string>
-            <string>rikazapp</string>
-            <string>com.googleusercontent.apps.464258371961-sk013ngtpvprvtru88hh4m3h52i80q21</string>
-            <!-- 👆 this line is your REVERSED_CLIENT_ID -->
-        </array>
-    </dict>
-</array>
-
-    <!-- 🎯 END DEEP LINKS -->
-
+	<string>We need Bluetooth to connect to your Rikaz focus device</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>We need Bluetooth to control your smart lights</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>We need location access to scan for nearby Rikaz devices via Bluetooth</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>We need location access to scan for nearby Rikaz devices via Bluetooth</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
