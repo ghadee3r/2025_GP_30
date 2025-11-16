@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>464258371961-sk013ngtpvprvtru88hh4m3h52i80q21.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.464258371961-sk013ngtpvprvtru88hh4m3h52i80q21</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>464258371961-9qe0qr6sdmls6u1ct3raqvd11itlvj52.apps.googleusercontent.com</string>
+	<key>API_KEY</key>
+	<string>AIzaSyA6pt8frZbaEw0Ds0jhhwIR2ePUg8rnljc</string>
+	<key>GCM_SENDER_ID</key>
+	<string>464258371961</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.example.rikazapp</string>
+	<key>PROJECT_ID</key>
+	<string>rikazapp</string>
+	<key>STORAGE_BUCKET</key>
+	<string>rikazapp.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:464258371961:ios:66e117db5da5e7bc509fa8</string>
+</dict>
+</plist>
