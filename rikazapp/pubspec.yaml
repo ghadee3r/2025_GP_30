@@ -8,39 +8,26 @@ environment:
   sdk: ^3.9.2
 
 dependencies:
-
   flutter:
     sdk: flutter
 
-  # Supabase Client (REQUIRED for RLS and Auth)
-  supabase_flutter: ^2.0.0 
-
-  # Utility packages already in use
-  slide_to_act: ^2.0.2 # Downgraded to compatible version
+  supabase_flutter: ^2.0.0
+  slide_to_act: ^2.0.2
   http: ^1.1.0
   shared_preferences: ^2.2.2
-
-  # Essential for date and time formatting (used in home.dart)
   intl: ^0.19.0
-  
-  # UI/UX packages
   fluid_bottom_nav_bar: ^1.4.0
-  table_calendar: ^3.0.9 # <--- ADDED: REQUIRED for the calendar widget
-
-  # iOS-style icons
+  table_calendar: ^3.0.9
   cupertino_icons: ^1.0.8
 
-  # --- START: GOOGLE CALENDAR API PACKAGES ---
-  # 1. Handles Google Sign-In (required for OAuth)
+  # Google Calendar API integration
   google_sign_in: ^6.1.6
-  # 2. Contains the generated Dart client for the Calendar API
   googleapis: ^11.4.0
-  # 3. Helper to integrate Google Sign-In with the Google APIs client
   extension_google_sign_in_as_googleapis_auth: ^2.0.7
+
   audioplayers: ^6.5.1
-  # --- END: GOOGLE CALENDAR API PACKAGES ---
-  flutter_blue_plus: ^1.32.0  # For BLE
-  permission_handler: ^11.0.1  # For BLE permissions
+  flutter_blue_plus: ^1.32.0
+  permission_handler: ^11.0.1
 
 dev_dependencies:
   flutter_test:
@@ -48,26 +35,24 @@ dev_dependencies:
   flutter_lints: ^5.0.0
   flutter_launcher_icons: ^0.14.4
 
-
 flutter_launcher_icons:
   android: true
   ios: true
   image_path: "assets/icon/AppLogo.png"
 
-  flutter:
-     uses-material-design: true
-     assets:
-       - assets/icon/
+flutter:
+  uses-material-design: true
 
   assets:
+    - assets/icon/
     - assets/images/
     - assets/fonts/
     - assets/sounds/
-    
+
   fonts:
     - family: Montserrat
       fonts:
-        - asset: assets/fonts/Montserrat-Regular.ttf # Use your actual file name
-          weight: 400 # Regular
-        - asset: assets/fonts/Montserrat-Bold.ttf    # Use your actual file name
-          weight: 700 # Bold
+        - asset: assets/fonts/Montserrat-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Montserrat-Bold.ttf
+          weight: 700
