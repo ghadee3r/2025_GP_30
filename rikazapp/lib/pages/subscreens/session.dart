@@ -6,14 +6,8 @@ import 'dart:ui';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:rikazapp/services/rikaz_light_service.dart';
 import 'package:rikazapp/widgets/rikaz_device_picker.dart';
+import 'package:rikazapp/main.dart';
 
-// ============================================================================
-// GLOBAL CONNECTION STATE
-// Tracks if Rikaz device (ESP32) is connected via BLE across the app
-// ============================================================================
-class RikazConnectionState {
-  static bool isConnected = false; 
-}
 
 // ============================================================================
 // FROSTED GLASS EFFECT WIDGET
@@ -202,7 +196,7 @@ class _SessionPageState extends State<SessionPage>
   Timer? _connectionCheckTimer;        // Periodically checks ESP32 BLE connection
 
   // ========================================================================
-  // REUSABLE RESUME LOGIC (New/Updated Function)
+  // REUSABLE RESUME LOGIC
   // Handles light re-initialization and checks for failure before resuming.
   // ========================================================================
   Future<bool> _handleLightAndResume() async {
@@ -210,7 +204,7 @@ class _SessionPageState extends State<SessionPage>
     
     bool success = true;
 
-    // 1. Re-initialize light connection if lost (Reconnect or manual resume after initial failure)
+    // 1. Re-initialize light connection if lost
     if (RikazConnectionState.isConnected && !_lightInitialized) {
       if (mode == 'focus') {
         success = await RikazLightService.setFocusLight();
@@ -227,7 +221,6 @@ class _SessionPageState extends State<SessionPage>
     } 
     // 2. Ensure light is on if already initialized and connected
     else if (_rikazConnected && _lightInitialized) {
-      // Send the current light command again just to be sure (no-op if already correct)
       if (mode == 'focus') {
         success = await RikazLightService.setFocusLight();
       } else if (mode == 'break') {
@@ -251,22 +244,16 @@ class _SessionPageState extends State<SessionPage>
   }
 
   // ========================================================================
-  // RECONNECTION HANDLER (Updated to use _handleLightAndResume)
-  // Flow: Pause session → Show device picker → Connect → Resume via helper
+  // RECONNECTION HANDLER
+  // Flow: Device picker → Connect → Resume via helper
+  // Session is already paused before this is called
   // ========================================================================
   Future<void> _handleReconnectAttempt() async {
     if (!mounted) return;
     
-    // STEP 1: Pause the session (timer stops, animation stops)
-    if (status == 'running') {
-      setState(() {
-        status = 'paused';
-      });
-      pulseController.stop();
-      print('⏸️ RIKAZ: Session automatically paused for reconnection');
-    }
+    print('🔄 RIKAZ: Starting reconnection attempt...');
     
-    // STEP 2: Show device picker - user selects Rikaz device
+    // STEP 1: Show device picker - user selects Rikaz device
     final RikazDevice? selectedDevice = await showDialog<RikazDevice>(
       context: context,
       barrierDismissible: false,
@@ -275,15 +262,15 @@ class _SessionPageState extends State<SessionPage>
     
     if (!mounted) return;
     
-    // STEP 3: If device was successfully selected and connected
+    // STEP 2: If device was successfully selected and connected
     if (selectedDevice != null) {
       RikazConnectionState.isConnected = true;
       _rikazConnected = true;
       
-      // STEP 4: Restore light and resume (using the robust helper)
+      // STEP 3: Restore light and resume
       final bool resumeSuccess = await _handleLightAndResume(); 
       
-      // STEP 5: Show result notification
+      // STEP 4: Show result notification
       if (mounted) {
         if (resumeSuccess) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -303,7 +290,6 @@ class _SessionPageState extends State<SessionPage>
             ),
           );
         } else {
-          // Light command failed after connection, session remains paused by helper logic
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Reconnected but light control failed. Please try again.'),
@@ -314,7 +300,6 @@ class _SessionPageState extends State<SessionPage>
         }
       }
     } else {
-      // User cancelled or connection failed - session remains paused
       print('❌ RIKAZ: Reconnection cancelled. Session remains paused.');
     }
   }
@@ -345,7 +330,17 @@ class _SessionPageState extends State<SessionPage>
           action: SnackBarAction(
             label: 'Reconnect',
             textColor: Colors.white,
-            onPressed: _handleReconnectAttempt,
+            onPressed: () {
+              // Pause session before reconnecting
+              if (mounted && status == 'running') {
+                setState(() {
+                  status = 'paused';
+                });
+                pulseController.stop();
+                print('⏸️ RIKAZ: Session paused via SnackBar Reconnect button');
+              }
+              _handleReconnectAttempt();
+            },
           ),
         ),
       );
@@ -480,7 +475,6 @@ class _SessionPageState extends State<SessionPage>
     );
   }
 
-  // Helper to build each progress option button
   Widget _buildProgressOption(
     BuildContext context, {
     required String level,
@@ -661,85 +655,118 @@ class _SessionPageState extends State<SessionPage>
   // Checks every 5 seconds if ESP32 is still connected via BLE
   // ========================================================================
   void _startConnectionMonitoring() {
-    _connectionCheckTimer?.cancel();
+  _connectionCheckTimer?.cancel();
+  
+  _connectionCheckTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
+    if (!mounted || !RikazConnectionState.isConnected) {
+      timer.cancel();
+      return;
+    }
     
-    // Check connection every 5 seconds
-    _connectionCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
-      if (!mounted || !RikazConnectionState.isConnected) {
-        timer.cancel();
-        return;
-      }
+    final bool stillConnected = await RikazLightService.isConnected();
+    
+    if (!stillConnected) {
+      timer.cancel();
       
-      final bool stillConnected = await RikazLightService.isConnected();
-      
-      if (!stillConnected) {
-        // BLE connection to ESP32 lost - automatically pause session
-        timer.cancel();
-        
-        await RikazLightService.disconnect();
-        RikazConnectionState.isConnected = false;
+      await RikazLightService.disconnect();
+      RikazConnectionState.isConnected = false;
 
-        if (mounted) {
-          setState(() {
-            _rikazConnected = false;
-            _lightInitialized = false;
-            
-            // Automatically pause session when connection is lost
-            if (status == 'running') {
-              status = 'paused';
-              pulseController.stop();
-              debugPrint('** SESSION AUTO PAUSED: status=$status **'); 
-            }
-          });
+      if (mounted) {
+        // ✅ FORCE PAUSE immediately when connection is lost
+        bool wasRunning = status == 'running';
+        
+        setState(() {
+          _rikazConnected = false;
+          _lightInitialized = false;
+          
+          // Pause the session
+          if (status == 'running') {
+            status = 'paused';
+          }
+        });
+        
+        // Stop animation outside setState
+        if (pulseController.isAnimating) {
+          pulseController.stop();
         }
         
-        _showDeviceLostWarning();
+        print('⚠️ CONNECTION LOST - Session paused');
+        print('📊 Was running: $wasRunning');
+        print('📊 Current status: $status');
+        print('🎬 Animation stopped: ${!pulseController.isAnimating}');
       }
-    });
-  }
+      
+      _showDeviceLostWarning();
+    }
+  });
+}
 
   // ========================================================================
   // SHOW DEVICE LOST WARNING
   // Alert dialog when BLE connection is lost during active session
   // ========================================================================
-  void _showDeviceLostWarning() {
-    if (!mounted) return;
-    
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        icon: Icon(Icons.link_off, color: Colors.red.shade700, size: 48),
-        title: const Text('Rikaz Tools Disconnected'),
-        content: const Text(
-          'The Bluetooth connection to your Rikaz device was lost.\n\n'
-          'Your session has been paused automatically.\n\n'
-          'Click "Reconnect" to restore the connection and resume your session.'
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              _handleReconnectAttempt();
-            },
-            icon: Icon(Icons.bluetooth_searching),
-            label: const Text('Reconnect'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue.shade600,
-              foregroundColor: Colors.white,
-            ),
-          ),
-        ],
+  // ========================================================================
+// SHOW DEVICE LOST WARNING
+// Alert dialog when BLE connection is lost during active session
+// ========================================================================
+void _showDeviceLostWarning() {
+  if (!mounted) return;
+  
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => AlertDialog(
+      icon: Icon(Icons.link_off, color: Colors.red.shade700, size: 48),
+      title: const Text('Rikaz Tools Disconnected'),
+      content: const Text(
+        'The Bluetooth connection to your Rikaz device was lost.\n\n'
+        'Your session has been paused automatically.\n\n'
+        'Click "Reconnect" to restore the connection and resume your session.'
       ),
-    );
-    
-    debugPrint('⚠️ RIKAZ: BLE connection lost. Session automatically paused.');
-  }
-
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+        ElevatedButton.icon(
+          onPressed: () {
+            Navigator.pop(context); // Close dialog first
+            
+            // ✅ FORCE PAUSE - Even if already paused, ensure everything stops
+            if (mounted) {
+              // Stop the timer from counting
+              if (status == 'running') {
+                setState(() {
+                  status = 'paused';
+                });
+              }
+              
+              // Stop the pulsing animation
+              if (pulseController.isAnimating) {
+                pulseController.stop();
+              }
+              
+              print('⏸️ RIKAZ: Session FORCED PAUSE via Reconnect button');
+              print('📊 Current status: $status');
+              print('🎬 Animation running: ${pulseController.isAnimating}');
+            }
+            
+            // Then attempt reconnection
+            _handleReconnectAttempt();
+          },
+          icon: Icon(Icons.bluetooth_searching),
+          label: const Text('Reconnect'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blue.shade600,
+            foregroundColor: Colors.white,
+          ),
+        ),
+      ],
+    ),
+  );
+  
+  debugPrint('⚠️ RIKAZ: BLE connection lost. Session automatically paused.');
+}
   // ========================================================================
   // TIMER LOGIC
   // Manages countdown and phase transitions
@@ -767,7 +794,6 @@ class _SessionPageState extends State<SessionPage>
     });
   }
 
-  // Called when a focus or break period ends
   void onPhaseEnd() async { 
     if (!mounted) return;
 
@@ -851,7 +877,7 @@ class _SessionPageState extends State<SessionPage>
   }
 
   // ========================================================================
-  // PAUSE/RESUME HANDLER (Updated to use _handleLightAndResume)
+  // PAUSE/RESUME HANDLER
   // Toggles between paused and running states
   // ========================================================================
   void onPauseResume() async {
@@ -865,7 +891,7 @@ class _SessionPageState extends State<SessionPage>
       pulseController.stop();
       print('⏸️ RIKAZ: Session manually paused (light remains ON)');
     } 
-    // RESUMING: Use the new robust helper
+    // RESUMING: Use the robust helper
     else if (nextStatus == 'running') {
       await _handleLightAndResume();
     }
@@ -938,19 +964,16 @@ class _SessionPageState extends State<SessionPage>
     );
   }
 
-  // Navigate to games page (during breaks)
   void onGames() {
     Navigator.of(context).pushNamed('/games');
   }
 
-  // Format seconds as MM:SS
   String formatTime(int seconds) {
     final m = (seconds ~/ 60).toString().padLeft(2, '0');
     final s = (seconds % 60).toString().padLeft(2, '0');
     return '$m:$s';
   }
 
-  // Calculate progress as percentage (0.0 to 1.0)
   double get progress {
     final total = (mode == 'focus' ? focusMinutes : breakMinutes) * 60;
     return (1 - (timeLeft / max(total, 1))).clamp(0, 1);
@@ -958,7 +981,6 @@ class _SessionPageState extends State<SessionPage>
 
   // ========================================================================
   // CLEANUP
-  // Stops timers and turns off light when leaving session
   // ========================================================================
   @override
   void dispose() {
@@ -980,7 +1002,6 @@ class _SessionPageState extends State<SessionPage>
 
   // ========================================================================
   // UI BUILD
-  // Constructs the session page interface
   // ========================================================================
   @override
   Widget build(BuildContext context) {
@@ -991,7 +1012,6 @@ class _SessionPageState extends State<SessionPage>
     final bool isPaused = status == 'paused';
     final bool isBreak = mode == 'break';
 
-    // Choose gradient colors based on state
     final gradientColors = isPaused
         ? const [
             Color.fromARGB(255, 225, 227, 230),
@@ -1074,7 +1094,6 @@ class _SessionPageState extends State<SessionPage>
                 Stack(
                   alignment: Alignment.center,
                   children: [
-                    // Outer white circle
                     Container(
                       width: timerOuterDiameter,
                       height: timerOuterDiameter,
@@ -1091,7 +1110,6 @@ class _SessionPageState extends State<SessionPage>
                         ],
                       ),
                     ),
-                    // Progress ring
                     SizedBox(
                       width: timerInnerDiameter,
                       height: timerInnerDiameter,
@@ -1102,7 +1120,6 @@ class _SessionPageState extends State<SessionPage>
                         ),
                       ),
                     ),
-                    // Time and status text
                     Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -1253,7 +1270,6 @@ class _SessionPageState extends State<SessionPage>
 
 // ============================================================================
 // CUSTOM PAINTER FOR CIRCULAR PROGRESS RING
-// Draws animated gradient ring showing session progress
 // ============================================================================
 class _GradientRingPainter extends CustomPainter {
   final double progress;
@@ -1266,7 +1282,6 @@ class _GradientRingPainter extends CustomPainter {
     const strokeWidth = 8.0;
     final rect = Offset.zero & size;
     
-    // Choose gradient colors based on mode (break = orange, focus = blue)
     final gradient = SweepGradient(
       startAngle: -pi / 2,
       endAngle: 2 * pi - pi / 2,
@@ -1300,10 +1315,7 @@ class _GradientRingPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = (size.width - strokeWidth) / 2;
 
-    // Draw background circle
     canvas.drawCircle(center, radius, bgPaint);
-    
-    // Draw progress arc
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
       -pi / 2,
@@ -1319,7 +1331,6 @@ class _GradientRingPainter extends CustomPainter {
 
 // ============================================================================
 // POMODORO BLOCK INDICATOR
-// Shows which blocks are completed, active, or pending
 // ============================================================================
 class _PomodoroBlock extends StatelessWidget {
   final int blockNum;
@@ -1343,7 +1354,6 @@ class _PomodoroBlock extends StatelessWidget {
     final blockDiameter = screenWidth * 0.14;
     final blockFontSize = screenWidth * 0.04;
 
-    // Determine colors based on state
     final Color bgColor = isCompleted
         ? Colors.green
         : (isActive ? const Color.fromRGBO(33, 150, 243, 1) : Colors.white);
@@ -1356,7 +1366,6 @@ class _PomodoroBlock extends StatelessWidget {
 
     return Column(
       children: [
-        // Pulsing animation for active block
         ScaleTransition(
           scale: isActive && isRunning
               ? Tween(begin: 1.0, end: 1.06).animate(
@@ -1411,17 +1420,15 @@ class _PomodoroBlock extends StatelessWidget {
 }
 
 // ============================================================================
-// SOUND OPTIONS
-// Defines available background sounds
+// SOUND OPTIONS MODEL
 // ============================================================================
 class SoundOption {
-  final String id; // We'll use the sound_name or 'off' as a unique ID
+  final String id;
   final String name;
-  final String? filePathUrl; // Nullable, because "No Sound" has no file
+  final String? filePathUrl;
   final String iconName;
   final String colorHex;
 
-  // Constructor for sounds from Supabase
   SoundOption({
     required this.id,
     required this.name,
@@ -1430,7 +1437,6 @@ class SoundOption {
     required this.colorHex,
   });
 
-  // A special "factory" constructor for our "No Sound" option
   factory SoundOption.off() {
     return SoundOption(
       id: 'off',
@@ -1441,8 +1447,6 @@ class SoundOption {
     );
   }
 
-  // Helper function to get the real IconData from the icon_name string
-  // You may need to add more icons here if you add them to the database
   IconData get icon {
     switch (iconName) {
       case 'water_drop_outlined':
@@ -1456,7 +1460,6 @@ class SoundOption {
     }
   }
 
-  // Helper function to get the real Color from the color_hex string
   Color get color {
     final hexCode = colorHex.replaceAll('#', '');
     return Color(int.parse('FF$hexCode', radix: 16));
@@ -1465,7 +1468,6 @@ class SoundOption {
 
 // ============================================================================
 // SOUND CONTROL SECTION
-// Allows user to play background sounds during focus
 // ============================================================================
 class SoundSection extends StatefulWidget {
   const SoundSection({super.key});
@@ -1476,26 +1478,16 @@ class SoundSection extends StatefulWidget {
 
 class _SoundSectionState extends State<SoundSection> {
   final AudioPlayer _audioPlayer = AudioPlayer();
-  
-  // ✅ NEW: This will hold our list of sounds fetched from Supabase
   late Future<List<SoundOption>> _soundsFuture;
-
-  // This now holds the *entire* SoundOption object, not just an ID
   late SoundOption _currentSound; 
-  
   bool _isSoundPlaying = false;
   bool _isExpanded = false;
 
   @override
   void initState() {
     super.initState();
-
     _audioPlayer.setReleaseMode(ReleaseMode.loop);
-    
-    // ✅ NEW: Set the default sound to "off"
     _currentSound = SoundOption.off();
-
-    // ✅ NEW: Call the function to fetch sounds when the widget first loads
     _soundsFuture = _fetchSoundsFromDB();
   }
 
@@ -1506,7 +1498,6 @@ class _SoundSectionState extends State<SoundSection> {
     super.dispose();
   }
 
-  // ✅ NEW: The function that fetches data from Supabase
   Future<List<SoundOption>> _fetchSoundsFromDB() async {
     try {
       final supabase = Supabase.instance.client;
@@ -1514,13 +1505,11 @@ class _SoundSectionState extends State<SoundSection> {
           .from('Sound_Option')
           .select('sound_name, sound_file_path, icon_name, color_hex');
 
-      // Add the "No Sound" option to the beginning of our list
       final List<SoundOption> fetchedSounds = [SoundOption.off()];
 
-      // Convert the database map data into our SoundOption objects
       for (var item in response) {
         fetchedSounds.add(SoundOption(
-          id: item['sound_name'], // Use name as the ID
+          id: item['sound_name'],
           name: item['sound_name'],
           filePathUrl: item['sound_file_path'],
           iconName: item['icon_name'],
@@ -1529,15 +1518,12 @@ class _SoundSectionState extends State<SoundSection> {
       }
 
       return fetchedSounds;
-
     } catch (e) {
       print('❌ Error fetching sounds: $e');
-      // If it fails, just return the "No Sound" option
       return [SoundOption.off()];
     }
   }
 
-  // ✅ UPDATED: Logic to play, pause, and stop sounds
   Future<void> _onSoundSelected(SoundOption selectedSound) async {
     if (!mounted) return;
 
@@ -1545,13 +1531,12 @@ class _SoundSectionState extends State<SoundSection> {
 
     if (selectedSound.id == 'off' || selectedSound.filePathUrl == null) {
       setState(() {
-        _currentSound = SoundOption.off(); // Set to the "off" object
+        _currentSound = SoundOption.off();
         _isSoundPlaying = false;
         _isExpanded = false;
       });
     } else {
       try {
-        // ✅ UPDATED: Play from a URL, not a local Asset
         await _audioPlayer.play(UrlSource(selectedSound.filePathUrl!));
         setState(() {
           _currentSound = selectedSound;
@@ -1589,7 +1574,6 @@ class _SoundSectionState extends State<SoundSection> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
 
-    // ✅ UPDATED: Get display info from the _currentSound object
     final displayIcon = _isSoundPlaying ? _currentSound.icon : Icons.volume_off_rounded;
     final displayColor = _isSoundPlaying ? _currentSound.color : const Color(0xFF64748B);
     final String displayText = _isSoundPlaying
@@ -1657,8 +1641,6 @@ class _SoundSectionState extends State<SoundSection> {
               ),
             ),
           ),
-
-          // ✅ NEW: This section now builds itself based on the database call
           AnimatedCrossFade(
             duration: const Duration(milliseconds: 300),
             crossFadeState:
@@ -1667,26 +1649,21 @@ class _SoundSectionState extends State<SoundSection> {
             secondChild: Column(
               children: [
                 const Divider(height: 1, color: Color.fromRGBO(255, 255, 255, 0.4), thickness: 1),
-                
-                // ✅ NEW: Use a FutureBuilder to handle loading/error/data
                 FutureBuilder<List<SoundOption>>(
                   future: _soundsFuture,
                   builder: (context, snapshot) {
-                    // 1. Loading State
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Padding(
                         padding: EdgeInsets.all(16.0),
                         child: Center(child: CircularProgressIndicator()),
                       );
                     }
-                    // 2. Error State
                     if (snapshot.hasError) {
                       return const Padding(
                         padding: EdgeInsets.all(16.0),
                         child: Center(child: Text('Could not load sounds')),
                       );
                     }
-                    // 3. Data Loaded Successfully
                     if (snapshot.hasData) {
                       final sounds = snapshot.data!;
                       return Column(
@@ -1694,14 +1671,13 @@ class _SoundSectionState extends State<SoundSection> {
                           final bool isThisOneSelected =
                               sound.id == _currentSound.id && _isSoundPlaying;
                           return _SoundRow(
-                            sound: sound, // Pass the whole object
+                            sound: sound,
                             isSelected: isThisOneSelected,
                             onTap: () => _onSoundSelected(sound),
                           );
                         }).toList(),
                       );
                     }
-                    // 4. Default case (shouldn't be reached)
                     return const SizedBox.shrink();
                   },
                 ),
@@ -1714,11 +1690,8 @@ class _SoundSectionState extends State<SoundSection> {
   }
 }
 
-// -------------------------------------------------------------------
-// 💡 UPDATED _SoundRow WIDGET
-// -------------------------------------------------------------------
 class _SoundRow extends StatelessWidget {
-  final SoundOption sound; // ✅ UPDATED: Use the new SoundOption model
+  final SoundOption sound;
   final bool isSelected;
   final VoidCallback onTap;
 
@@ -1744,19 +1717,18 @@ class _SoundRow extends StatelessWidget {
               height: screenWidth * 0.08,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(screenWidth * 0.02),
-                // ✅ UPDATED: Get color from the object
-                color: sound.color.withOpacity(0.15), 
+                color: sound.color.withOpacity(0.15),
               ),
               child: Icon(
-                sound.icon, // ✅ UPDATED: Get icon from the object
-                color: sound.color, // ✅ UPDATED: Get color from the object
+                sound.icon,
+                color: sound.color,
                 size: screenWidth * 0.045,
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                sound.name, // ✅ UPDATED: Get name from the object
+                sound.name,
                 style: TextStyle(
                   fontWeight: FontWeight.w500,
                   color: const Color(0xFF0F172A),

@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:slide_to_act/slide_to_act.dart';
 import '/services/rikaz_light_service.dart';
 import '/widgets/rikaz_device_picker.dart';
+import '/main.dart';
 
 // =============================================================================
 // THEME DEFINITIONS
@@ -51,25 +52,6 @@ const List<String> toolPresets = [
 
 enum SessionMode { pomodoro, custom }
 
-// =============================================================================
-// GLOBAL CONNECTION STATE
-// Tracks BLE connection across app lifecycle
-// =============================================================================
-class RikazConnectionState {
-  static bool _isConnected = false;
-  
-  static bool get isConnected => _isConnected;
-  
-  static void setConnected(bool value) {
-    _isConnected = value;
-    debugPrint('🔌 RIKAZ Global State: ${value ? "CONNECTED" : "DISCONNECTED"}');
-  }
-  
-  static void reset() {
-    _isConnected = false;
-    debugPrint('🔌 RIKAZ Global State: RESET');
-  }
-}
 
 // =============================================================================
 // SET SESSION PAGE

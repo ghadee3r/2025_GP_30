@@ -122,7 +122,6 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
             Row(
               children: [
                 Icon(Icons.bluetooth_searching, color: Color(0xFF7A68FF), size: 28),
@@ -145,7 +144,6 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
             ),
             SizedBox(height: 16),
 
-            // Scanning
             if (_isScanning)
               Padding(
                 padding: EdgeInsets.symmetric(vertical: 20),
@@ -161,7 +159,6 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
                 ),
               ),
 
-            // Error
             if (_errorMessage != null && !_isScanning)
               Flexible(
                 child: SingleChildScrollView(
@@ -189,7 +186,6 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
                 ),
               ),
 
-            // Device list
             if (_devices.isNotEmpty && !_isScanning)
               Flexible(
                 child: ListView.builder(
@@ -202,7 +198,6 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
                 ),
               ),
 
-            // Rescan
             if (!_isScanning)
               Padding(
                 padding: EdgeInsets.only(top: 16),

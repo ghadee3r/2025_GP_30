@@ -26,17 +26,15 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 // Global state for Rikaz BLE connection (persists across navigation)
 class RikazConnectionState {
-  static bool _isConnected = false;
-  
-  static bool get isConnected => _isConnected;
+  static bool isConnected = false; 
   
   static void setConnected(bool value) {
-    _isConnected = value;
+    isConnected = value;
     debugPrint('🔌 RIKAZ ESP32 Tools: ${value ? "CONNECTED" : "DISCONNECTED"}');
   }
   
   static void reset() {
-    _isConnected = false;
+    isConnected = false;
     debugPrint('🔌 RIKAZ ESP32 Tools: RESET');
   }
 }
