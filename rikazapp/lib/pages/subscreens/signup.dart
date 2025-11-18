@@ -136,6 +136,7 @@ class _SignupScreenState extends State<SignupScreen> {
         setState(() {
           _postSignupMessage = 'A verification email has been sent to $email. Please click the link to confirm your account, then log in.';
           _isSuccessMessage = true;
+          _passwordController.clear();
         });
 
       } else {
@@ -145,7 +146,7 @@ class _SignupScreenState extends State<SignupScreen> {
           _isSuccessMessage = false;
         });
       }
-      // --- END OF NEW LOGIC ---
+      // --- END OF VERIFICATION LOGIC ---
       
     } on sb.AuthException catch (e) { 
       if (!mounted) return;

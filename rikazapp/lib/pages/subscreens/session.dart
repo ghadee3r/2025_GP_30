@@ -701,10 +701,7 @@ class _SessionPageState extends State<SessionPage>
   });
 }
 
-  // ========================================================================
-  // SHOW DEVICE LOST WARNING
-  // Alert dialog when BLE connection is lost during active session
-  // ========================================================================
+
   // ========================================================================
 // SHOW DEVICE LOST WARNING
 // Alert dialog when BLE connection is lost during active session
@@ -732,7 +729,7 @@ void _showDeviceLostWarning() {
           onPressed: () {
             Navigator.pop(context); // Close dialog first
             
-            // ✅ FORCE PAUSE - Even if already paused, ensure everything stops
+            // FORCE PAUSE - Even if already paused, ensure everything stops
             if (mounted) {
               // Stop the timer from counting
               if (status == 'running') {
@@ -1429,6 +1426,7 @@ class SoundOption {
   final String iconName;
   final String colorHex;
 
+  //Constructor
   SoundOption({
     required this.id,
     required this.name,
@@ -1437,6 +1435,8 @@ class SoundOption {
     required this.colorHex,
   });
 
+  // a "factory constructor." is a special helper
+  // to create a pre-configured SoundOption for the "No Sound" state.
   factory SoundOption.off() {
     return SoundOption(
       id: 'off',
@@ -1446,7 +1446,7 @@ class SoundOption {
       colorHex: '#64748B',
     );
   }
-
+  //Getter for icons
   IconData get icon {
     switch (iconName) {
       case 'water_drop_outlined':
@@ -1459,7 +1459,7 @@ class SoundOption {
         return Icons.volume_off_rounded;
     }
   }
-
+  //Getter for colors
   Color get color {
     final hexCode = colorHex.replaceAll('#', '');
     return Color(int.parse('FF$hexCode', radix: 16));
@@ -1469,6 +1469,7 @@ class SoundOption {
 // ============================================================================
 // SOUND CONTROL SECTION
 // ============================================================================
+
 class SoundSection extends StatefulWidget {
   const SoundSection({super.key});
 
@@ -1476,9 +1477,14 @@ class SoundSection extends StatefulWidget {
   State<SoundSection> createState() => _SoundSectionState();
 }
 
+// The "State" class holds all the logic and variables
+// that can change over time.
 class _SoundSectionState extends State<SoundSection> {
+  // The actual audio player instance from the 'audioplayers' package.
   final AudioPlayer _audioPlayer = AudioPlayer();
+  // This variable holds the future result of our database call.
   late Future<List<SoundOption>> _soundsFuture;
+  //Currently playing sounds
   late SoundOption _currentSound; 
   bool _isSoundPlaying = false;
   bool _isExpanded = false;
@@ -1486,11 +1492,14 @@ class _SoundSectionState extends State<SoundSection> {
   @override
   void initState() {
     super.initState();
+    //Loops sounds
     _audioPlayer.setReleaseMode(ReleaseMode.loop);
     _currentSound = SoundOption.off();
+    //Fetches sounds from DB to the list we will be using
     _soundsFuture = _fetchSoundsFromDB();
   }
 
+  //when the session is stopped, the sounds stop playing and the player disappears
   @override
   void dispose() {
     _audioPlayer.stop();
@@ -1498,16 +1507,21 @@ class _SoundSectionState extends State<SoundSection> {
     super.dispose();
   }
 
+  //Queries DB
   Future<List<SoundOption>> _fetchSoundsFromDB() async {
     try {
-      final supabase = Supabase.instance.client;
+      final supabase = Supabase.instance.client; // Get the Supabase client instance.
       final response = await supabase
           .from('Sound_Option')
           .select('sound_name, sound_file_path, icon_name, color_hex');
 
+      // Create a new list and immediately add our "No Sound"
+      // option as the first choice.
       final List<SoundOption> fetchedSounds = [SoundOption.off()];
 
       for (var item in response) {
+        //Create a SoundOption object from the database data
+        // and add it to our list.
         fetchedSounds.add(SoundOption(
           id: item['sound_name'],
           name: item['sound_name'],
@@ -1517,31 +1531,32 @@ class _SoundSectionState extends State<SoundSection> {
         ));
       }
 
-      return fetchedSounds;
+      return fetchedSounds; // Return the complete list (No Sound + DB sounds).
     } catch (e) {
       print('❌ Error fetching sounds: $e');
       return [SoundOption.off()];
     }
   }
 
+  // Function is called when a user taps on a sound in the list.
   Future<void> _onSoundSelected(SoundOption selectedSound) async {
-    if (!mounted) return;
+    if (!mounted) return;   // Safety check: is the widget still on screen?
 
-    await _audioPlayer.stop();
-
+    await _audioPlayer.stop();// Stop any sound currently playing.
+    // Check if the user selected "No Sound"
     if (selectedSound.id == 'off' || selectedSound.filePathUrl == null) {
-      setState(() {
-        _currentSound = SoundOption.off();
+      setState(() { 
+        _currentSound = SoundOption.off(); //If "No Sound" is tapped, reset the state and close the list.
         _isSoundPlaying = false;
         _isExpanded = false;
       });
-    } else {
+    } else { // If a sound was tapped:
       try {
-        await _audioPlayer.play(UrlSource(selectedSound.filePathUrl!));
+        await _audioPlayer.play(UrlSource(selectedSound.filePathUrl!)); //Play that sound
         setState(() {
-          _currentSound = selectedSound;
+          _currentSound = selectedSound;// Update the state: set the new sound, mark it as playing,
           _isSoundPlaying = true;
-          _isExpanded = false;
+          _isExpanded = false;   //Collapse the list.
         });
       } catch (e) {
         print('Error playing sound from URL: $e');
@@ -1553,41 +1568,45 @@ class _SoundSectionState extends State<SoundSection> {
       }
     }
   }
-
+// This is called when the user taps the play/pause icon in the HEADER.
   Future<void> _onPlayPauseTapped() async {
-    if (_currentSound.id == 'off') return;
+    if (_currentSound.id == 'off') return; // Do nothing if "No Sound" is selected.
 
     if (_isSoundPlaying) {
-      await _audioPlayer.pause();
+      await _audioPlayer.pause(); // If it's playing, pause it.
       if (mounted) {
-        setState(() => _isSoundPlaying = false);
+        setState(() => _isSoundPlaying = false); // Update UI
       }
     } else {
-      await _audioPlayer.resume();
+      await _audioPlayer.resume(); // If it's paused, resume it.
       if (mounted) {
-        setState(() => _isSoundPlaying = true);
+        setState(() => _isSoundPlaying = true); // Update UI
       }
     }
   }
 
+  // The build method that creates the UI.
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
 
+    // These are "computed variables" to clean up the UI code.
+    // They decide *what* to display based on the current state.
     final displayIcon = _isSoundPlaying ? _currentSound.icon : Icons.volume_off_rounded;
     final displayColor = _isSoundPlaying ? _currentSound.color : const Color(0xFF64748B);
     final String displayText = _isSoundPlaying
         ? 'Playing: ${_currentSound.name}'
         : (_currentSound.id == 'off' ? 'Background Sound' : 'Paused: ${_currentSound.name}');
 
+  // Use the FrostedGlassContainer we defined earlier.
     return FrostedGlassContainer(
       child: Column(
         children: [
-          InkWell(
+          InkWell( //InkWell makes the whole header tappable.
             onTap: () {
               if (!mounted) return;
               setState(() {
-                _isExpanded = !_isExpanded;
+                _isExpanded = !_isExpanded; // Tapping the header toggles the expand/collapse state.
               });
             },
             child: Padding(
@@ -1618,6 +1637,8 @@ class _SoundSectionState extends State<SoundSection> {
                       ),
                     ),
                   ),
+                  // This is the play/pause button in the header.
+                  // It is *only* shown if a real sound is selected.
                   if (_currentSound.id != 'off')
                     Padding(
                       padding: EdgeInsets.only(right: screenWidth * 0.03),
