@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert'; // ✅ ADD THIS for jsonEncode
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -7,7 +8,6 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:rikazapp/services/rikaz_light_service.dart';
 import 'package:rikazapp/widgets/rikaz_device_picker.dart';
 import 'package:rikazapp/main.dart';
-
 
 // ============================================================================
 // FROSTED GLASS EFFECT WIDGET
@@ -196,6 +196,55 @@ class _SessionPageState extends State<SessionPage>
   Timer? _connectionCheckTimer;        // Periodically checks ESP32 BLE connection
 
   // ========================================================================
+  // SEND TIMER UPDATE TO ESP32 LCD
+  // Syncs the countdown timer with the external LCD display
+  // ========================================================================
+Future<void> _sendTimerUpdateToESP32() async {
+  if (!_rikazConnected || !_lightInitialized) {
+    print('⏸️ RIKAZ: Skipping LCD update - device not connected');
+    return;
+  }
+  
+  final String currentStatus = status == 'running' ? 'running' : 'paused';
+  final String currentMode = mode; // 'focus' or 'break'
+  
+  final Map<String, dynamic> timerCommand = {
+    'timer': {
+      'minutes': timeLeft ~/ 60,
+      'seconds': timeLeft % 60,
+      'status': currentStatus,
+      'mode': currentMode,
+    }
+  };
+  
+  final String jsonCommand = jsonEncode(timerCommand);
+  
+  try {
+    print('📺 RIKAZ: Sending to LCD: $jsonCommand');
+    final bool success = await RikazLightService.sendCommand(jsonCommand);
+    if (!success) {
+      print('⚠️ RIKAZ: Failed to send timer update to LCD');
+    } else {
+      print('✅ RIKAZ: Timer sent to LCD: ${timeLeft ~/ 60}:${timeLeft % 60} ($currentStatus)');
+    }
+  } catch (e) {
+    print('❌ RIKAZ: Error sending timer update: $e');
+  }
+}
+
+// Add this method for positive reinforcement
+Future<void> _sendMotivationalMessage() async {
+  if (!_rikazConnected || !_lightInitialized) return;
+  
+  try {
+    final String motivationCommand = jsonEncode({'motivation': 'show'});
+    await RikazLightService.sendCommand(motivationCommand);
+    print('💪 RIKAZ: Sent motivational message to LCD');
+  } catch (e) {
+    print('❌ RIKAZ: Error sending motivation: $e');
+  }
+}
+  // ========================================================================
   // REUSABLE RESUME LOGIC
   // Handles light re-initialization and checks for failure before resuming.
   // ========================================================================
@@ -239,6 +288,10 @@ class _SessionPageState extends State<SessionPage>
       status = 'running';
     });
     pulseController.repeat(reverse: true);
+    
+    // 5. ✅ Update LCD with resumed state
+    _sendTimerUpdateToESP32();
+    
     print('▶️ RIKAZ: Session resumed');
     return true; // Resume SUCCESS
   }
@@ -317,6 +370,7 @@ class _SessionPageState extends State<SessionPage>
         status = 'paused';
       });
       pulseController.stop();
+      _sendTimerUpdateToESP32(); // ✅ Update LCD with paused state
       print('⏸️ RIKAZ: Session paused due to light command failure');
     }
     
@@ -337,6 +391,7 @@ class _SessionPageState extends State<SessionPage>
                   status = 'paused';
                 });
                 pulseController.stop();
+                _sendTimerUpdateToESP32(); // ✅ Update LCD with paused state
                 print('⏸️ RIKAZ: Session paused via SnackBar Reconnect button');
               }
               _handleReconnectAttempt();
@@ -633,6 +688,7 @@ class _SessionPageState extends State<SessionPage>
           if (mounted && success) {
             _lightInitialized = true;
             _startConnectionMonitoring();
+            _sendTimerUpdateToESP32(); // ✅ Send initial timer to LCD
             print('🔵 RIKAZ: Session started - Focus light ON');
           } else if (mounted && !success) {
             _handleLightCommandFailure();
@@ -652,7 +708,7 @@ class _SessionPageState extends State<SessionPage>
 
   // ========================================================================
   // START CONNECTION MONITORING
-  // Checks every 5 seconds if ESP32 is still connected via BLE
+  // Checks every 2 seconds if ESP32 is still connected via BLE
   // ========================================================================
   void _startConnectionMonitoring() {
   _connectionCheckTimer?.cancel();
@@ -672,30 +728,18 @@ class _SessionPageState extends State<SessionPage>
       RikazConnectionState.isConnected = false;
 
       if (mounted) {
-        // ✅ FORCE PAUSE immediately when connection is lost
-        bool wasRunning = status == 'running';
-        
+        // ✅ DON'T auto-pause - just update connection flags
         setState(() {
           _rikazConnected = false;
           _lightInitialized = false;
-          
-          // Pause the session
-          if (status == 'running') {
-            status = 'paused';
-          }
+          // Remove automatic pausing - let session continue
         });
         
-        // Stop animation outside setState
-        if (pulseController.isAnimating) {
-          pulseController.stop();
-        }
-        
-        print('⚠️ CONNECTION LOST - Session paused');
-        print('📊 Was running: $wasRunning');
-        print('📊 Current status: $status');
-        print('🎬 Animation stopped: ${!pulseController.isAnimating}');
+        print('⚠️ CONNECTION LOST - Session continues running (no auto-pause)');
+        print('📊 Current status: $status (unchanged)');
       }
       
+      // Show dialog when user opens app, but don't force pause
       _showDeviceLostWarning();
     }
   });
@@ -703,10 +747,10 @@ class _SessionPageState extends State<SessionPage>
 
 
   // ========================================================================
-// SHOW DEVICE LOST WARNING
-// Alert dialog when BLE connection is lost during active session
-// ========================================================================
-void _showDeviceLostWarning() {
+  // SHOW DEVICE LOST WARNING
+  // Alert dialog when BLE connection is lost during active session
+  // ========================================================================
+  void _showDeviceLostWarning() {
   if (!mounted) return;
   
   showDialog(
@@ -717,35 +761,27 @@ void _showDeviceLostWarning() {
       title: const Text('Rikaz Tools Disconnected'),
       content: const Text(
         'The Bluetooth connection to your Rikaz device was lost.\n\n'
-        'Your session has been paused automatically.\n\n'
-        'Click "Reconnect" to restore the connection and resume your session.'
+        'Your session is still running without external feedback.\n\n'
+        'Click "Reconnect" to restore the connection.'
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
+          child: const Text('Continue Without Rikaz'),
         ),
         ElevatedButton.icon(
           onPressed: () {
             Navigator.pop(context); // Close dialog first
             
-            // FORCE PAUSE - Even if already paused, ensure everything stops
-            if (mounted) {
-              // Stop the timer from counting
-              if (status == 'running') {
-                setState(() {
-                  status = 'paused';
-                });
-              }
-              
-              // Stop the pulsing animation
+            // ✅ NOW pause when user actively tries to reconnect
+            if (mounted && status == 'running') {
+              setState(() {
+                status = 'paused';
+              });
               if (pulseController.isAnimating) {
                 pulseController.stop();
               }
-              
-              print('⏸️ RIKAZ: Session FORCED PAUSE via Reconnect button');
-              print('📊 Current status: $status');
-              print('🎬 Animation running: ${pulseController.isAnimating}');
+              print('⏸️ RIKAZ: Session paused - User is reconnecting');
             }
             
             // Then attempt reconnection
@@ -762,8 +798,9 @@ void _showDeviceLostWarning() {
     ),
   );
   
-  debugPrint('⚠️ RIKAZ: BLE connection lost. Session automatically paused.');
+  debugPrint('⚠️ RIKAZ: BLE connection lost. Session continues running.');
 }
+
   // ========================================================================
   // TIMER LOGIC
   // Manages countdown and phase transitions
@@ -787,91 +824,104 @@ void _showDeviceLostWarning() {
             _totalFocusSeconds++;
           }
         });
+        
+        // ✅ Send timer update to LCD every second
+        _sendTimerUpdateToESP32();
       }
     });
   }
 
-  void onPhaseEnd() async { 
-    if (!mounted) return;
+void onPhaseEnd() async { 
+  if (!mounted) return;
 
-    // CUSTOM SESSION: End when time is up
-    if (!isPomodoro) {
-      setState(() => status = 'idle');
-      _timer?.cancel();
+  // CUSTOM SESSION: End when time is up
+  if (!isPomodoro) {
+    setState(() => status = 'idle');
+    _timer?.cancel();
 
+    // Send session completion message to LCD
+    if (_rikazConnected && _lightInitialized) {
+      final String completeCommand = jsonEncode({'sessionComplete': 'true'});
+      await RikazLightService.sendCommand(completeCommand);
+      
+      bool success = await RikazLightService.turnOff();
+      if (!success) {
+        print('❌ RIKAZ: Final turnOff failed due to connection loss.');
+      }
+      print('⚫ RIKAZ: Custom session ended - Light OFF');
+    }
+
+    _endSessionInDB(completed: true);
+    return;
+  }
+
+  // POMODORO SESSION: Switch between focus and break
+  if (mode == 'focus') {
+    if (!completedBlocks.contains(currentBlock)) {
+      completedBlocks.add(currentBlock);
+      _sendMotivationalMessage(); // ✅ Already implemented correctly
+    }
+    
+    setState(() {
+      mode = 'break';
+      timeLeft = breakMinutes * 60;
+    });
+
+    if (_rikazConnected && _lightInitialized) {
+      bool success = await RikazLightService.setBreakLight();
+      if (mounted && !success) {
+        _handleLightCommandFailure();
+        return; 
+      }
+      _sendTimerUpdateToESP32(); // ✅ Update LCD for break mode
+      print('🟡 RIKAZ: Break started - Break light ON');
+    }
+  } else {
+    final next = currentBlock + 1;
+    
+    if (next > totalBlocks) {
+      // All blocks complete - Send completion message
       if (_rikazConnected && _lightInitialized) {
+        final String completeCommand = jsonEncode({'sessionComplete': 'true'});
+        await RikazLightService.sendCommand(completeCommand);
+        
         bool success = await RikazLightService.turnOff();
         if (!success) {
           print('❌ RIKAZ: Final turnOff failed due to connection loss.');
         }
-        print('⚫ RIKAZ: Custom session ended - Light OFF');
-      }
-
-      _endSessionInDB(completed: true);
-      return;
-    }
-
-    // POMODORO SESSION: Switch between focus and break
-    if (mode == 'focus') {
-      if (!completedBlocks.contains(currentBlock)) {
-        completedBlocks.add(currentBlock);
+        print('⚫ RIKAZ: Pomodoro complete - Light OFF');
       }
       
       setState(() {
-        mode = 'break';
-        timeLeft = breakMinutes * 60;
+        mode = 'focus';
+        currentBlock = 1;
+        completedBlocks.clear();
+        timeLeft = focusMinutes * 60;
+        status = 'idle';
+      });
+      _timer?.cancel();
+
+      _endSessionInDB(completed: true);
+    } else {
+      // Start next block
+      setState(() {
+        currentBlock = next;
+        mode = 'focus';
+        timeLeft = focusMinutes * 60;
       });
 
       if (_rikazConnected && _lightInitialized) {
-        bool success = await RikazLightService.setBreakLight();
+        bool success = await RikazLightService.setFocusLight();
         if (mounted && !success) {
           _handleLightCommandFailure();
           return; 
         }
-        print('🟡 RIKAZ: Break started - Break light ON');
-      }
-    } else {
-      final next = currentBlock + 1;
-      
-      if (next > totalBlocks) {
-        // All blocks complete
-        setState(() {
-          mode = 'focus';
-          currentBlock = 1;
-          completedBlocks.clear();
-          timeLeft = focusMinutes * 60;
-          status = 'idle';
-        });
-        _timer?.cancel();
-
-        if (_rikazConnected && _lightInitialized) {
-          bool success = await RikazLightService.turnOff();
-          if (!success) {
-            print('❌ RIKAZ: Final turnOff failed due to connection loss.');
-          }
-          print('⚫ RIKAZ: Pomodoro complete - Light OFF');
-        }
-
-        _endSessionInDB(completed: true);
-      } else {
-        // Start next block
-        setState(() {
-          currentBlock = next;
-          mode = 'focus';
-          timeLeft = focusMinutes * 60;
-        });
-
-        if (_rikazConnected && _lightInitialized) {
-          bool success = await RikazLightService.setFocusLight();
-          if (mounted && !success) {
-            _handleLightCommandFailure();
-            return; 
-          }
-          print('🔵 RIKAZ: Focus resumed - Focus light ON');
-        }
+        _sendTimerUpdateToESP32(); // ✅ Update LCD for focus mode
+        print('🔵 RIKAZ: Focus resumed - Focus light ON');
       }
     }
   }
+}
 
   // ========================================================================
   // PAUSE/RESUME HANDLER
@@ -886,11 +936,12 @@ void _showDeviceLostWarning() {
     if (nextStatus == 'paused') {
       setState(() { status = nextStatus; });
       pulseController.stop();
+      _sendTimerUpdateToESP32(); // ✅ Update LCD with paused state
       print('⏸️ RIKAZ: Session manually paused (light remains ON)');
     } 
     // RESUMING: Use the robust helper
     else if (nextStatus == 'running') {
-      await _handleLightAndResume();
+      await _handleLightAndResume(); // This already calls _sendTimerUpdateToESP32()
     }
   }
 
@@ -1426,7 +1477,6 @@ class SoundOption {
   final String iconName;
   final String colorHex;
 
-  //Constructor
   SoundOption({
     required this.id,
     required this.name,
@@ -1435,8 +1485,6 @@ class SoundOption {
     required this.colorHex,
   });
 
-  // a "factory constructor." is a special helper
-  // to create a pre-configured SoundOption for the "No Sound" state.
   factory SoundOption.off() {
     return SoundOption(
       id: 'off',
@@ -1446,7 +1494,7 @@ class SoundOption {
       colorHex: '#64748B',
     );
   }
-  //Getter for icons
+
   IconData get icon {
     switch (iconName) {
       case 'water_drop_outlined':
@@ -1459,7 +1507,7 @@ class SoundOption {
         return Icons.volume_off_rounded;
     }
   }
-  //Getter for colors
+
   Color get color {
     final hexCode = colorHex.replaceAll('#', '');
     return Color(int.parse('FF$hexCode', radix: 16));
@@ -1469,7 +1517,6 @@ class SoundOption {
 // ============================================================================
 // SOUND CONTROL SECTION
 // ============================================================================
-
 class SoundSection extends StatefulWidget {
   const SoundSection({super.key});
 
@@ -1477,14 +1524,9 @@ class SoundSection extends StatefulWidget {
   State<SoundSection> createState() => _SoundSectionState();
 }
 
-// The "State" class holds all the logic and variables
-// that can change over time.
 class _SoundSectionState extends State<SoundSection> {
-  // The actual audio player instance from the 'audioplayers' package.
   final AudioPlayer _audioPlayer = AudioPlayer();
-  // This variable holds the future result of our database call.
   late Future<List<SoundOption>> _soundsFuture;
-  //Currently playing sounds
   late SoundOption _currentSound; 
   bool _isSoundPlaying = false;
   bool _isExpanded = false;
@@ -1492,14 +1534,11 @@ class _SoundSectionState extends State<SoundSection> {
   @override
   void initState() {
     super.initState();
-    //Loops sounds
     _audioPlayer.setReleaseMode(ReleaseMode.loop);
     _currentSound = SoundOption.off();
-    //Fetches sounds from DB to the list we will be using
     _soundsFuture = _fetchSoundsFromDB();
   }
 
-  //when the session is stopped, the sounds stop playing and the player disappears
   @override
   void dispose() {
     _audioPlayer.stop();
@@ -1507,21 +1546,16 @@ class _SoundSectionState extends State<SoundSection> {
     super.dispose();
   }
 
-  //Queries DB
   Future<List<SoundOption>> _fetchSoundsFromDB() async {
     try {
-      final supabase = Supabase.instance.client; // Get the Supabase client instance.
+      final supabase = Supabase.instance.client;
       final response = await supabase
           .from('Sound_Option')
           .select('sound_name, sound_file_path, icon_name, color_hex');
 
-      // Create a new list and immediately add our "No Sound"
-      // option as the first choice.
       final List<SoundOption> fetchedSounds = [SoundOption.off()];
 
       for (var item in response) {
-        //Create a SoundOption object from the database data
-        // and add it to our list.
         fetchedSounds.add(SoundOption(
           id: item['sound_name'],
           name: item['sound_name'],
@@ -1531,32 +1565,30 @@ class _SoundSectionState extends State<SoundSection> {
         ));
       }
 
-      return fetchedSounds; // Return the complete list (No Sound + DB sounds).
+      return fetchedSounds;
     } catch (e) {
       print('❌ Error fetching sounds: $e');
       return [SoundOption.off()];
     }
   }
 
-  // Function is called when a user taps on a sound in the list.
   Future<void> _onSoundSelected(SoundOption selectedSound) async {
-    if (!mounted) return;   // Safety check: is the widget still on screen?
+    if (!mounted) return;
 
-    await _audioPlayer.stop();// Stop any sound currently playing.
-    // Check if the user selected "No Sound"
+    await _audioPlayer.stop();
     if (selectedSound.id == 'off' || selectedSound.filePathUrl == null) {
       setState(() { 
-        _currentSound = SoundOption.off(); //If "No Sound" is tapped, reset the state and close the list.
+        _currentSound = SoundOption.off();
         _isSoundPlaying = false;
         _isExpanded = false;
       });
-    } else { // If a sound was tapped:
+    } else {
       try {
-        await _audioPlayer.play(UrlSource(selectedSound.filePathUrl!)); //Play that sound
+        await _audioPlayer.play(UrlSource(selectedSound.filePathUrl!));
         setState(() {
-          _currentSound = selectedSound;// Update the state: set the new sound, mark it as playing,
+          _currentSound = selectedSound;
           _isSoundPlaying = true;
-          _isExpanded = false;   //Collapse the list.
+          _isExpanded = false;
         });
       } catch (e) {
         print('Error playing sound from URL: $e');
@@ -1568,45 +1600,41 @@ class _SoundSectionState extends State<SoundSection> {
       }
     }
   }
-// This is called when the user taps the play/pause icon in the HEADER.
+
   Future<void> _onPlayPauseTapped() async {
-    if (_currentSound.id == 'off') return; // Do nothing if "No Sound" is selected.
+    if (_currentSound.id == 'off') return;
 
     if (_isSoundPlaying) {
-      await _audioPlayer.pause(); // If it's playing, pause it.
+      await _audioPlayer.pause();
       if (mounted) {
-        setState(() => _isSoundPlaying = false); // Update UI
+        setState(() => _isSoundPlaying = false);
       }
     } else {
-      await _audioPlayer.resume(); // If it's paused, resume it.
+      await _audioPlayer.resume();
       if (mounted) {
-        setState(() => _isSoundPlaying = true); // Update UI
+        setState(() => _isSoundPlaying = true);
       }
     }
   }
 
-  // The build method that creates the UI.
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
 
-    // These are "computed variables" to clean up the UI code.
-    // They decide *what* to display based on the current state.
     final displayIcon = _isSoundPlaying ? _currentSound.icon : Icons.volume_off_rounded;
     final displayColor = _isSoundPlaying ? _currentSound.color : const Color(0xFF64748B);
     final String displayText = _isSoundPlaying
         ? 'Playing: ${_currentSound.name}'
         : (_currentSound.id == 'off' ? 'Background Sound' : 'Paused: ${_currentSound.name}');
 
-  // Use the FrostedGlassContainer we defined earlier.
     return FrostedGlassContainer(
       child: Column(
         children: [
-          InkWell( //InkWell makes the whole header tappable.
+          InkWell(
             onTap: () {
               if (!mounted) return;
               setState(() {
-                _isExpanded = !_isExpanded; // Tapping the header toggles the expand/collapse state.
+                _isExpanded = !_isExpanded;
               });
             },
             child: Padding(
@@ -1637,8 +1665,6 @@ class _SoundSectionState extends State<SoundSection> {
                       ),
                     ),
                   ),
-                  // This is the play/pause button in the header.
-                  // It is *only* shown if a real sound is selected.
                   if (_currentSound.id != 'off')
                     Padding(
                       padding: EdgeInsets.only(right: screenWidth * 0.03),

@@ -191,7 +191,7 @@ class RikazLightService {
   }
 
   // Send BLE command
-  static Future<bool> _sendCommand(String jsonCommand) async {
+  static Future<bool> sendCommand(String jsonCommand) async {
     if (_writeCharacteristic == null) {
       debugPrint("❌ No characteristic available");
       return false;
@@ -221,7 +221,7 @@ class RikazLightService {
       "mode": "focus"
     });
     
-    bool success = await _sendCommand(command);
+    bool success = await sendCommand(command);
     if (success) {
       debugPrint("🔵 Focus light activated");
     }
@@ -235,7 +235,7 @@ class RikazLightService {
       "mode": "break"
     });
     
-    bool success = await _sendCommand(command);
+    bool success = await sendCommand(command);
     if (success) {
       debugPrint("🟡 Break light activated");
     }
@@ -248,7 +248,7 @@ class RikazLightService {
       "on": false
     });
     
-    bool success = await _sendCommand(command);
+    bool success = await sendCommand(command);
     if (success) {
       debugPrint("⚫ Light turned off");
     }
