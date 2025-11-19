@@ -69,7 +69,7 @@ class ForgotPasswordState extends State<ForgotPassword> {
     });
 
     try {
-      // 🚨 SUPABASE RESET PASSWORD REQUEST 🚨
+      // SUPABASE RESET PASSWORD REQUEST
       // This sends the email with the reset link.
       await supabase.auth.resetPasswordForEmail(
         email,
@@ -93,7 +93,7 @@ class ForgotPasswordState extends State<ForgotPassword> {
       final message = e.message;
       debugPrint("Supabase Reset Error: $message");
 
-      // 🔒 Detect Supabase rate-limit message
+      // Detect Supabase rate-limit message
       if (message.contains("For security purposes")) {
         // Extract the remaining seconds (if present)
         final secondsMatch = RegExp(r'(\d+)\s*seconds?').firstMatch(message);

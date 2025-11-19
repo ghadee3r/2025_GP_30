@@ -45,6 +45,8 @@ class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  // Controller for confirming the password
+  final TextEditingController _confirmPasswordController = TextEditingController(); 
 
   // State to hold the post-signup success/error message
   String _postSignupMessage = ''; 
@@ -53,22 +55,30 @@ class _SignupScreenState extends State<SignupScreen> {
 
   bool _isSubmitting = false;
 
+  // State to manage password visibility
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
+
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    //  Dispose the new controller
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-// 🚨 SUPABASE SIGN UP LOGIC WITH ON-SCREEN ERROR 🚨
+// SUPABASE SIGN UP LOGIC WITH ON-SCREEN ERROR
   Future<void> _handleSignup() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text;
+    //  Get the confirmed password
+    final confirmPassword = _confirmPasswordController.text;
 
     // --- Validation Checks ---
-    if (name.isEmpty || email.isEmpty || password.isEmpty) {
+    if (name.isEmpty || email.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
       _showAlert(context, "Missing Info", "Please fill in all fields.");
       return;
     }
@@ -77,6 +87,12 @@ class _SignupScreenState extends State<SignupScreen> {
       return;
     }
     
+    // ➕ NEW: Check if passwords match
+    if (password != confirmPassword) {
+      _showAlert(context, "Password Mismatch", "Passwords do not match.");
+      return;
+    }
+
     // Updated password validation with specific error messages
     if (password.length < 12) {
       _showAlert(context, "Weak Password", "Password must be at least 12 characters long.");
@@ -136,7 +152,9 @@ class _SignupScreenState extends State<SignupScreen> {
         setState(() {
           _postSignupMessage = 'A verification email has been sent to $email. Please click the link to confirm your account, then log in.';
           _isSuccessMessage = true;
+          // Clear password fields on successful sign up
           _passwordController.clear();
+          _confirmPasswordController.clear();
         });
 
       } else {
@@ -173,12 +191,15 @@ class _SignupScreenState extends State<SignupScreen> {
     }
   }
 
+  // included obscureText and onToggleVisibility
   Widget _buildTextInput({
     required TextEditingController controller,
     required String hintText,
     required TextInputType keyboardType,
     bool obscureText = false,
     bool autocorrect = true,
+    // ➕ NEW: Parameters for visibility toggle
+    VoidCallback? onToggleVisibility, 
   }) {
     return TextField(
       controller: controller,
@@ -189,6 +210,14 @@ class _SignupScreenState extends State<SignupScreen> {
       decoration: InputDecoration(
         hintText: hintText,
         contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+        // ➕ NEW: Add the suffix icon for visibility toggle if the callback is provided
+        suffixIcon: onToggleVisibility != null ? IconButton(
+          icon: Icon(
+            obscureText ? Icons.visibility : Icons.visibility_off,
+            color: const Color(0xFF666666),
+          ),
+          onPressed: onToggleVisibility,
+        ) : null,
       ),
     );
   }
@@ -214,12 +243,15 @@ class _SignupScreenState extends State<SignupScreen> {
               ),
               const SizedBox(height: 24),
 
+              // Full Name
               _buildTextInput(
                 controller: _nameController,
                 hintText: "Full Name",
                 keyboardType: TextInputType.text,
               ),
               const SizedBox(height: 12),
+              
+              // Email
               _buildTextInput(
                 controller: _emailController,
                 hintText: "Email",
@@ -227,15 +259,48 @@ class _SignupScreenState extends State<SignupScreen> {
                 autocorrect: false,
               ),
               const SizedBox(height: 12),
+              
+              // Password use visibility toggle
               _buildTextInput(
                 controller: _passwordController,
                 hintText: "Password",
                 keyboardType: TextInputType.visiblePassword,
-                obscureText: true,
+                obscureText: _obscurePassword,
                 autocorrect: false,
+                onToggleVisibility: () {
+                  setState(() {
+                    _obscurePassword = !_obscurePassword;
+                  });
+                },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
+              
+              // Confirm Password
+              _buildTextInput(
+                controller: _confirmPasswordController,
+                hintText: "Confirm Password",
+                keyboardType: TextInputType.visiblePassword,
+                obscureText: _obscureConfirmPassword,
+                autocorrect: false,
+                onToggleVisibility: () {
+                  setState(() {
+                    _obscureConfirmPassword = !_obscureConfirmPassword;
+                  });
+                },
+              ),
 
+              // Password requirements note
+              const Padding(
+                padding: EdgeInsets.only(top: 8.0, bottom: 16.0),
+                child: Text(
+                  'Password must be at least 12 characters long and contain:\n• One uppercase letter • One lowercase letter\n• One number • One special character (!@#\$%^&*)',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF666666),
+                  ),
+                ),
+              ),
+              
               ElevatedButton(
                 onPressed: _isSubmitting ? null : _handleSignup,
                 child: Text(
