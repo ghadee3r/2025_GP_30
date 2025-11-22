@@ -1,6 +1,4 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:slide_to_act/slide_to_act.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/calendar/v3.dart' as calendar;
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
@@ -345,10 +343,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Future<void> _fetchSchedule() async {
     if (!_client.isConnected) {
-      if (mounted) setState(() {
+      if (mounted) {
+        setState(() {
         _events = [];
         _displayedEvents = [];
       });
+      }
       return;
     }
 
@@ -522,28 +522,28 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   // REMOVED: buildRikazConnectLocal widget
 
-Widget buildFocusSessionLocal() {
-  final screenHeight = MediaQuery.of(context).size.height;
-  final screenWidth = MediaQuery.of(context).size.width;
-  final hasSelectedMode = selectedModeIndex != null;
+  Widget buildFocusSessionLocal() {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final hasSelectedMode = selectedModeIndex != null;
 
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        'Start Focus Session',
-        style: TextStyle(
-          fontSize: _adaptiveFontSize(0.045),
-          fontWeight: FontWeight.bold,
-          color: localPrimaryTextDark,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Start Focus Session',
+          style: TextStyle(
+            // MODIFIED: Use _adaptiveFontSize
+            fontSize: _adaptiveFontSize(0.045),
+            fontWeight: FontWeight.bold,
+            color: localPrimaryTextDark,
+          ),
         ),
-      ),
-      // FLEXIBLE HEIGHT
-      SizedBox(height: screenHeight * 0.02),
+        // FLEXIBLE HEIGHT
+        SizedBox(height: screenHeight * 0.02),
 
-      // 🎯 FIX: IntrinsicHeight forces all children of the Row to match the height of the tallest child.
-      IntrinsicHeight(
-        child: Row(
+        // Mode Selection Cards - Refactored to use Flexible sizing
+        Row(
           children: List.generate(modes.length, (i) {
             final mode = modes[i];
             final selected = selectedModeIndex == i;
@@ -552,30 +552,34 @@ Widget buildFocusSessionLocal() {
             final Color selectedTextColor = hpDeepBlue;
             final Color defaultTextColor = hpDeepBlue;
 
-            return Expanded(
+            return Expanded( // Ensures cards share horizontal space
               child: GestureDetector(
                 onTap: () => setState(() => selectedModeIndex = i),
                 child: AnimatedScale(
-                  scale: selected ? 1.08 : 1.0,
+                  scale: selected ? 1.08 : 1.0, // Slight enlargement when selected
                   duration: const Duration(milliseconds: 250),
                   curve: Curves.easeInOut,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 250),
+                    // FLEXIBLE MARGIN
                     margin: EdgeInsets.only(
                       right: i == 0 ? screenWidth * 0.03 : 0,
                       left: i == 1 ? screenWidth * 0.03 : 0,
                     ),
-                    
-                    // You can remove the constraints here, as IntrinsicHeight handles it
-                    // but keeping it as a minimum is harmless.
-                    constraints: BoxConstraints(
-                      minHeight: screenHeight * 0.12, 
+                    // REMOVED FIXED HEIGHT TO PREVENT OVERFLOW
+
+                    // FLEXIBLE PADDING
+                    padding: EdgeInsets.symmetric(
+                        vertical: screenHeight * 0.02, 
+                        horizontal: screenWidth * 0.03
                     ),
-                    
+                    constraints: BoxConstraints(
+                        minHeight: screenHeight * 0.12, 
+                    ),
                     decoration: BoxDecoration(
                       color: selected ? modeBgColor : localCardBackground,
                       borderRadius:
-                          BorderRadius.circular(cardBorderRadius / 2),
+                      BorderRadius.circular(cardBorderRadius / 2),
                       border: Border.all(color: Colors.transparent, width: 0),
                       boxShadow: [
                         BoxShadow(
@@ -584,32 +588,33 @@ Widget buildFocusSessionLocal() {
                           offset: const Offset(0, 8),
                         ),
                       ],
+
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      // The combination of IntrinsicHeight on the Row
-                      // and MainAxisAlignment.center on the Column ensures
-                      // the content is centered vertically within the now-equal height.
-                      mainAxisSize: MainAxisSize.max, // <--- Change to max to fill the expanded height
+                      mainAxisSize: MainAxisSize.min, // Ensure minimal height usage
                       children: [
                         Text(
                           mode['title']!,
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
+                            // MODIFIED: Use _adaptiveFontSize
                             fontSize: _adaptiveFontSize(0.04),
                             color: selected
                                 ? selectedTextColor
                                 : defaultTextColor,
                           ),
                         ),
+                        // FLEXIBLE HEIGHT
                         SizedBox(height: screenHeight * 0.008),
                         Text(
                           mode['desc']!,
                           textAlign: TextAlign.center,
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 2,
+                            overflow: TextOverflow.ellipsis, // Added fallback
+                            maxLines: 2, // Added fallback
                           style: TextStyle(
+                            // MODIFIED: Use _adaptiveFontSize
                             fontSize: _adaptiveFontSize(0.03),
                             color: selected
                                 ? selectedTextColor.withOpacity(0.7)
@@ -620,11 +625,9 @@ Widget buildFocusSessionLocal() {
                     ),
                   ),
                 ),
-              ),
-            );
+              ));
           }),
         ),
-      ),
         // FLEXIBLE HEIGHT
         SizedBox(height: screenHeight * 0.03),
 
@@ -949,7 +952,7 @@ Widget buildFocusSessionLocal() {
     final activeColor = primaryThemePurple;
     final inactiveColor = secondaryTextGrey;
 
-    Widget _buildButton(ScheduleView view, String text, IconData icon) {
+    Widget buildButton(ScheduleView view, String text, IconData icon) {
       final isSelected = _scheduleView == view;
       return Expanded(
         child: InkWell(
@@ -991,10 +994,10 @@ Widget buildFocusSessionLocal() {
 
     return Row(
       children: [
-        _buildButton(ScheduleView.all, 'All Calendar', Icons.calendar_month),
+        buildButton(ScheduleView.all, 'All Calendar', Icons.calendar_month),
         // FLEXIBLE WIDTH
         SizedBox(width: screenWidth * 0.02),
-        _buildButton(ScheduleView.rikaz, 'Rikaz Focus', Icons.auto_awesome),
+        buildButton(ScheduleView.rikaz, 'Rikaz Focus', Icons.auto_awesome),
       ],
     );
   }
@@ -1139,7 +1142,10 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
   }
 
   // Handles the Add action (Two-way sync: Write)
-  Future<void> _handleSave() async {
+Future<void> _handleSave() async {
+    // 💡 FIX 1: Dismiss the keyboard to ensure the button is pressable
+    FocusScope.of(context).unfocus(); 
+    
     if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
 
@@ -1270,6 +1276,7 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
   }
 
   // Handles the Delete action (Two-way sync: Write)
+  // (No changes needed for _handleDelete)
   Future<void> _handleDelete() async {
     if (!isEditing || widget.eventToEdit!.id == null) return;
 
@@ -1423,20 +1430,24 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
             ),
             // --- END: HEADER AND CLOSE BUTTON ---
 
-            // FLEXIBLE HEIGHT DIVIDER
+           // FLEXIBLE HEIGHT DIVIDER
             Divider(height: screenHeight * 0.025, color: Colors.grey),
 
             // Title Field - uses flexible input decoration
-            TextFormField(
-              initialValue: isEditing ? _title : null,
-              decoration: _inputDecoration(
-                label: 'Session Title',
-                icon: Icons.title,
-                enabled: !isEditing,
+            // 💡 FIX 2: Wrapped in Padding to help prevent horizontal overflow
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.01),
+              child: TextFormField(
+                initialValue: isEditing ? _title : null,
+                decoration: _inputDecoration(
+                  label: 'Session Title',
+                  icon: Icons.title,
+                  enabled: !isEditing,
+                ),
+                validator: (value) => value == null || value.isEmpty ? 'Title is required' : null,
+                onSaved: (value) => _title = value!,
+                readOnly: isEditing,
               ),
-              validator: (value) => value == null || value.isEmpty ? 'Title is required' : null,
-              onSaved: (value) => _title = value!,
-              readOnly: isEditing,
             ),
             // FLEXIBLE HEIGHT
             SizedBox(height: screenHeight * 0.015),
@@ -1507,7 +1518,8 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                 if (!isEditing)
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: _handleSave,
+                      // This onPressed now triggers the modified _handleSave which dismisses the keyboard
+                      onPressed: _handleSave, 
                       icon: const Icon(Icons.add, color: Colors.white),
                       label: Text('Add Session', style: TextStyle(fontSize: _adaptiveFontSize(0.038))), // MODIFIED
                       style: ElevatedButton.styleFrom(
@@ -1519,7 +1531,6 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                       ),
                     ),
                   ),
-
                 // Delete Button (Only visible when editing an existing event)
                 if (isEditing)
                   Expanded(
