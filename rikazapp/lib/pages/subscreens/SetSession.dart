@@ -1,56 +1,105 @@
 // ============================================================================
 // FILE: SetSession.dart
 // PURPOSE: Session configuration page with BLE device connection
+// REDESIGNED: Matching Home theme with improved hardware connection clarity
 // ============================================================================
 
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:slide_to_act/slide_to_act.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import '/services/rikaz_light_service.dart';
 import '/widgets/rikaz_device_picker.dart';
 import '/main.dart';
 
 // =============================================================================
-// THEME DEFINITIONS
+// THEME DEFINITIONS - Matching Home Page
 // =============================================================================
 
-const Color primaryThemePurple = Color(0xFF7A68FF);
-const Color hpDeepBlue = Color.fromARGB(255, 24, 114, 150);
-const Color primaryTextDark = Color(0xFF30304D);
-const Color secondaryTextGrey = Color(0xFF8C8C99);
-const Color softAccentHighlight = Color(0xFFE9E5FF);
-const Color softLavender = Color(0xFFE9E5FF);
-const Color softCyan = Color(0xFFE8F8FF);
-const Color primaryBackground = Color(0xFFFFFFFF);
-const Color cardBackground = Color(0xFFFFFFFF);
+// Primary color palette (matching HomePage)
+const Color dfDeepTeal = Color(0xFF175B73); 
+const Color dfTealCyan = Color(0xFF287C85); 
+const Color dfLightSeafoam = Color(0xFF87ACA3); 
+const Color dfDeepBlue = Color(0xFF162893); 
+const Color dfNavyIndigo = Color(0xFF0C1446); 
 
-const double cardBorderRadius = 24.0;
+// Primary theme colors
+const Color primaryThemeColor = dfDeepBlue;      
+const Color accentThemeColor = dfTealCyan;      
+const Color lightestAccentColor = dfLightSeafoam; 
 
+// Background colors
+const Color primaryBackground = Color(0xFFF7F7F7); 
+const Color cardBackground = Color(0xFFFFFFFF);  
+
+// Text colors
+const Color primaryTextDark = dfNavyIndigo;      
+const Color secondaryTextGrey = Color(0xFF6B6B78); 
+
+// Error/alert color
+const Color errorIndicatorRed = Color(0xFFE57373); 
+
+// Standard border radius for cards
+const double cardBorderRadius = 16.0; 
+
+// Standard shadow for elevated cards
 List<BoxShadow> get subtleShadow => [
       BoxShadow(
-        color: const Color.fromARGB(255, 155, 141, 255).withOpacity(0.4),
-        blurRadius: 20,
-        offset: const Offset(0, 10),
-      ),
-    ];
-
-List<BoxShadow> get cardShadow => [
-      BoxShadow(
-        color: Colors.black.withOpacity(0.05),
-        offset: const Offset(0, 5),
+        color: dfNavyIndigo.withOpacity(0.08), 
         blurRadius: 10,
+        offset: const Offset(0, 5),
       ),
     ];
-
-// Configuration presets for quick setup
-const List<String> toolPresets = [
-  'Select a Preset',
-  'Aggressive Focus (High Sensitivity)',
-  'Study Chill (Low Sensitivity)',
-  'Quiet Office (Light only)',
-];
 
 enum SessionMode { pomodoro, custom }
+
+// Sound option model
+class SoundOption {
+  final String id;
+  final String name;
+  final String? filePathUrl;
+  final String iconName;
+  final String colorHex;
+
+  SoundOption({
+    required this.id,
+    required this.name,
+    required this.filePathUrl,
+    required this.iconName,
+    required this.colorHex,
+  });
+
+  factory SoundOption.off() {
+    return SoundOption(
+      id: 'off',
+      name: 'No Sound',
+      filePathUrl: null,
+      iconName: 'volume_off_rounded',
+      colorHex: '#6B6B78',
+    );
+  }
+
+  IconData get icon {
+    switch (iconName) {
+      case 'water_drop_outlined':
+        return Icons.water_drop_outlined;
+      case 'water_rounded':
+        return Icons.water_rounded;
+      case 'waves_rounded':
+        return Icons.waves_rounded;
+      case 'volume_off_rounded':
+        return Icons.volume_off_rounded;
+      default:
+        return Icons.music_note_rounded;
+    }
+  }
+
+  Color get color {
+    final hexCode = colorHex.replaceAll('#', '');
+    return Color(int.parse('FF$hexCode', radix: 16));
+  }
+}
 
 
 // =============================================================================
@@ -66,7 +115,7 @@ class SetSessionPage extends StatefulWidget {
   State<SetSessionPage> createState() => _SetSessionPageState();
 }
 
-class _SetSessionPageState extends State<SetSessionPage> {
+class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProviderStateMixin {
   // --- SESSION MODE STATE ---
   late SessionMode sessionMode;
 
@@ -78,11 +127,20 @@ class _SetSessionPageState extends State<SetSessionPage> {
   double customDuration = 70;
 
   // --- CONFIGURATION STATE ---
-  bool isConfigurationOpen = false; 
-  bool isCameraDetectionEnabled = true; // Future sprint: camera detection
-  double sensitivity = 0.5; // Future sprint: detection sensitivity
-  String notificationStyle = 'Both'; // Future sprint: alert type
-  String selectedPreset = toolPresets.first;
+  // These are saved to database and sent to session page
+  bool isCameraDetectionEnabled = true;
+  double sensitivity = 0.5;
+  String notificationStyle = 'Both';
+  
+  // UI state for configuration menu (kept for future use)
+  bool isConfigurationOpen = false;
+  
+  // --- SOUND SELECTION STATE ---
+  SoundOption _selectedSound = SoundOption.off();
+  List<SoundOption> _availableSounds = [];
+  bool _soundsLoaded = false;
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  Timer? _previewTimer;
 
   // --- RIKAZ BLE CONNECTION STATE ---
   bool get isRikazToolConnected => RikazConnectionState.isConnected;
@@ -95,24 +153,30 @@ class _SetSessionPageState extends State<SetSessionPage> {
   bool _deviceWasConnected = false;
   bool _hasShownDisconnectWarning = false;
 
+  // Animation controller for pulsing hardware icons
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
+
   // Slider reset key
   final GlobalKey<SlideActionState> _slideKey = GlobalKey<SlideActionState>();
-
-  // Theme colors (local references for readability)
-  final Color primaryColor = primaryThemePurple;
-  final Color darkText = primaryTextDark;
-  final Color lightText = secondaryTextGrey;
-  final Color localCardBackground = cardBackground;
-  final Color localPrimaryThemePurple = primaryThemePurple;
-  final Color localSecondaryTextGrey = secondaryTextGrey;
-  final double radius = cardBorderRadius / 2;
-  final Color blueText = hpDeepBlue;
 
   @override
   void initState() {
     super.initState();
     sessionMode = widget.initialMode ?? SessionMode.pomodoro;
-    _applyPreset(selectedPreset);
+    
+    // Setup pulse animation for hardware icons
+    _pulseController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    )..repeat(reverse: true);
+    
+    _pulseAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+    
+    // Load available sounds
+    _loadSounds();
     
     // Restore connection state if already connected
     if (RikazConnectionState.isConnected) {
@@ -125,7 +189,69 @@ class _SetSessionPageState extends State<SetSessionPage> {
   @override
   void dispose() {
     _connectionCheckTimer?.cancel();
+    _pulseController.dispose();
+    _previewTimer?.cancel();
+    _audioPlayer.stop();
+    _audioPlayer.dispose();
     super.dispose();
+  }
+  
+  // Load sounds from database
+  Future<void> _loadSounds() async {
+    try {
+      final supabase = sb.Supabase.instance.client;
+      final response = await supabase
+          .from('Sound_Option')
+          .select('sound_name, sound_file_path, icon_name, color_hex');
+
+      final List<SoundOption> fetchedSounds = [SoundOption.off()];
+
+      for (var item in response) {
+        fetchedSounds.add(SoundOption(
+          id: item['sound_name'],
+          name: item['sound_name'],
+          filePathUrl: item['sound_file_path'],
+          iconName: item['icon_name'],
+          colorHex: item['color_hex'],
+        ));
+      }
+
+      if (mounted) {
+        setState(() {
+          _availableSounds = fetchedSounds;
+          _soundsLoaded = true;
+        });
+      }
+    } catch (e) {
+      print('❌ Error fetching sounds: $e');
+      if (mounted) {
+        setState(() {
+          _availableSounds = [SoundOption.off()];
+          _soundsLoaded = true;
+        });
+      }
+    }
+  }
+  
+  // Play 5-second preview of selected sound
+  Future<void> _playPreview(SoundOption sound) async {
+    _previewTimer?.cancel();
+    await _audioPlayer.stop();
+    
+    if (sound.id == 'off' || sound.filePathUrl == null) {
+      return;
+    }
+    
+    try {
+      await _audioPlayer.play(UrlSource(sound.filePathUrl!));
+      
+      // Stop after 5 seconds
+      _previewTimer = Timer(const Duration(seconds: 5), () {
+        _audioPlayer.stop();
+      });
+    } catch (e) {
+      print('❌ Error playing sound preview: $e');
+    }
   }
 
   // Adaptive font sizing for different screen sizes
@@ -133,64 +259,30 @@ class _SetSessionPageState extends State<SetSessionPage> {
     final screenWidth = MediaQuery.of(context).size.width;
     final baseSize = screenWidth * baseScreenWidthMultiplier;
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
-    final mitigationFactor = 0.8; 
+    final mitigationFactor = 0.9; 
     return baseSize / (1.0 + (textScaleFactor - 1.0) * mitigationFactor);
-  }
-
-  // Apply configuration preset
-  void _applyPreset(String preset) {
-    if (preset == 'Aggressive Focus (High Sensitivity)') {
-      isCameraDetectionEnabled = true;
-      sensitivity = 1.0;
-      notificationStyle = 'Both';
-    } else if (preset == 'Study Chill (Low Sensitivity)') {
-      isCameraDetectionEnabled = true;
-      sensitivity = 0.0;
-      notificationStyle = 'Sound';
-    } else if (preset == 'Quiet Office (Light only)') {
-      isCameraDetectionEnabled = true;
-      sensitivity = 0.5;
-      notificationStyle = 'Light';
-    } else {
-      isCameraDetectionEnabled = true;
-      sensitivity = 0.5;
-      notificationStyle = 'Both';
-    }
-
-    if (mounted && selectedPreset != preset) {
-      setState(() {
-        selectedPreset = preset;
-      });
-    }
   }
 
   // Handle session start button press
   void handleStartSessionPress() {
+    // Show friendly reminder if hardware is not connected, but allow proceeding
+    if (!isRikazToolConnected) {
+      _showHardwareReminderDialog();
+      return;
+    }
+    
     // Warn if device was connected but is now unplugged
-    if (RikazConnectionState.isConnected && !_deviceWasConnected && _hasShownDisconnectWarning) {
+    if (_deviceWasConnected && !isRikazToolConnected && _hasShownDisconnectWarning) {
       showDialog(
         context: context,
-        builder: (context) => AlertDialog(
-          icon: Icon(Icons.warning_amber_rounded, color: Colors.orange.shade600, size: 48),
-          title: const Text('Device Unplugged'),
-          content: const Text(
-            'Rikaz Tools device appears to be unplugged.\n\n'
-            'The session will start without hardware control. '
-            'Plug in the device to enable lights.'
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _navigateToSession();
-              },
-              child: const Text('Start Anyway'),
-            ),
-          ],
+        builder: (context) => _buildThemedDialog(
+          title: 'Device Unplugged',
+          content: 'Rikaz Tools device appears to be unplugged.\n\nThe session will start without hardware control. Plug in the device to enable lights.',
+          icon: Icons.warning_amber_rounded,
+          iconColor: Colors.orange.shade600,
+          cancelText: 'Cancel',
+          confirmText: 'Start Anyway',
+          onConfirm: _navigateToSession,
         ),
       );
       return;
@@ -199,11 +291,173 @@ class _SetSessionPageState extends State<SetSessionPage> {
     _navigateToSession();
   }
   
+  // Show friendly reminder about hardware connection (but allow user to proceed)
+  void _showHardwareReminderDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => _buildThemedDialog(
+        title: 'Hardware Not Connected',
+        content: 'You haven\'t connected your Rikaz Tools hardware yet.\n\nConnecting enables:\n• Smart light feedback\n• Screen monitoring\n\nYou can still start the session without it.',
+        icon: Icons.lightbulb_outline,
+        iconColor: accentThemeColor,
+        cancelText: 'Connect Now',
+        confirmText: 'Continue Anyway',
+        onCancel: () {
+          Navigator.pop(context);
+          // User can scroll up to connect
+        },
+        onConfirm: _navigateToSession,
+      ),
+    );
+  }
+  
+  // Helper widget for feature list in dialog
+  Widget _buildFeatureRow(IconData icon, String text) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).size.height * 0.008),
+      child: Row(
+        children: [
+          Icon(icon, color: accentThemeColor, size: _adaptiveFontSize(0.045)),
+          SizedBox(width: MediaQuery.of(context).size.width * 0.02),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: _adaptiveFontSize(0.032),
+              color: primaryTextDark,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // Build themed dialog widget for consistent styling
+  Widget _buildThemedDialog({
+    required String title,
+    required String content,
+    required IconData icon,
+    required Color iconColor,
+    required String cancelText,
+    required String confirmText,
+    VoidCallback? onCancel,
+    VoidCallback? onConfirm,
+  }) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(cardBorderRadius)),
+      backgroundColor: cardBackground,
+      child: Padding(
+        padding: EdgeInsets.all(MediaQuery.of(context).size.width * 0.05),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Icon
+            Container(
+              padding: EdgeInsets.all(MediaQuery.of(context).size.width * 0.04),
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icon,
+                color: iconColor,
+                size: MediaQuery.of(context).size.width * 0.12,
+              ),
+            ),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.02),
+            
+            // Title
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: _adaptiveFontSize(0.045),
+                fontWeight: FontWeight.bold,
+                color: primaryTextDark,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.015),
+            
+            // Content
+            Text(
+              content,
+              style: TextStyle(
+                fontSize: _adaptiveFontSize(0.035),
+                color: secondaryTextGrey,
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.025),
+            
+            // Action buttons
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: onCancel ?? () => Navigator.pop(context),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.symmetric(
+                        vertical: MediaQuery.of(context).size.height * 0.015,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: secondaryTextGrey.withOpacity(0.3)),
+                      ),
+                    ),
+                    child: Text(
+                      cancelText,
+                      style: TextStyle(
+                        color: secondaryTextGrey,
+                        fontSize: _adaptiveFontSize(0.035),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(width: MediaQuery.of(context).size.width * 0.03),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      if (onConfirm != null) onConfirm();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryThemeColor,
+                      padding: EdgeInsets.symmetric(
+                        vertical: MediaQuery.of(context).size.height * 0.015,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 2,
+                    ),
+                    child: Text(
+                      confirmText,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: _adaptiveFontSize(0.035),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
   // Navigate to session page with configuration
   void _navigateToSession() {
     final String sessionType = sessionMode == SessionMode.pomodoro ? 'pomodoro' : 'custom';
     final String durationValue = sessionMode == SessionMode.pomodoro ? pomodoroDuration : customDuration.toInt().toString();
     final String? blocks = sessionMode == SessionMode.pomodoro ? numberOfBlocks.toInt().toString() : null;
+
+    // Stop any preview playing
+    _previewTimer?.cancel();
+    _audioPlayer.stop();
 
     Navigator.pushNamed(
       context,
@@ -216,6 +470,9 @@ class _SetSessionPageState extends State<SetSessionPage> {
         'sensitivity': sensitivity,
         'notificationStyle': notificationStyle,
         'rikazConnected': RikazConnectionState.isConnected,
+        'selectedSoundId': _selectedSound.id,
+        'selectedSoundName': _selectedSound.name,
+        'selectedSoundUrl': _selectedSound.filePathUrl,
       },
     );
   }
@@ -328,26 +585,14 @@ class _SetSessionPageState extends State<SetSessionPage> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        icon: Icon(Icons.link_off, color: Colors.red.shade700, size: 48),
-        title: const Text('Rikaz Tools Disconnected'),
-        content: const Text(
-          'The Bluetooth connection to your Rikaz device was lost (unplugged or out of range).\n\n'
-          'Please ensure the device is powered on and try reconnecting.'
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _handleRikazConnect(); 
-            },
-            child: const Text('Reconnect Now'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
+      builder: (context) => _buildThemedDialog(
+        title: 'Hardware Disconnected',
+        content: 'The Bluetooth connection to your Rikaz device was lost.\n\nThis could be due to:\n• Device unplugged\n• Out of range\n• Low battery\n\nPlease check your device and try reconnecting.',
+        icon: Icons.bluetooth_disabled_rounded,
+        iconColor: errorIndicatorRed,
+        cancelText: 'Close',
+        confirmText: 'Reconnect Now',
+        onConfirm: _handleRikazConnect,
       ),
     );
     
@@ -382,23 +627,17 @@ class _SetSessionPageState extends State<SetSessionPage> {
   Future<void> _handleRikazDisconnect() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Disconnect Rikaz Tools?'),
-        content: const Text(
-          'This will disable hardware control (lights) for your sessions.\n\n'
-          'You can reconnect anytime.'
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Disconnect'),
-          ),
-        ],
+      builder: (context) => _buildThemedDialog(
+        title: 'Disconnect Hardware?',
+        content: 'This will disable hardware features (lights and monitoring) for your sessions.\n\nYou can reconnect anytime.',
+        icon: Icons.power_settings_new_rounded,
+        iconColor: errorIndicatorRed,
+        cancelText: 'Cancel',
+        confirmText: 'Disconnect',
+        onCancel: () => Navigator.pop(context, false),
+        onConfirm: () {
+          Navigator.pop(context, true);
+        },
       ),
     );
 
@@ -418,9 +657,11 @@ class _SetSessionPageState extends State<SetSessionPage> {
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Rikaz Tools disconnected'),
+          SnackBar(
+            content: Text('Hardware disconnected'),
+            backgroundColor: primaryThemeColor,
             duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -433,162 +674,274 @@ class _SetSessionPageState extends State<SetSessionPage> {
   // UI COMPONENTS
   // =============================================================================
 
-  // Disconnect button (power icon)
-  Widget _buildDisconnectButton({required double screenWidth, required double screenHeight}) {
+  // Build hardware status visual with icons (modern design)
+  Widget _buildHardwareStatusVisual() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.red.shade50.withOpacity(0.0),
-        borderRadius: BorderRadius.circular(10),
+      padding: EdgeInsets.symmetric(
+        horizontal: screenWidth * 0.05,
+        vertical: screenHeight * 0.03,
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: _handleRikazDisconnect,
-          borderRadius: BorderRadius.circular(10),
-          child: Padding(
-            padding: EdgeInsets.all(screenHeight * 0.01),
-            child: Icon(Icons.power_settings_new, 
-                color: Colors.red.shade700, 
-                size: screenWidth * 0.055
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isRikazToolConnected 
+              ? [
+                  accentThemeColor.withOpacity(0.15),
+                  lightestAccentColor.withOpacity(0.1),
+                ]
+              : [
+                  secondaryTextGrey.withOpacity(0.08),
+                  secondaryTextGrey.withOpacity(0.05),
+                ],
+        ),
+        borderRadius: BorderRadius.circular(cardBorderRadius),
+        border: Border.all(
+          color: isRikazToolConnected 
+              ? accentThemeColor.withOpacity(0.4)
+              : secondaryTextGrey.withOpacity(0.2),
+          width: 1.5,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildHardwareIcon(
+            icon: Icons.lightbulb_rounded,
+            label: 'Smart Light',
+            isActive: isRikazToolConnected,
+          ),
+          Container(
+            width: 1.5,
+            height: screenHeight * 0.08,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.transparent,
+                  secondaryTextGrey.withOpacity(0.2),
+                  Colors.transparent,
+                ],
+              ),
             ),
           ),
-        ),
+          _buildHardwareIcon(
+            icon: Icons.computer_rounded,
+            label: 'Screen Monitor',
+            isActive: isRikazToolConnected,
+          ),
+        ],
       ),
     );
   }
+  
+  // Build individual hardware icon with status (modern design)
+  Widget _buildHardwareIcon({
+    required IconData icon,
+    required String label,
+    required bool isActive,
+  }) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    
+    return Column(
+      children: [
+        AnimatedBuilder(
+          animation: _pulseAnimation,
+          builder: (context, child) {
+            return Transform.scale(
+              scale: isActive ? _pulseAnimation.value : 1.0,
+              child: Container(
+                padding: EdgeInsets.all(screenWidth * 0.045),
+                decoration: BoxDecoration(
+                  gradient: isActive 
+                      ? LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            accentThemeColor,
+                            accentThemeColor.withOpacity(0.7),
+                          ],
+                        )
+                      : null,
+                  color: isActive ? null : secondaryTextGrey.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                  boxShadow: isActive 
+                      ? [
+                          BoxShadow(
+                            color: accentThemeColor.withOpacity(0.5),
+                            blurRadius: 16,
+                            spreadRadius: 2,
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Icon(
+                  icon,
+                  color: isActive ? Colors.white : secondaryTextGrey,
+                  size: screenWidth * 0.09,
+                ),
+              ),
+            );
+          },
+        ),
+        SizedBox(height: screenHeight * 0.012),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: _adaptiveFontSize(0.032),
+            fontWeight: FontWeight.w600,
+            color: isActive ? accentThemeColor : secondaryTextGrey,
+            letterSpacing: 0.3,
+          ),
+        ),
+      ],
+    );
+  }
 
-  // Rikaz BLE connection section
+  // Rikaz BLE connection section with improved visuals
   Widget _buildRikazConnect() {
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
-    final statusColor = isRikazToolConnected ? Colors.green.shade600 : primaryColor;
 
-    Widget content;
-
-    // Show success confirmation after connection
-    if (isRikazToolConnected && _showRikazConfirmation) {
-      content = Column(
-        key: const ValueKey('RikazConfirmation'),
+    return Container(
+      padding: EdgeInsets.all(screenWidth * 0.05),
+      margin: EdgeInsets.only(bottom: screenHeight * 0.025), 
+      decoration: BoxDecoration(
+        color: cardBackground,
+        borderRadius: BorderRadius.circular(cardBorderRadius),
+        boxShadow: subtleShadow,
+      ),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Icon(
+                isRikazToolConnected ? Icons.check_circle : Icons.bluetooth,
+                color: isRikazToolConnected ? Colors.green.shade600 : primaryThemeColor,
+                size: _adaptiveFontSize(0.055),
+              ),
+              SizedBox(width: screenWidth * 0.02),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.check_circle_outline, color: Colors.green.shade600, size: screenWidth * 0.08),
-                    SizedBox(height: screenHeight * 0.01),
-                    Text('Connection Successful! 🎉',
-                        style: TextStyle(
-                            fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: statusColor)),
-                    SizedBox(height: screenHeight * 0.008),
-                    Text('You can now monitor your focus and apply custom configurations to your sessions.',
-                        style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: localSecondaryTextGrey)),
-                  ],
+                child: Text(
+                  isRikazToolConnected ? 'Hardware Connected' : 'Connect Hardware',
+                  style: TextStyle(
+                    fontSize: _adaptiveFontSize(0.045),
+                    fontWeight: FontWeight.bold,
+                    color: primaryTextDark,
+                  ),
                 ),
               ),
-              _buildDisconnectButton(screenWidth: screenWidth, screenHeight: screenHeight),
+              if (isRikazToolConnected && !_showRikazConfirmation)
+                IconButton(
+                  icon: Icon(Icons.power_settings_new, color: errorIndicatorRed),
+                  onPressed: _handleRikazDisconnect,
+                  tooltip: 'Disconnect',
+                ),
             ],
           ),
-        ],
-      );
-    } 
-    // Show active connection status
-    else if (isRikazToolConnected) {
-      content = Column(
-        key: const ValueKey('RikazConnectedWithDisconnect'),
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+          SizedBox(height: screenHeight * 0.015),
+          
+          // Hardware status visual
+          _buildHardwareStatusVisual(),
+          SizedBox(height: screenHeight * 0.015),
+          
+          // Status message or connection slider
+          if (_showRikazConfirmation) ...[
+            // Success confirmation
+            Container(
+              padding: EdgeInsets.all(screenWidth * 0.04),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.green.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green.shade600, size: _adaptiveFontSize(0.06)),
+                  SizedBox(width: screenWidth * 0.03),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.check_circle, color: Colors.green.shade600, size: screenWidth * 0.06),
-                        SizedBox(width: screenWidth * 0.02),
-                        Text('Rikaz Tools Active',
-                            style: TextStyle(
-                                fontSize: _adaptiveFontSize(0.045), 
-                                fontWeight: FontWeight.bold, 
-                                color: statusColor)),
+                        Text(
+                          'Connection Successful!',
+                          style: TextStyle(
+                            fontSize: _adaptiveFontSize(0.04),
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green.shade700,
+                          ),
+                        ),
+                        SizedBox(height: screenHeight * 0.005),
+                        Text(
+                          'All hardware features are now active',
+                          style: TextStyle(
+                            fontSize: _adaptiveFontSize(0.032),
+                            color: secondaryTextGrey,
+                          ),
+                        ),
                       ],
                     ),
-                    SizedBox(height: screenHeight * 0.008),
-                    Text('Hardware connected. Configuration available below.',
-                        style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: localSecondaryTextGrey)),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              _buildDisconnectButton(screenWidth: screenWidth, screenHeight: screenHeight),
-            ],
-          ),
-        ],
-      );
-    } 
-    // Show connection slider
-    else {
-      content = Column(
-        key: const ValueKey('RikazDisconnected'),
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Connect Rikaz Tools',
+            ),
+          ] else if (isRikazToolConnected) ...[
+            // Connected status
+            Text(
+              'Your Rikaz Tools hardware is ready. All features are enabled and monitoring your focus session.',
               style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: darkText)),
-          SizedBox(height: screenHeight * 0.008),
-          Text(
-              'Slide to scan and connect via Bluetooth.',
-              style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: localSecondaryTextGrey)),
-          SizedBox(height: screenHeight * 0.02),
-          SlideAction(
-            key: _slideKey,
-            text: isLoading ? "Scanning..." : "Slide to Scan",
-            textStyle: TextStyle(
+                fontSize: _adaptiveFontSize(0.033),
+                color: secondaryTextGrey,
+                height: 1.4,
+              ),
+            ),
+          ] else ...[
+            // Not connected - show slider
+            Text(
+              'Connect your Rikaz Tools hardware via Bluetooth to enable smart light control, screen monitoring, and camera detection.',
+              style: TextStyle(
+                fontSize: _adaptiveFontSize(0.033),
+                color: secondaryTextGrey,
+                height: 1.4,
+              ),
+            ),
+            SizedBox(height: screenHeight * 0.02),
+            SlideAction(
+              key: _slideKey,
+              text: isLoading ? "Scanning..." : "Slide to Connect",
+              textStyle: TextStyle(
                 fontSize: _adaptiveFontSize(0.038),
                 fontWeight: FontWeight.w600,
-                color: Colors.white),
-            innerColor: localCardBackground,
-            outerColor: primaryColor.withOpacity(0.9),
-            sliderButtonIcon:
-            Icon(Icons.bluetooth_searching, color: darkText, size: screenWidth * 0.05),
-            height: screenHeight * 0.055,
-            borderRadius: cardBorderRadius,
-            onSubmit: isLoading ? null : () async {
-              await _handleRikazConnect();
-              return null;
-            },
-          ),
+                color: Colors.white,
+              ),
+              innerColor: cardBackground,
+              outerColor: primaryThemeColor,
+              sliderButtonIcon: Icon(
+                Icons.bluetooth_searching,
+                color: primaryThemeColor,
+                size: screenWidth * 0.06,
+              ),
+              height: screenHeight * 0.06,
+              borderRadius: cardBorderRadius,
+              onSubmit: isLoading ? null : () async {
+                await _handleRikazConnect();
+                return null;
+              },
+            ),
+          ],
         ],
-      );
-    }
-
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 300),
-      transitionBuilder: (Widget child, Animation<double> animation) {
-        return FadeTransition(opacity: animation, child: child);
-      },
-      child: Container(
-        key: ValueKey(isRikazToolConnected.toString() + _showRikazConfirmation.toString()), 
-        padding: EdgeInsets.all(screenWidth * 0.04),
-        margin: EdgeInsets.only(bottom: screenHeight * 0.035), 
-        decoration: BoxDecoration(
-          color: cardBackground,
-          borderRadius: BorderRadius.circular(cardBorderRadius),
-          boxShadow: subtleShadow,
-          border: Border.all(color: Colors.grey.shade100, width: 1.0),
-        ),
-        child: content,
       ),
     );
   }
 
-  // Pomodoro duration option (25min or 50min)
+  // Pomodoro duration option (25min or 50min) - Modern design
   Widget _pomodoroDurationOption(String label, String breakText) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -597,37 +950,119 @@ class _SetSessionPageState extends State<SetSessionPage> {
     return GestureDetector(
       onTap: () => setState(() => pomodoroDuration = label),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        margin: EdgeInsets.only(bottom: screenHeight * 0.018),
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeInOut,
+        margin: EdgeInsets.only(bottom: screenHeight * 0.012),
         padding: EdgeInsets.all(screenWidth * 0.045),
         decoration: BoxDecoration(
-          color: isSelected ? softLavender.withOpacity(0.8) : cardBackground,
-          borderRadius: BorderRadius.circular(radius),
-          border: Border.all(color: isSelected ? primaryColor : Colors.grey.shade200, width: 1.5),
-          boxShadow: cardShadow,
+          gradient: isSelected 
+              ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    primaryThemeColor.withOpacity(0.15),
+                    accentThemeColor.withOpacity(0.1),
+                  ],
+                )
+              : null,
+          color: isSelected ? null : cardBackground,
+          borderRadius: BorderRadius.circular(cardBorderRadius / 1.5),
+          border: Border.all(
+            color: isSelected ? primaryThemeColor : secondaryTextGrey.withOpacity(0.25),
+            width: isSelected ? 2.5 : 1.5,
+          ),
+          boxShadow: isSelected 
+              ? [
+                  BoxShadow(
+                    color: primaryThemeColor.withOpacity(0.2),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.03),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
         ),
         child: Row(
           children: [
-            Icon(
-              isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
-              color: isSelected ? primaryColor : lightText.withOpacity(0.7),
-              size: screenWidth * 0.06,
+            // Checkmark icon
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              width: screenWidth * 0.065,
+              height: screenWidth * 0.065,
+              decoration: BoxDecoration(
+                gradient: isSelected 
+                    ? LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [primaryThemeColor, accentThemeColor],
+                      )
+                    : null,
+                color: isSelected ? null : Colors.transparent,
+                shape: BoxShape.circle,
+                border: isSelected 
+                    ? null 
+                    : Border.all(color: secondaryTextGrey.withOpacity(0.4), width: 2),
+              ),
+              child: isSelected
+                  ? Icon(Icons.check_rounded, color: Colors.white, size: screenWidth * 0.04)
+                  : null,
             ),
             SizedBox(width: screenWidth * 0.04),
+            
+            // Duration text
             Expanded(
-              child: Text(label,
-                  style: TextStyle(
-                      fontSize: _adaptiveFontSize(0.04), fontWeight: FontWeight.w600, color: darkText)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: _adaptiveFontSize(0.042),
+                      fontWeight: FontWeight.bold,
+                      color: isSelected ? primaryThemeColor : primaryTextDark,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  SizedBox(height: screenHeight * 0.003),
+                  Text(
+                    breakText,
+                    style: TextStyle(
+                      fontSize: _adaptiveFontSize(0.031),
+                      color: secondaryTextGrey,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            Text(breakText, style: TextStyle(
-                fontSize: _adaptiveFontSize(0.035), color: lightText)),
+            
+            // Duration icon
+            Container(
+              padding: EdgeInsets.all(screenWidth * 0.025),
+              decoration: BoxDecoration(
+                color: isSelected 
+                    ? primaryThemeColor.withOpacity(0.15)
+                    : secondaryTextGrey.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                Icons.timer_outlined,
+                color: isSelected ? primaryThemeColor : secondaryTextGrey,
+                size: screenWidth * 0.055,
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  // Pomodoro blocks slider (1-8 blocks)
+  // Pomodoro blocks slider (1-8 blocks) - Clean design matching page theme
   Widget _pomodoroBlocksSlider() {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -635,54 +1070,155 @@ class _SetSessionPageState extends State<SetSessionPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Number of Blocks',
-            style: TextStyle(
-                fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: darkText)),
+        Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(screenWidth * 0.025),
+              decoration: BoxDecoration(
+                color: accentThemeColor.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                Icons.grid_view_rounded,
+                color: accentThemeColor,
+                size: _adaptiveFontSize(0.05),
+              ),
+            ),
+            SizedBox(width: screenWidth * 0.03),
+            Text(
+              'Number of Blocks',
+              style: TextStyle(
+                fontSize: _adaptiveFontSize(0.04),
+                fontWeight: FontWeight.bold,
+                color: primaryTextDark,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ],
+        ),
         SizedBox(height: screenHeight * 0.02),
-        Container(
-          padding: EdgeInsets.symmetric(vertical: screenHeight * 0.025),
-          decoration: BoxDecoration(
-            color: softCyan.withOpacity(0.5),
-            borderRadius: BorderRadius.circular(radius),
-            border: Border.all(color: Colors.grey.shade200),
-            boxShadow: cardShadow,
-          ),
-          child: Column(
-            children: [
-              Center(
-                child: Text(
-                  numberOfBlocks.toInt().toString(),
-                  style: TextStyle(
-                      fontSize: _adaptiveFontSize(0.12), fontWeight: FontWeight.bold, color: blueText),
+        
+        // Large number display
+        Center(
+          child: Container(
+            width: screenWidth * 0.28,
+            height: screenWidth * 0.28,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  accentThemeColor,
+                  primaryThemeColor,
+                ],
+              ),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: accentThemeColor.withOpacity(0.4),
+                  blurRadius: 20,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Center(
+              child: Text(
+                numberOfBlocks.toInt().toString(),
+                style: TextStyle(
+                  fontSize: _adaptiveFontSize(0.15),
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  shadows: [
+                    Shadow(
+                      color: Colors.black.withOpacity(0.2),
+                      offset: const Offset(0, 2),
+                      blurRadius: 4,
+                    ),
+                  ],
                 ),
               ),
-              Slider(
-                value: numberOfBlocks,
-                min: 1,
-                max: 8,
-                divisions: 7,
-                label: '${numberOfBlocks.toInt()}',
-                onChanged: (v) => setState(() => numberOfBlocks = v),
-                activeColor: blueText,
-                inactiveColor: softAccentHighlight,
+            ),
+          ),
+        ),
+        SizedBox(height: screenHeight * 0.02),
+        
+        // Slider
+        SliderTheme(
+          data: SliderThemeData(
+            activeTrackColor: accentThemeColor,
+            inactiveTrackColor: lightestAccentColor.withOpacity(0.5),
+            thumbColor: Colors.white,
+            thumbShape: const RoundSliderThumbShape(
+              enabledThumbRadius: 12,
+              elevation: 4,
+            ),
+            overlayColor: accentThemeColor.withOpacity(0.2),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 24),
+            trackHeight: 6,
+          ),
+          child: Slider(
+            value: numberOfBlocks,
+            min: 1,
+            max: 8,
+            divisions: 7,
+            label: '${numberOfBlocks.toInt()} blocks',
+            onChanged: (v) => setState(() => numberOfBlocks = v),
+          ),
+        ),
+        
+        // Min-Max labels
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.02),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '1 Block',
+                style: TextStyle(
+                  fontSize: _adaptiveFontSize(0.028),
+                  color: secondaryTextGrey,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.05, vertical: screenHeight * 0.005),
-                child: Text(
-                  'One block = one focus session followed by its break.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      fontSize: _adaptiveFontSize(0.035), color: lightText),
+              Text(
+                '8 Blocks',
+                style: TextStyle(
+                  fontSize: _adaptiveFontSize(0.028),
+                  color: secondaryTextGrey,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
         ),
+        SizedBox(height: screenHeight * 0.015),
+        
+        // Info text with icon
+        Row(
+          children: [
+            Icon(
+              Icons.info_outline_rounded,
+              color: accentThemeColor,
+              size: _adaptiveFontSize(0.04),
+            ),
+            SizedBox(width: screenWidth * 0.02),
+            Expanded(
+              child: Text(
+                'One block = focus session + break',
+                style: TextStyle(
+                  fontSize: _adaptiveFontSize(0.031),
+                  color: secondaryTextGrey,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
 
-  // Custom duration slider (25-120 minutes)
+  // Custom duration slider (25-120 minutes) - Clean design matching page theme
   Widget _customDurationSlider() {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -690,179 +1226,200 @@ class _SetSessionPageState extends State<SetSessionPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Session Duration',
-            style: TextStyle(
-                fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: darkText)),
-        SizedBox(height: screenHeight * 0.02),
-        Container(
-          padding: EdgeInsets.symmetric(vertical: screenHeight * 0.025),
-          decoration: BoxDecoration(
-            color: softCyan.withOpacity(0.5),
-            borderRadius: BorderRadius.circular(radius),
-            border: Border.all(color: Colors.grey.shade200),
-            boxShadow: cardShadow,
-          ),
-          child: Column(
-            children: [
-              Center(
-                child: Text(
-                  '${customDuration.toInt()}:00',
+        Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(screenWidth * 0.025),
+              decoration: BoxDecoration(
+                color: accentThemeColor.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                Icons.schedule_rounded,
+                color: accentThemeColor,
+                size: _adaptiveFontSize(0.05),
+              ),
+            ),
+            SizedBox(width: screenWidth * 0.03),
+            Text(
+              'Session Duration',
+              style: TextStyle(
+                fontSize: _adaptiveFontSize(0.04),
+                fontWeight: FontWeight.bold,
+                color: primaryTextDark,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: screenHeight * 0.025),
+        
+        // Large time display with gradient background
+        Center(
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: screenWidth * 0.08,
+              vertical: screenHeight * 0.03,
+            ),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  accentThemeColor,
+                  primaryThemeColor,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: accentThemeColor.withOpacity(0.4),
+                  blurRadius: 20,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                Text(
+                  '${customDuration.toInt()}',
                   style: TextStyle(
-                      fontSize: _adaptiveFontSize(0.12), fontWeight: FontWeight.bold, color: hpDeepBlue),
+                    fontSize: _adaptiveFontSize(0.18),
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    height: 1,
+                    shadows: [
+                      Shadow(
+                        color: Colors.black.withOpacity(0.2),
+                        offset: const Offset(0, 2),
+                        blurRadius: 4,
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  'MINUTES',
+                  style: TextStyle(
+                    fontSize: _adaptiveFontSize(0.035),
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white.withOpacity(0.9),
+                    letterSpacing: 2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: screenHeight * 0.015),
+        
+        // "No Breaks" badge
+        Center(
+          child: Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: screenWidth * 0.04,
+              vertical: screenHeight * 0.008,
+            ),
+            decoration: BoxDecoration(
+              color: secondaryTextGrey.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: secondaryTextGrey.withOpacity(0.3)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.block_rounded,
+                  color: secondaryTextGrey,
+                  size: _adaptiveFontSize(0.035),
+                ),
+                SizedBox(width: screenWidth * 0.015),
+                Text(
+                  'No Breaks',
+                  style: TextStyle(
+                    fontSize: _adaptiveFontSize(0.032),
+                    color: secondaryTextGrey,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(height: screenHeight * 0.025),
+        
+        // Slider
+        SliderTheme(
+          data: SliderThemeData(
+            activeTrackColor: accentThemeColor,
+            inactiveTrackColor: lightestAccentColor.withOpacity(0.5),
+            thumbColor: Colors.white,
+            thumbShape: const RoundSliderThumbShape(
+              enabledThumbRadius: 12,
+              elevation: 4,
+            ),
+            overlayColor: accentThemeColor.withOpacity(0.2),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 24),
+            trackHeight: 6,
+          ),
+          child: Slider(
+            value: customDuration,
+            min: 25,
+            max: 120,
+            divisions: (120 - 25),
+            label: '${customDuration.toInt()} min',
+            onChanged: (v) => setState(() => customDuration = v),
+          ),
+        ),
+        
+        // Min-Max labels
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.02),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '25 min',
+                style: TextStyle(
+                  fontSize: _adaptiveFontSize(0.028),
+                  color: secondaryTextGrey,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              Text('No Breaks',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      fontSize: _adaptiveFontSize(0.04), color: lightText)),
-              Slider(
-                value: customDuration,
-                min: 25,
-                max: 120,
-                divisions: (120 - 25),
-                label: '${customDuration.toInt()} min',
-                onChanged: (v) => setState(() => customDuration = v),
-                activeColor: hpDeepBlue,
-                inactiveColor: softAccentHighlight,
-              ),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.05),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('25 Minutes', style: TextStyle(
-                        fontSize: _adaptiveFontSize(0.03), color: lightText)),
-                    Text('120 Minutes', style: TextStyle(
-                        fontSize: _adaptiveFontSize(0.03), color: lightText)),
-                  ],
+              Text(
+                '120 min',
+                style: TextStyle(
+                  fontSize: _adaptiveFontSize(0.028),
+                  color: secondaryTextGrey,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
         ),
-      ],
-    );
-  }
-
-  // Configuration menu (sensitivity, notification style) - Future sprint features
-  Widget _configurationMenu() {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-
-    final isConfigurationDisabled = !isRikazToolConnected;
-    final disabledColor = Colors.grey.shade200;
-    final disabledBorderColor = Colors.grey.shade300;
-    final disabledTextColor = Colors.grey.shade500;
-    final activeMenuColor = cardBackground;
-    final activeMenuBorderColor = Colors.grey.shade200;
-
-    return Container(
-      padding: EdgeInsets.all(screenWidth * 0.05),
-      decoration: BoxDecoration(
-        color: isConfigurationDisabled ? disabledColor : activeMenuColor,
-        border: Border.all(color: isConfigurationDisabled ? disabledBorderColor : activeMenuBorderColor),
-        borderRadius: BorderRadius.circular(radius),
-        boxShadow: cardShadow,
-      ),
-      child: IgnorePointer(
-        ignoring: isConfigurationDisabled,
-        child: Column(
+        SizedBox(height: screenHeight * 0.015),
+        
+        // Info text with icon
+        Row(
           children: [
-            if (isConfigurationDisabled)
-              Padding(
-                padding: EdgeInsets.only(bottom: screenHeight * 0.015),
-                child: Text(
-                  'Connection Required to edit settings.',
-                  style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.038),
-                    fontWeight: FontWeight.bold,
-                    color: Colors.red.shade700,
-                  ),
+            Icon(
+              Icons.info_outline_rounded,
+              color: accentThemeColor,
+              size: _adaptiveFontSize(0.04),
+            ),
+            SizedBox(width: screenWidth * 0.02),
+            Expanded(
+              child: Text(
+                'Continuous focus without interruptions',
+                style: TextStyle(
+                  fontSize: _adaptiveFontSize(0.031),
+                  color: secondaryTextGrey,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
-            
-            // Sensitivity slider (Future sprint)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Sensitivity', style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.04), color: isConfigurationDisabled ? disabledTextColor : darkText)),
-                Row(
-                  children: [
-                    Text('Low', style: TextStyle(
-                        fontSize: _adaptiveFontSize(0.03), color: isConfigurationDisabled ? disabledTextColor : lightText)),
-                    Expanded(
-                      child: Slider(
-                        value: sensitivity,
-                        min: 0,
-                        max: 1,
-                        divisions: 2,
-                        label: sensitivity == 0 ? 'Low' : sensitivity == 0.5 ? 'Medium' : 'High',
-                        onChanged: isConfigurationDisabled ? null : (v) {
-                          setState(() {
-                            sensitivity = v;
-                            selectedPreset = toolPresets.first;
-                          });
-                        },
-                        activeColor: primaryColor.withOpacity(isConfigurationDisabled ? 0.4 : 1.0),
-                        inactiveColor: softAccentHighlight,
-                      ),
-                    ),
-                    Text('High', style: TextStyle(
-                        fontSize: _adaptiveFontSize(0.03), color: isConfigurationDisabled ? disabledTextColor : lightText)),
-                  ],
-                ),
-              ],
-            ),
-            SizedBox(height: screenHeight * 0.015),
-
-            // Notification style (Future sprint)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Notification Style', style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.04), color: isConfigurationDisabled ? disabledTextColor : darkText)),
-                SizedBox(height: screenHeight * 0.015),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: ['Light', 'Sound', 'Both'].map((option) {
-                    final isSelected = notificationStyle == option;
-                    return Expanded(
-                      child: GestureDetector(
-                        onTap: isConfigurationDisabled ? null : () {
-                          setState(() {
-                            notificationStyle = option;
-                            selectedPreset = toolPresets.first;
-                          });
-                        },
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.01),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: screenWidth * 0.045,
-                                height: screenWidth * 0.045,
-                                margin: EdgeInsets.only(right: screenWidth * 0.01),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: isSelected ? primaryColor : (isConfigurationDisabled ? disabledTextColor : Colors.grey)),
-                                  color: isSelected ? primaryColor.withOpacity(isConfigurationDisabled ? 0.4 : 1.0) : Colors.transparent,
-                                ),
-                              ),
-                              Text(option, style: TextStyle(color: isConfigurationDisabled ? disabledTextColor : darkText,
-                                  fontSize: _adaptiveFontSize(0.035))),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 
@@ -874,7 +1431,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
     return Container(
       padding: EdgeInsets.all(screenHeight * 0.005),
       decoration: BoxDecoration(
-        color: softAccentHighlight.withOpacity(0.5),
+        color: const Color.fromARGB(255, 184, 184, 184).withOpacity(0.3),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -892,39 +1449,190 @@ class _SetSessionPageState extends State<SetSessionPage> {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
     final isSelected = sessionMode == mode;
-    final selectedColor = primaryColor;
-    final unselectedColor = secondaryTextGrey;
 
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() {
-          sessionMode = mode;
-        }),
+        onTap: () => setState(() => sessionMode = mode),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           padding: EdgeInsets.symmetric(vertical: screenHeight * 0.015),
           decoration: BoxDecoration(
-            color: isSelected ? cardBackground : Colors.transparent,
+            color: isSelected ? primaryThemeColor : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
-            boxShadow: isSelected ? [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4)] : null,
+            boxShadow: isSelected 
+                ? [BoxShadow(color: primaryThemeColor.withOpacity(0.3), blurRadius: 8)]
+                : null,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon,
-                  size: screenWidth * 0.05, color: isSelected ? selectedColor : unselectedColor),
+              Icon(
+                icon,
+                size: screenWidth * 0.05,
+                color: isSelected ? Colors.white : secondaryTextGrey,
+              ),
               SizedBox(width: screenWidth * 0.02),
               Text(
                 text,
                 style: TextStyle(
                   fontSize: _adaptiveFontSize(0.035),
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                  color: isSelected ? selectedColor : unselectedColor,
+                  color: isSelected ? Colors.white : secondaryTextGrey,
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+  
+  // Sound selection section
+  Widget _buildSoundSelection() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    return Container(
+      padding: EdgeInsets.all(screenWidth * 0.05),
+      decoration: BoxDecoration(
+        color: cardBackground,
+        borderRadius: BorderRadius.circular(cardBorderRadius),
+        boxShadow: subtleShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Icon(
+                Icons.music_note_rounded,
+                color: accentThemeColor,
+                size: _adaptiveFontSize(0.055),
+              ),
+              SizedBox(width: screenWidth * 0.02),
+              Expanded(
+                child: Text(
+                  'Background Sound',
+                  style: TextStyle(
+                    fontSize: _adaptiveFontSize(0.045),
+                    fontWeight: FontWeight.bold,
+                    color: primaryTextDark,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: screenHeight * 0.01),
+          Text(
+            'Select a sound to play during your focus session',
+            style: TextStyle(
+              fontSize: _adaptiveFontSize(0.033),
+              color: secondaryTextGrey,
+            ),
+          ),
+          SizedBox(height: screenHeight * 0.02),
+          
+          // Sound options
+          if (!_soundsLoaded)
+            Center(
+              child: Padding(
+                padding: EdgeInsets.all(screenHeight * 0.02),
+                child: CircularProgressIndicator(color: accentThemeColor),
+              ),
+            )
+          else
+            ...List.generate(_availableSounds.length, (index) {
+              final sound = _availableSounds[index];
+              final isSelected = sound.id == _selectedSound.id;
+              
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedSound = sound;
+                  });
+                  _playPreview(sound);
+                },
+                child: Container(
+                  margin: EdgeInsets.only(bottom: screenHeight * 0.012),
+                  padding: EdgeInsets.all(screenWidth * 0.04),
+                  decoration: BoxDecoration(
+                    color: isSelected 
+                        ? sound.color.withOpacity(0.1) 
+                        : cardBackground,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isSelected 
+                          ? sound.color 
+                          : secondaryTextGrey.withOpacity(0.25),
+                      width: isSelected ? 2 : 1.5,
+                    ),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: sound.color.withOpacity(0.2),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Row(
+                    children: [
+                      // Icon
+                      Container(
+                        padding: EdgeInsets.all(screenWidth * 0.025),
+                        decoration: BoxDecoration(
+                          color: sound.color.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          sound.icon,
+                          color: sound.color,
+                          size: screenWidth * 0.055,
+                        ),
+                      ),
+                      SizedBox(width: screenWidth * 0.03),
+                      
+                      // Name
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              sound.name,
+                              style: TextStyle(
+                                fontSize: _adaptiveFontSize(0.04),
+                                fontWeight: FontWeight.w600,
+                                color: primaryTextDark,
+                              ),
+                            ),
+                            if (isSelected && sound.id != 'off')
+                              Text(
+                                '5-second preview playing...',
+                                style: TextStyle(
+                                  fontSize: _adaptiveFontSize(0.028),
+                                  color: sound.color,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      
+                      // Selection indicator
+                      if (isSelected)
+                        Icon(
+                          Icons.check_circle,
+                          color: sound.color,
+                          size: screenWidth * 0.06,
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+        ],
       ),
     );
   }
@@ -937,10 +1645,10 @@ class _SetSessionPageState extends State<SetSessionPage> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-    final proportionalHorizontalPadding = screenWidth * 0.1;
+    final proportionalHorizontalPadding = screenWidth * 0.05;
 
+    // Button is always enabled now
     final bool isStartButtonEnabled = !isLoading;
-    final Color startButtonColor = isStartButtonEnabled ? primaryColor : Colors.grey.shade400;
 
     return Scaffold(
       appBar: AppBar(
@@ -953,7 +1661,10 @@ class _SetSessionPageState extends State<SetSessionPage> {
         title: Text(
           'Set Session',
           style: TextStyle(
-              fontSize: _adaptiveFontSize(0.05), fontWeight: FontWeight.bold, color: primaryTextDark),
+            fontSize: _adaptiveFontSize(0.045),
+            fontWeight: FontWeight.bold,
+            color: primaryTextDark,
+          ),
         ),
         centerTitle: true,
       ),
@@ -966,106 +1677,74 @@ class _SetSessionPageState extends State<SetSessionPage> {
               padding: EdgeInsets.only(
                 left: proportionalHorizontalPadding,
                 right: proportionalHorizontalPadding,
-                top: 0,
-                bottom: screenHeight * 0.18, 
+                top: screenHeight * 0.02,
+                bottom: screenHeight * 0.2, // Increased from 0.15 to 0.2 for better clearance
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(height: screenHeight * 0.015),
-                  
                   // Page title
                   Text(
-                    sessionMode == SessionMode.pomodoro ? 'Pomodoro Session' : 'Custom Session',
+                    sessionMode == SessionMode.pomodoro 
+                        ? 'Pomodoro Session' 
+                        : 'Custom Session',
                     style: TextStyle(
-                        fontSize: _adaptiveFontSize(0.07), fontWeight: FontWeight.bold, color: hpDeepBlue)),
+                      fontSize: _adaptiveFontSize(0.055),
+                      fontWeight: FontWeight.w800,
+                      color: primaryTextDark,
+                    ),
+                  ),
                   Text(
-                    sessionMode == SessionMode.pomodoro ? 'Configure your structured focus routine' : 'Set your own uninterrupted timing',
+                    sessionMode == SessionMode.pomodoro
+                        ? 'Structured focus and break sessions'
+                        : 'Set your own uninterrupted timing',
                     style: TextStyle(
-                        fontSize: _adaptiveFontSize(0.04), color: secondaryTextGrey)),
-                  SizedBox(height: screenHeight * 0.035),
+                      fontSize: _adaptiveFontSize(0.035),
+                      color: secondaryTextGrey,
+                    ),
+                  ),
+                  SizedBox(height: screenHeight * 0.025),
 
                   // Session mode toggle
                   _buildModeToggle(),
-                  SizedBox(height: screenHeight * 0.035),
+                  SizedBox(height: screenHeight * 0.025),
 
-                  // Rikaz BLE connection section
+                  // Rikaz BLE connection section with visuals
                   _buildRikazConnect(),
 
                   // Session configuration (Pomodoro or Custom)
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
-                    transitionBuilder: (Widget child, Animation<double> animation) {
-                      return FadeTransition(opacity: animation, child: child);
-                    },
                     child: (sessionMode == SessionMode.pomodoro)
                         ? Column(
-                      key: const ValueKey(SessionMode.pomodoro),
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Duration Options',
-                            style: TextStyle(
-                                fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold, color: darkText)),
-                        SizedBox(height: screenHeight * 0.02),
-                        _pomodoroDurationOption('25min', '+ 5 min break'),
-                        _pomodoroDurationOption('50min', '+ 10 min break'),
-                        SizedBox(height: screenHeight * 0.035),
-                        _pomodoroBlocksSlider(),
-                      ],
-                    )
-                        : Column(
-                      key: const ValueKey(SessionMode.custom),
-                      children: [_customDurationSlider()],
-                    ),
-                  ),
-
-                  SizedBox(height: screenHeight * 0.035),
-
-                  // Configuration menu toggle
-                  if (!_showRikazConfirmation)
-                    GestureDetector(
-                      onTap: isRikazToolConnected ? () => setState(() => isConfigurationOpen = !isConfigurationOpen) : null,
-                      child: Container(
-                        padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.05, vertical: screenHeight * 0.02),
-                        decoration: BoxDecoration(
-                          color: isRikazToolConnected ? cardBackground : Colors.grey.shade200, 
-                          borderRadius: BorderRadius.circular(radius),
-                          border: Border.all(color: isRikazToolConnected ? primaryColor.withOpacity(0.5) : Colors.grey.shade400),
-                          boxShadow: cardShadow, 
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('Rikaz Tools Configuration',
+                            key: const ValueKey(SessionMode.pomodoro),
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Duration Options',
                                 style: TextStyle(
-                                    color: isRikazToolConnected ? darkText : Colors.grey.shade600,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: _adaptiveFontSize(0.04))),
-                            Icon(isConfigurationOpen && isRikazToolConnected ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                                color: isRikazToolConnected ? primaryColor : Colors.grey.shade600,
-                                size: screenWidth * 0.06),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                  // Expandable configuration menu
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    transitionBuilder: (Widget child, Animation<double> animation) {
-                      return SizeTransition(
-                        sizeFactor: animation,
-                        child: child,
-                      );
-                    },
-                    child: isConfigurationOpen 
-                        ? Padding(
-                      key: ValueKey('ConfigOpen_$isRikazToolConnected'), 
-                      padding: EdgeInsets.only(top: screenHeight * 0.015),
-                      child: _configurationMenu(),
-                    )
-                        : const SizedBox.shrink(key: ValueKey('ConfigClosed')),
+                                  fontSize: _adaptiveFontSize(0.04),
+                                  fontWeight: FontWeight.bold,
+                                  color: primaryTextDark,
+                                ),
+                              ),
+                              SizedBox(height: screenHeight * 0.015),
+                              _pomodoroDurationOption('25min', '+ 5 min break'),
+                              _pomodoroDurationOption('50min', '+ 10 min break'),
+                              SizedBox(height: screenHeight * 0.025),
+                              _pomodoroBlocksSlider(),
+                            ],
+                          )
+                        : Column(
+                            key: const ValueKey(SessionMode.custom),
+                            children: [_customDurationSlider()],
+                          ),
                   ),
+
+                  SizedBox(height: screenHeight * 0.025),
+                  
+                  // Sound selection section (moved to last)
+                  _buildSoundSelection(),
                 ],
               ),
             ),
@@ -1077,7 +1756,7 @@ class _SetSessionPageState extends State<SetSessionPage> {
               bottom: 0,
               child: Container(
                 decoration: BoxDecoration(
-                  color: primaryBackground.withOpacity(0.95),
+                  color: primaryBackground,
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(0.08),
@@ -1095,47 +1774,72 @@ class _SetSessionPageState extends State<SetSessionPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Warning when hardware is offline
+                    // Friendly reminder when hardware is offline
                     if (!isRikazToolConnected)
-                      Padding(
-                        padding: EdgeInsets.only(bottom: screenHeight * 0.01),
-                        child: Center(
-                          child: Text(
-                            'Rikaz tools offline. Session tracking will be limited.',
-                            style: TextStyle(
-                              fontSize: _adaptiveFontSize(0.03),
-                              color: Colors.grey.shade600,
-                              fontStyle: FontStyle.italic,
-                            ),
+                      Container(
+                        margin: EdgeInsets.only(bottom: screenHeight * 0.015),
+                        padding: EdgeInsets.all(screenWidth * 0.03),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              accentThemeColor.withOpacity(0.1),
+                              lightestAccentColor.withOpacity(0.15),
+                            ],
                           ),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: accentThemeColor.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.lightbulb_outline_rounded,
+                              color: accentThemeColor,
+                              size: _adaptiveFontSize(0.045),
+                            ),
+                            SizedBox(width: screenWidth * 0.02),
+                            Expanded(
+                              child: Text(
+                                'Connect hardware for enhanced features',
+                                style: TextStyle(
+                                  fontSize: _adaptiveFontSize(0.032),
+                                  color: primaryTextDark,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      
+
                     // Start session button
-                    ElevatedButton(
-                      onPressed: isStartButtonEnabled ? handleStartSessionPress : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: startButtonColor,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(radius)),
-                        padding: EdgeInsets.symmetric(vertical: screenHeight * 0.022),
-                        elevation: 8,
-                        shadowColor: startButtonColor.withOpacity(0.6),
-                      ),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: Center(
-                          child: isStartButtonEnabled
-                            ? Text(
-                                'Start Session',
-                                style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: _adaptiveFontSize(0.045), fontWeight: FontWeight.bold),
-                              )
-                            : SizedBox(
-                                width: screenWidth * 0.055, 
-                                height: screenWidth * 0.055, 
-                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: isStartButtonEnabled ? handleStartSessionPress : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryThemeColor,
+                          padding: EdgeInsets.symmetric(vertical: screenHeight * 0.022),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(cardBorderRadius),
+                          ),
+                          elevation: 6,
+                          shadowColor: primaryThemeColor.withOpacity(0.4),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.play_arrow_rounded, color: Colors.white, size: _adaptiveFontSize(0.06)),
+                            SizedBox(width: screenWidth * 0.02),
+                            Text(
+                              'Start Session',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: _adaptiveFontSize(0.04),
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
