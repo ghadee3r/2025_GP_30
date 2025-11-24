@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:convert'; // ✅ ADD THIS for jsonEncode
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -10,140 +10,35 @@ import 'package:rikazapp/widgets/rikaz_device_picker.dart';
 import 'package:rikazapp/main.dart';
 
 // ============================================================================
-// FROSTED GLASS EFFECT WIDGET
-// Used for sound controls UI with glassmorphism effect
+// THEME COLORS - Matching HomePage theme
 // ============================================================================
-class FrostedGlassContainer extends StatelessWidget {
-  final Widget child;
-  final double blur;
-  final double opacity;
-  final double borderRadius;
-  final Color? borderColor;
+const Color dfDeepTeal = Color(0xFF175B73);
+const Color dfTealCyan = Color(0xFF287C85);
+const Color dfLightSeafoam = Color(0xFF87ACA3);
+const Color dfDeepBlue = Color(0xFF162893);
+const Color dfNavyIndigo = Color(0xFF0C1446);
 
-  const FrostedGlassContainer({
-    super.key,
-    required this.child,
-    this.blur = 10,
-    this.opacity = 0.6,
-    this.borderRadius = 18,
-    this.borderColor,
-  });
+const Color primaryThemeColor = dfDeepBlue;
+const Color accentThemeColor = dfTealCyan;
+const Color lightestAccentColor = dfLightSeafoam;
+const Color primaryBackground = Color(0xFFF7F7F7);
+const Color cardBackground = Color(0xFFFFFFFF);
+const Color primaryTextDark = dfNavyIndigo;
+const Color secondaryTextGrey = Color(0xFF6B6B78);
+const Color errorIndicatorRed = Color(0xFFE57373);
 
-  @override
-  Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final proportionalBorderRadius = screenWidth * 0.045;
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(proportionalBorderRadius),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(opacity),
-            borderRadius: BorderRadius.circular(proportionalBorderRadius),
-            border: Border.all(
-              color: borderColor ?? Colors.white.withOpacity(0.3),
-              width: 1.0,
-            ),
-          ),
-          child: child,
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// PLAY/PAUSE BUTTON WITH ANIMATION
-// Animated button that transitions between play and pause states
-// ============================================================================
-class PlayAndPauseButton extends StatefulWidget {
-  final Duration animationDuration;
-  final Curve animationCurve;
-  final VoidCallback onPressed;
-  final bool isPaused;
-
-  const PlayAndPauseButton({
-    super.key,
-    required this.onPressed,
-    required this.isPaused,
-    this.animationDuration = const Duration(milliseconds: 350),
-    this.animationCurve = Curves.bounceIn,
-  });
-
-  @override
-  State<PlayAndPauseButton> createState() => _PlayAndPauseButtonState();
-}
-
-class _PlayAndPauseButtonState extends State<PlayAndPauseButton>
-    with SingleTickerProviderStateMixin {
-  AnimationController? _controller;
-  Animation<double>? _animation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(vsync: this, duration: widget.animationDuration);
-    _animation = CurvedAnimation(parent: _controller!, curve: widget.animationCurve);
-    _controller!.value = widget.isPaused ? 0.0 : 1.0;
-  }
-
-  @override
-  void didUpdateWidget(covariant PlayAndPauseButton oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.isPaused != oldWidget.isPaused && _controller != null) {
-      widget.isPaused ? _controller!.reverse() : _controller!.forward();
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final animation = _animation ?? kAlwaysCompleteAnimation;
-    final color = widget.isPaused ? Colors.green : Colors.blue;
-
-    return FloatingActionButton.extended(
-      backgroundColor: color,
-      onPressed: widget.onPressed,
-      label: Row(
-        children: [
-          Text(
-            widget.isPaused ? 'Resume' : 'Pause',
-            style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: screenWidth * 0.04),
-          ),
-          SizedBox(width: screenWidth * 0.015),
-          AnimatedIcon(
-            icon: AnimatedIcons.play_pause,
-            progress: animation,
-            color: Colors.white,
-            size: screenWidth * 0.05,
-          ),
-        ],
-      ),
-    );
-  }
-}
+// Session-specific colors
+const Color focusBgColor = dfLightSeafoam; // #87ACA3
+const Color breakBgColor = Color(0xFFE6B400); // Yellow for break
+const Color pausedBgColor = Color(0xFF9E9E9E); // Gray for paused
 
 // ============================================================================
 // MAIN SESSION PAGE
-// Manages focus sessions with timer, Rikaz light control, and database tracking
 // ============================================================================
 class SessionPage extends StatefulWidget {
   final String sessionType;
   final String duration;
   final String? numberOfBlocks;
-  
-  // Future sprint parameters - camera detection, notifications, etc.
   final bool? isCameraDetectionEnabled;
   final double? sensitivity;
   final String? notificationStyle;
@@ -168,92 +63,92 @@ class _SessionPageState extends State<SessionPage>
     with SingleTickerProviderStateMixin {
   
   // ========== RIKAZ LIGHT CONNECTION STATE ==========
-  bool _rikazConnected = false;        // Is ESP32 currently connected via BLE?
-  bool _lightInitialized = false;      // Has initial light command been sent?
+  bool _rikazConnected = false;
+  bool _lightInitialized = false;
 
   // ========== SESSION CONFIGURATION ==========
-  late bool isPomodoro;                // Pomodoro or Custom mode?
-  late int focusMinutes;               // Length of focus periods
-  late int breakMinutes;               // Length of break periods
-  late int totalBlocks;                // Number of Pomodoro blocks
+  late bool isPomodoro;
+  late int focusMinutes;
+  late int breakMinutes;
+  late int totalBlocks;
 
   // ========== DATABASE TRACKING ==========
-  String? _currentSessionId;           // ID of session in database
-  DateTime? _sessionStartTime;         // When session started
-  int _totalFocusSeconds = 0;          // Total focused time (excludes breaks)
+  String? _currentSessionId;
+  DateTime? _sessionStartTime;
+  int _totalFocusSeconds = 0;
 
   // ========== SESSION STATE ==========
-  String mode = 'focus';               // 'focus' or 'break'
-  String status = 'running';           // 'running', 'paused', or 'idle'
-  int currentBlock = 1;                // Which Pomodoro block we're on
-  int timeLeft = 0;                    // Seconds remaining in current phase
-  List<int> completedBlocks = [];      // Which blocks have been completed
-  Timer? _timer;                       // Timer that counts down
+  String mode = 'focus';
+  String status = 'running';
+  int currentBlock = 1;
+  int timeLeft = 0;
+  List<int> completedBlocks = [];
+  Timer? _timer;
 
-  late AnimationController pulseController;  // For pulsing animation
+  late AnimationController pulseController;
 
   // ========== CONNECTION MONITORING ==========
-  Timer? _connectionCheckTimer;        // Periodically checks ESP32 BLE connection
+  Timer? _connectionCheckTimer;
+
+  // ========== MINIMUM SESSION TIME ==========
+  static const int minimumSessionMinutes = 10;
 
   // ========================================================================
   // SEND TIMER UPDATE TO ESP32 LCD
-  // Syncs the countdown timer with the external LCD display
   // ========================================================================
-Future<void> _sendTimerUpdateToESP32() async {
-  if (!_rikazConnected || !_lightInitialized) {
-    print('⏸️ RIKAZ: Skipping LCD update - device not connected');
-    return;
-  }
-  
-  final String currentStatus = status == 'running' ? 'running' : 'paused';
-  final String currentMode = mode; // 'focus' or 'break'
-  
-  final Map<String, dynamic> timerCommand = {
-    'timer': {
-      'minutes': timeLeft ~/ 60,
-      'seconds': timeLeft % 60,
-      'status': currentStatus,
-      'mode': currentMode,
+  Future<void> _sendTimerUpdateToESP32() async {
+    if (!_rikazConnected || !_lightInitialized) {
+      print('⏸️ RIKAZ: Skipping LCD update - device not connected');
+      return;
     }
-  };
-  
-  final String jsonCommand = jsonEncode(timerCommand);
-  
-  try {
-    print('📺 RIKAZ: Sending to LCD: $jsonCommand');
-    final bool success = await RikazLightService.sendCommand(jsonCommand);
-    if (!success) {
-      print('⚠️ RIKAZ: Failed to send timer update to LCD');
-    } else {
-      print('✅ RIKAZ: Timer sent to LCD: ${timeLeft ~/ 60}:${timeLeft % 60} ($currentStatus)');
+    
+    final String currentStatus = status == 'running' ? 'running' : 'paused';
+    final String currentMode = mode;
+    
+    final Map<String, dynamic> timerCommand = {
+      'timer': {
+        'minutes': timeLeft ~/ 60,
+        'seconds': timeLeft % 60,
+        'status': currentStatus,
+        'mode': currentMode,
+      }
+    };
+    
+    final String jsonCommand = jsonEncode(timerCommand);
+    
+    try {
+      print('📺 RIKAZ: Sending to LCD: $jsonCommand');
+      final bool success = await RikazLightService.sendCommand(jsonCommand);
+      if (!success) {
+        print('⚠️ RIKAZ: Failed to send timer update to LCD');
+      } else {
+        print('✅ RIKAZ: Timer sent to LCD: ${timeLeft ~/ 60}:${timeLeft % 60} ($currentStatus)');
+      }
+    } catch (e) {
+      print('❌ RIKAZ: Error sending timer update: $e');
     }
-  } catch (e) {
-    print('❌ RIKAZ: Error sending timer update: $e');
   }
-}
 
-// Add this method for positive reinforcement
-Future<void> _sendMotivationalMessage() async {
-  if (!_rikazConnected || !_lightInitialized) return;
-  
-  try {
-    final String motivationCommand = jsonEncode({'motivation': 'show'});
-    await RikazLightService.sendCommand(motivationCommand);
-    print('💪 RIKAZ: Sent motivational message to LCD');
-  } catch (e) {
-    print('❌ RIKAZ: Error sending motivation: $e');
+  Future<void> _sendMotivationalMessage() async {
+    if (!_rikazConnected || !_lightInitialized) return;
+    
+    try {
+      final String motivationCommand = jsonEncode({'motivation': 'show'});
+      await RikazLightService.sendCommand(motivationCommand);
+      print('💪 RIKAZ: Sent motivational message to LCD');
+    } catch (e) {
+      print('❌ RIKAZ: Error sending motivation: $e');
+    }
   }
-}
+
   // ========================================================================
   // REUSABLE RESUME LOGIC
-  // Handles light re-initialization and checks for failure before resuming.
   // ========================================================================
   Future<bool> _handleLightAndResume() async {
     if (!mounted) return false;
     
     bool success = true;
 
-    // 1. Re-initialize light connection if lost
     if (RikazConnectionState.isConnected && !_lightInitialized) {
       if (mode == 'focus') {
         success = await RikazLightService.setFocusLight();
@@ -267,9 +162,7 @@ Future<void> _sendMotivationalMessage() async {
         _startConnectionMonitoring();
         print('✅ RIKAZ: Lights re-initialized during resume attempt');
       }
-    } 
-    // 2. Ensure light is on if already initialized and connected
-    else if (_rikazConnected && _lightInitialized) {
+    } else if (_rikazConnected && _lightInitialized) {
       if (mode == 'focus') {
         success = await RikazLightService.setFocusLight();
       } else if (mode == 'break') {
@@ -277,36 +170,30 @@ Future<void> _sendMotivationalMessage() async {
       }
     }
 
-    // 3. Handle light command failure
     if (!success && (_rikazConnected || _lightInitialized)) {
       print('⚠️ RIKAZ: Light command failed on resume, remaining paused.');
-      return false; // Resume FAILED
+      return false;
     }
 
-    // 4. Resume Timer/Animation
     setState(() {
       status = 'running';
     });
     pulseController.repeat(reverse: true);
     
-    // 5. ✅ Update LCD with resumed state
     _sendTimerUpdateToESP32();
     
     print('▶️ RIKAZ: Session resumed');
-    return true; // Resume SUCCESS
+    return true;
   }
 
   // ========================================================================
   // RECONNECTION HANDLER
-  // Flow: Device picker → Connect → Resume via helper
-  // Session is already paused before this is called
   // ========================================================================
   Future<void> _handleReconnectAttempt() async {
     if (!mounted) return;
     
     print('🔄 RIKAZ: Starting reconnection attempt...');
     
-    // STEP 1: Show device picker - user selects Rikaz device
     final RikazDevice? selectedDevice = await showDialog<RikazDevice>(
       context: context,
       barrierDismissible: false,
@@ -315,15 +202,12 @@ Future<void> _sendMotivationalMessage() async {
     
     if (!mounted) return;
     
-    // STEP 2: If device was successfully selected and connected
     if (selectedDevice != null) {
       RikazConnectionState.isConnected = true;
       _rikazConnected = true;
       
-      // STEP 3: Restore light and resume
-      final bool resumeSuccess = await _handleLightAndResume(); 
+      final bool resumeSuccess = await _handleLightAndResume();
       
-      // STEP 4: Show result notification
       if (mounted) {
         if (resumeSuccess) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -359,22 +243,19 @@ Future<void> _sendMotivationalMessage() async {
 
   // ========================================================================
   // HANDLE LIGHT COMMAND FAILURE
-  // Called when a light command fails during an active session
   // ========================================================================
   void _handleLightCommandFailure({bool showSnackbar = true}) {
     if (!mounted) return;
     
-    // Pause the session immediately
     if (status == 'running') {
       setState(() {
         status = 'paused';
       });
       pulseController.stop();
-      _sendTimerUpdateToESP32(); // ✅ Update LCD with paused state
+      _sendTimerUpdateToESP32();
       print('⏸️ RIKAZ: Session paused due to light command failure');
     }
     
-    // Show notification with reconnect option
     if (showSnackbar) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -385,13 +266,12 @@ Future<void> _sendMotivationalMessage() async {
             label: 'Reconnect',
             textColor: Colors.white,
             onPressed: () {
-              // Pause session before reconnecting
               if (mounted && status == 'running') {
                 setState(() {
                   status = 'paused';
                 });
                 pulseController.stop();
-                _sendTimerUpdateToESP32(); // ✅ Update LCD with paused state
+                _sendTimerUpdateToESP32();
                 print('⏸️ RIKAZ: Session paused via SnackBar Reconnect button');
               }
               _handleReconnectAttempt();
@@ -401,7 +281,6 @@ Future<void> _sendMotivationalMessage() async {
       );
     }
     
-    // Reset connection flags
     if (!RikazConnectionState.isConnected) {
       _rikazConnected = false;
       _lightInitialized = false;
@@ -411,7 +290,6 @@ Future<void> _sendMotivationalMessage() async {
 
   // ========================================================================
   // START SESSION IN DATABASE
-  // Creates a new session record when user starts focusing
   // ========================================================================
   Future<void> _startSessionInDB() async {
     final supabase = Supabase.instance.client;
@@ -453,8 +331,7 @@ Future<void> _sendMotivationalMessage() async {
   }
 
   // ========================================================================
-  // SHOW PROGRESS LEVEL DIALOG
-  // Asks user how much they accomplished after session ends
+  // SHOW PROGRESS LEVEL DIALOG - Updated with new theme
   // ========================================================================
   Future<String?> _showProgressLevelDialog() async {
     return showDialog<String>(
@@ -465,33 +342,45 @@ Future<void> _sendMotivationalMessage() async {
 
         return Dialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(screenWidth * 0.05),
+            borderRadius: BorderRadius.circular(20),
           ),
           child: Container(
             padding: EdgeInsets.all(screenWidth * 0.06),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFFF3F6FF), Color(0xFFEEF2FF)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-              borderRadius: BorderRadius.circular(screenWidth * 0.05),
+              color: cardBackground,
+              borderRadius: BorderRadius.circular(20),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.track_changes,
-                  size: screenWidth * 0.15,
-                  color: const Color(0xFF6366F1),
+                Container(
+                  padding: EdgeInsets.all(screenWidth * 0.04),
+                  decoration: BoxDecoration(
+                    color: accentThemeColor.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.track_changes,
+                    size: screenWidth * 0.15,
+                    color: accentThemeColor,
+                  ),
                 ),
                 SizedBox(height: screenWidth * 0.04),
                 Text(
-                  'How much of your goal did you achieve in this session?',
+                  'Session Complete!',
                   style: TextStyle(
-                    fontSize: screenWidth * 0.048,
+                    fontSize: screenWidth * 0.055,
                     fontWeight: FontWeight.bold,
-                    color: const Color(0xFF0F172A),
+                    color: primaryTextDark,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: screenWidth * 0.02),
+                Text(
+                  'How much of your goal did you achieve?',
+                  style: TextStyle(
+                    fontSize: screenWidth * 0.038,
+                    color: secondaryTextGrey,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -499,8 +388,8 @@ Future<void> _sendMotivationalMessage() async {
                 _buildProgressOption(
                   context,
                   level: 'fully',
-                  title: 'Fully',
-                  subtitle: 'I accomplished everything I set out to do',
+                  title: 'Fully Achieved',
+                  subtitle: 'Completed everything I set out to do',
                   icon: Icons.verified,
                   color: const Color(0xFF10B981),
                 ),
@@ -508,8 +397,8 @@ Future<void> _sendMotivationalMessage() async {
                 _buildProgressOption(
                   context,
                   level: 'partially',
-                  title: 'Partially',
-                  subtitle: 'I made good progress but didn\'t finish',
+                  title: 'Partially Done',
+                  subtitle: 'Made good progress but didn\'t finish',
                   icon: Icons.trending_up,
                   color: const Color(0xFFF59E0B),
                 ),
@@ -517,10 +406,10 @@ Future<void> _sendMotivationalMessage() async {
                 _buildProgressOption(
                   context,
                   level: 'barely',
-                  title: 'Barely',
-                  subtitle: 'I struggled to stay focused',
+                  title: 'Barely Started',
+                  subtitle: 'Struggled to stay focused',
                   icon: Icons.sentiment_dissatisfied,
-                  color: const Color(0xFFEF4444),
+                  color: errorIndicatorRed,
                 ),
               ],
             ),
@@ -540,68 +429,63 @@ Future<void> _sendMotivationalMessage() async {
   }) {
     final screenWidth = MediaQuery.of(context).size.width;
 
-    return InkWell(
-      onTap: () => Navigator.of(context).pop(level),
-      borderRadius: BorderRadius.circular(screenWidth * 0.035),
-      child: Container(
-        padding: EdgeInsets.all(screenWidth * 0.04),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(screenWidth * 0.035),
-          border: Border.all(color: color.withOpacity(0.3), width: 2),
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(screenWidth * 0.03),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(screenWidth * 0.025),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => Navigator.of(context).pop(level),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: EdgeInsets.all(screenWidth * 0.04),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withOpacity(0.3), width: 1.5),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(screenWidth * 0.025),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: screenWidth * 0.06),
               ),
-              child: Icon(icon, color: color, size: screenWidth * 0.07),
-            ),
-            SizedBox(width: screenWidth * 0.04),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: screenWidth * 0.045,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF0F172A),
+              SizedBox(width: screenWidth * 0.04),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: screenWidth * 0.042,
+                        fontWeight: FontWeight.bold,
+                        color: primaryTextDark,
+                      ),
                     ),
-                  ),
-                  SizedBox(height: screenWidth * 0.01),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: screenWidth * 0.033,
-                      color: const Color(0xFF64748B),
+                    SizedBox(height: screenWidth * 0.01),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: screenWidth * 0.032,
+                        color: secondaryTextGrey,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            Icon(Icons.arrow_forward_ios,
-                color: color, size: screenWidth * 0.04),
-          ],
+              Icon(Icons.arrow_forward_ios,
+                  color: color, size: screenWidth * 0.04),
+            ],
+          ),
         ),
       ),
     );
   }
 
   // ========================================================================
-  // END SESSION IN DATABASE
-  // Updates session with final duration and progress when session completes
+  // END SESSION IN DATABASE - Updated with 10 minute minimum
   // ========================================================================
   Future<void> _endSessionInDB({bool completed = false}) async {
     final supabase = Supabase.instance.client;
@@ -613,9 +497,9 @@ Future<void> _sendMotivationalMessage() async {
 
     final int actualFocusDurationMinutes = (_totalFocusSeconds ~/ 60);
 
-    // Don't save sessions shorter than 1 minute
-    if (actualFocusDurationMinutes < 1) {
-      print('❌ Session too short (<1 min). Not saved.');
+    // Delete sessions shorter than 10 minutes
+    if (actualFocusDurationMinutes < minimumSessionMinutes) {
+      print('❌ Session too short (<$minimumSessionMinutes min). Not saved.');
       try {
         await supabase
             .from('Focus_Session')
@@ -628,7 +512,6 @@ Future<void> _sendMotivationalMessage() async {
       return;
     }
 
-    // Ask user about their progress
     String? progressLevel = await _showProgressLevelDialog();
     progressLevel ??= 'partially';
 
@@ -649,7 +532,6 @@ Future<void> _sendMotivationalMessage() async {
 
   // ========================================================================
   // INITIALIZATION
-  // Sets up session parameters and starts the timer
   // ========================================================================
   @override
   void initState() {
@@ -679,7 +561,6 @@ Future<void> _sendMotivationalMessage() async {
 
     _startSessionInDB();
 
-    // Send initial light command if ESP32 is connected
     if (_rikazConnected && !_lightInitialized) {
       Future.delayed(const Duration(milliseconds: 500), () async {
         if (mounted && status == 'running') {
@@ -688,7 +569,7 @@ Future<void> _sendMotivationalMessage() async {
           if (mounted && success) {
             _lightInitialized = true;
             _startConnectionMonitoring();
-            _sendTimerUpdateToESP32(); // ✅ Send initial timer to LCD
+            _sendTimerUpdateToESP32();
             print('🔵 RIKAZ: Session started - Focus light ON');
           } else if (mounted && !success) {
             _handleLightCommandFailure();
@@ -702,108 +583,109 @@ Future<void> _sendMotivationalMessage() async {
 
     pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 1),
+      duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
   }
 
   // ========================================================================
   // START CONNECTION MONITORING
-  // Checks every 2 seconds if ESP32 is still connected via BLE
   // ========================================================================
   void _startConnectionMonitoring() {
-  _connectionCheckTimer?.cancel();
-  
-  _connectionCheckTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
-    if (!mounted || !RikazConnectionState.isConnected) {
-      timer.cancel();
-      return;
-    }
+    _connectionCheckTimer?.cancel();
     
-    final bool stillConnected = await RikazLightService.isConnected();
-    
-    if (!stillConnected) {
-      timer.cancel();
-      
-      await RikazLightService.disconnect();
-      RikazConnectionState.isConnected = false;
-
-      if (mounted) {
-        // ✅ DON'T auto-pause - just update connection flags
-        setState(() {
-          _rikazConnected = false;
-          _lightInitialized = false;
-          // Remove automatic pausing - let session continue
-        });
-        
-        print('⚠️ CONNECTION LOST - Session continues running (no auto-pause)');
-        print('📊 Current status: $status (unchanged)');
+    _connectionCheckTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
+      if (!mounted || !RikazConnectionState.isConnected) {
+        timer.cancel();
+        return;
       }
       
-      // Show dialog when user opens app, but don't force pause
-      _showDeviceLostWarning();
-    }
-  });
-}
+      final bool stillConnected = await RikazLightService.isConnected();
+      
+      if (!stillConnected) {
+        timer.cancel();
+        
+        await RikazLightService.disconnect();
+        RikazConnectionState.isConnected = false;
 
+        if (mounted) {
+          setState(() {
+            _rikazConnected = false;
+            _lightInitialized = false;
+          });
+          
+          print('⚠️ CONNECTION LOST - Session continues running (no auto-pause)');
+          print('📊 Current status: $status (unchanged)');
+        }
+        
+        _showDeviceLostWarning();
+      }
+    });
+  }
 
   // ========================================================================
   // SHOW DEVICE LOST WARNING
-  // Alert dialog when BLE connection is lost during active session
   // ========================================================================
   void _showDeviceLostWarning() {
-  if (!mounted) return;
-  
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) => AlertDialog(
-      icon: Icon(Icons.link_off, color: Colors.red.shade700, size: 48),
-      title: const Text('Rikaz Tools Disconnected'),
-      content: const Text(
-        'The Bluetooth connection to your Rikaz device was lost.\n\n'
-        'Your session is still running without external feedback.\n\n'
-        'Click "Reconnect" to restore the connection.'
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Continue Without Rikaz'),
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: cardBackground,
+        icon: Icon(Icons.link_off, color: errorIndicatorRed, size: 48),
+        title: Text(
+          'Rikaz Tools Disconnected',
+          style: TextStyle(color: primaryTextDark, fontWeight: FontWeight.bold),
         ),
-        ElevatedButton.icon(
-          onPressed: () {
-            Navigator.pop(context); // Close dialog first
-            
-            // ✅ NOW pause when user actively tries to reconnect
-            if (mounted && status == 'running') {
-              setState(() {
-                status = 'paused';
-              });
-              if (pulseController.isAnimating) {
-                pulseController.stop();
-              }
-              print('⏸️ RIKAZ: Session paused - User is reconnecting');
-            }
-            
-            // Then attempt reconnection
-            _handleReconnectAttempt();
-          },
-          icon: Icon(Icons.bluetooth_searching),
-          label: const Text('Reconnect'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue.shade600,
-            foregroundColor: Colors.white,
+        content: Text(
+          'The Bluetooth connection to your Rikaz device was lost.\n\n'
+          'Your session is still running without external feedback.\n\n'
+          'Click "Reconnect" to restore the connection.',
+          style: TextStyle(color: secondaryTextGrey, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Continue Without Rikaz',
+              style: TextStyle(color: secondaryTextGrey),
+            ),
           ),
-        ),
-      ],
-    ),
-  );
-  
-  debugPrint('⚠️ RIKAZ: BLE connection lost. Session continues running.');
-}
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              
+              if (mounted && status == 'running') {
+                setState(() {
+                  status = 'paused';
+                });
+                if (pulseController.isAnimating) {
+                  pulseController.stop();
+                }
+                print('⏸️ RIKAZ: Session paused - User is reconnecting');
+              }
+              
+              _handleReconnectAttempt();
+            },
+            icon: Icon(Icons.bluetooth_searching),
+            label: const Text('Reconnect'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accentThemeColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ],
+      ),
+    );
+    
+    debugPrint('⚠️ RIKAZ: BLE connection lost. Session continues running.');
+  }
 
   // ========================================================================
   // TIMER LOGIC
-  // Manages countdown and phase transitions
   // ========================================================================
   
   void startTimer() {
@@ -825,62 +707,18 @@ Future<void> _sendMotivationalMessage() async {
           }
         });
         
-        // ✅ Send timer update to LCD every second
         _sendTimerUpdateToESP32();
       }
     });
   }
 
-void onPhaseEnd() async { 
-  if (!mounted) return;
+  void onPhaseEnd() async { 
+    if (!mounted) return;
 
-  // CUSTOM SESSION: End when time is up
-  if (!isPomodoro) {
-    setState(() => status = 'idle');
-    _timer?.cancel();
+    if (!isPomodoro) {
+      setState(() => status = 'idle');
+      _timer?.cancel();
 
-    // Send session completion message to LCD
-    if (_rikazConnected && _lightInitialized) {
-      final String completeCommand = jsonEncode({'sessionComplete': 'true'});
-      await RikazLightService.sendCommand(completeCommand);
-      
-      bool success = await RikazLightService.turnOff();
-      if (!success) {
-        print('❌ RIKAZ: Final turnOff failed due to connection loss.');
-      }
-      print('⚫ RIKAZ: Custom session ended - Light OFF');
-    }
-
-    _endSessionInDB(completed: true);
-    return;
-  }
-
-  // POMODORO SESSION: Switch between focus and break
-  if (mode == 'focus') {
-    if (!completedBlocks.contains(currentBlock)) {
-      completedBlocks.add(currentBlock);
-      _sendMotivationalMessage(); // ✅ Already implemented correctly
-    }
-    
-    setState(() {
-      mode = 'break';
-      timeLeft = breakMinutes * 60;
-    });
-
-    if (_rikazConnected && _lightInitialized) {
-      bool success = await RikazLightService.setBreakLight();
-      if (mounted && !success) {
-        _handleLightCommandFailure();
-        return; 
-      }
-      _sendTimerUpdateToESP32(); // ✅ Update LCD for break mode
-      print('🟡 RIKAZ: Break started - Break light ON');
-    }
-  } else {
-    final next = currentBlock + 1;
-    
-    if (next > totalBlocks) {
-      // All blocks complete - Send completion message
       if (_rikazConnected && _lightInitialized) {
         final String completeCommand = jsonEncode({'sessionComplete': 'true'});
         await RikazLightService.sendCommand(completeCommand);
@@ -889,65 +727,98 @@ void onPhaseEnd() async {
         if (!success) {
           print('❌ RIKAZ: Final turnOff failed due to connection loss.');
         }
-        print('⚫ RIKAZ: Pomodoro complete - Light OFF');
+        print('⚫ RIKAZ: Custom session ended - Light OFF');
+      }
+
+      _endSessionInDB(completed: true);
+      return;
+    }
+
+    if (mode == 'focus') {
+      if (!completedBlocks.contains(currentBlock)) {
+        completedBlocks.add(currentBlock);
+        _sendMotivationalMessage();
       }
       
       setState(() {
-        mode = 'focus';
-        currentBlock = 1;
-        completedBlocks.clear();
-        timeLeft = focusMinutes * 60;
-        status = 'idle';
-      });
-      _timer?.cancel();
-
-      _endSessionInDB(completed: true);
-    } else {
-      // Start next block
-      setState(() {
-        currentBlock = next;
-        mode = 'focus';
-        timeLeft = focusMinutes * 60;
+        mode = 'break';
+        timeLeft = breakMinutes * 60;
       });
 
       if (_rikazConnected && _lightInitialized) {
-        bool success = await RikazLightService.setFocusLight();
+        bool success = await RikazLightService.setBreakLight();
         if (mounted && !success) {
           _handleLightCommandFailure();
           return; 
         }
-        _sendTimerUpdateToESP32(); // ✅ Update LCD for focus mode
-        print('🔵 RIKAZ: Focus resumed - Focus light ON');
+        _sendTimerUpdateToESP32();
+        print('🟡 RIKAZ: Break started - Break light ON');
+      }
+    } else {
+      final next = currentBlock + 1;
+      
+      if (next > totalBlocks) {
+        if (_rikazConnected && _lightInitialized) {
+          final String completeCommand = jsonEncode({'sessionComplete': 'true'});
+          await RikazLightService.sendCommand(completeCommand);
+          
+          bool success = await RikazLightService.turnOff();
+          if (!success) {
+            print('❌ RIKAZ: Final turnOff failed due to connection loss.');
+          }
+          print('⚫ RIKAZ: Pomodoro complete - Light OFF');
+        }
+        
+        setState(() {
+          mode = 'focus';
+          currentBlock = 1;
+          completedBlocks.clear();
+          timeLeft = focusMinutes * 60;
+          status = 'idle';
+        });
+        _timer?.cancel();
+
+        _endSessionInDB(completed: true);
+      } else {
+        setState(() {
+          currentBlock = next;
+          mode = 'focus';
+          timeLeft = focusMinutes * 60;
+        });
+
+        if (_rikazConnected && _lightInitialized) {
+          bool success = await RikazLightService.setFocusLight();
+          if (mounted && !success) {
+            _handleLightCommandFailure();
+            return; 
+          }
+          _sendTimerUpdateToESP32();
+          print('🔵 RIKAZ: Focus resumed - Focus light ON');
+        }
       }
     }
   }
-}
 
   // ========================================================================
   // PAUSE/RESUME HANDLER
-  // Toggles between paused and running states
   // ========================================================================
   void onPauseResume() async {
     if (!mounted) return;
     
     final nextStatus = status == 'paused' ? 'running' : 'paused';
     
-    // PAUSING: Just pause timer/animation
     if (nextStatus == 'paused') {
       setState(() { status = nextStatus; });
       pulseController.stop();
-      _sendTimerUpdateToESP32(); // ✅ Update LCD with paused state
+      _sendTimerUpdateToESP32();
       print('⏸️ RIKAZ: Session manually paused (light remains ON)');
-    } 
-    // RESUMING: Use the robust helper
-    else if (nextStatus == 'running') {
-      await _handleLightAndResume(); // This already calls _sendTimerUpdateToESP32()
+    } else if (nextStatus == 'running') {
+      await _handleLightAndResume();
     }
   }
 
   // ========================================================================
-  // QUIT SESSION HANDLER
-  // Shows confirmation dialog before ending session
+  // QUIT SESSION HANDLER - Updated with 10 minute warning
   // ========================================================================
   void onQuit() {
     final String previousStatus = status;
@@ -959,11 +830,36 @@ void onPhaseEnd() async {
 
     if (!mounted) return;
 
+    final int actualFocusDurationMinutes = (_totalFocusSeconds ~/ 60);
+    final bool belowMinimum = actualFocusDurationMinutes < minimumSessionMinutes;
+
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('End Session?'),
-        content: const Text('Are you sure you want to quit this session?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: cardBackground,
+        title: Row(
+          children: [
+            Icon(
+              belowMinimum ? Icons.warning_amber_rounded : Icons.exit_to_app,
+              color: belowMinimum ? Colors.orange : errorIndicatorRed,
+              size: 28,
+            ),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                belowMinimum ? 'Session Too Short' : 'End Session?',
+                style: TextStyle(fontSize: 20, color: primaryTextDark, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          belowMinimum 
+              ? 'You\'ve only focused for $actualFocusDurationMinutes minutes. Sessions under $minimumSessionMinutes minutes won\'t be saved for future analysis.\n\nAre you sure you want to quit?'
+              : 'Are you sure you want to end this session? Your progress will be saved.',
+          style: TextStyle(color: secondaryTextGrey, height: 1.4),
+        ),
         actions: [
           TextButton(
             onPressed: () {
@@ -975,9 +871,12 @@ void onPhaseEnd() async {
                 }
               }
             },
-            child: const Text('Cancel'),
+            child: Text(
+              'Continue Session',
+              style: TextStyle(color: secondaryTextGrey, fontWeight: FontWeight.w600),
+            ),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () async {
               _timer?.cancel();
 
@@ -1002,18 +901,16 @@ void onPhaseEnd() async {
                 );
               }
             },
-            child: const Text(
-              'Quit',
-              style: TextStyle(color: Colors.red),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: errorIndicatorRed,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
+            child: Text(belowMinimum ? 'Quit Anyway' : 'End Session'),
           ),
         ],
       ),
     );
-  }
-
-  void onGames() {
-    Navigator.of(context).pushNamed('/games');
   }
 
   String formatTime(int seconds) {
@@ -1049,308 +946,379 @@ void onPhaseEnd() async {
   }
 
   // ========================================================================
+  // GET BACKGROUND COLOR BASED ON STATE
+  // ========================================================================
+  Color get backgroundColor {
+    if (status == 'paused') return pausedBgColor;
+    if (mode == 'break') return const Color.fromARGB(255, 247, 181, 0);
+    return focusBgColor;
+  }
+
+  Color get ringColor {
+    if (status == 'paused') return pausedBgColor.withOpacity(0.6);
+    if (mode == 'break') return const Color.fromARGB(255, 255, 169, 8); // Darker yellow
+    return dfTealCyan; // Darker teal
+  }
+
+  // ========================================================================
   // UI BUILD
   // ========================================================================
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-    final horizontalPadding = screenWidth * 0.05;
 
     final bool isPaused = status == 'paused';
     final bool isBreak = mode == 'break';
 
-    final gradientColors = isPaused
-        ? const [
-            Color.fromARGB(255, 225, 227, 230),
-            Color.fromARGB(255, 185, 196, 207)
-          ]
-        : isBreak
-          ? const [
-              Color(0xFFFFF7ED),
-              Color(0xFFFFFBEB),
-              Color(0xFFFEF3C7)
-            ]
-          : const [
-              Color(0xFFF3F6FF),
-              Color(0xFFEEF2FF),
-              Color(0xFFEDE9FE)
-            ];
-
-    final Color shadowColor = isPaused
-        ? Colors.grey.withOpacity(0.3)
-        : (isBreak
-            ? const Color.fromARGB(160, 255, 172, 64).withOpacity(0.3)
-            : const Color.fromARGB(78, 78, 52, 194).withOpacity(0.3));
-
-    final timerOuterDiameter = screenWidth * 0.75;
-    final timerInnerDiameter = screenWidth * 0.62;
-    final controlContainerRadius = screenWidth * 0.045;
+    final timerDiameter = screenWidth * 0.75; // Made bigger from 0.65 to 0.75
 
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: gradientColors,
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+      body: Stack(
+        children: [
+          // Top colored section (full background)
+          Container(
+            color: backgroundColor,
           ),
-        ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.symmetric(
-                horizontal: horizontalPadding, vertical: screenHeight * 0.02),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Session type badge
-                Container(
-                  padding: EdgeInsets.symmetric(
-                      horizontal: screenWidth * 0.03,
-                      vertical: screenHeight * 0.008),
-                  decoration: BoxDecoration(
-                    color: (isBreak ? Colors.orange : Colors.blue).withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(999),
+          
+          // Bottom white section with fully circular/rounded top
+          Positioned(
+            top: screenHeight * 0.38,
+            left: -screenWidth * 0.5, // Extend left to create circle effect
+            right: -screenWidth * 0.5, // Extend right to create circle effect
+            bottom: 0,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(screenWidth * 1.5), // Huge radius for circle effect
+                  topRight: Radius.circular(screenWidth * 1.5),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 20,
+                    offset: const Offset(0, -5),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: screenWidth * 0.02,
-                        height: screenWidth * 0.02,
-                        margin: EdgeInsets.only(right: screenWidth * 0.02),
-                        decoration: BoxDecoration(
-                          color: isBreak ? Colors.orange : Colors.blue,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+                ],
+              ),
+            ),
+          ),
+
+          // Main scrollable content
+          SafeArea(
+            child: Column(
+              children: [
+                // Fixed top section with timer and buttons
+                Column(
+                  children: [
+                    SizedBox(height: screenHeight * 0.05),
+
+                    // Session Type Label
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: screenWidth * 0.04,
+                        vertical: screenHeight * 0.012,
                       ),
-                      Text(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
                         isPomodoro
-                            ? (isBreak ? 'Break Time' : 'Focus Session')
+                            ? (isBreak ? 'Break Time' : 'Pomodoro Focus')
                             : 'Custom Session',
                         style: TextStyle(
-                            color: isBreak ? Colors.orange[900] : Colors.blue[900],
-                            fontWeight: FontWeight.w700,
-                            fontSize: screenWidth * 0.035),
+                          color: Colors.white,
+                          fontSize: screenWidth * 0.035,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ],
-                  ),
-                ),
-                SizedBox(height: screenHeight * 0.04),
+                    ),
 
-                // Circular timer
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Container(
-                      width: timerOuterDiameter,
-                      height: timerOuterDiameter,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: shadowColor,
-                            blurRadius: 40,
-                            spreadRadius: 6,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                    ),
-                    SizedBox(
-                      width: timerInnerDiameter,
-                      height: timerInnerDiameter,
-                      child: CustomPaint(
-                        painter: _GradientRingPainter(
-                          progress: progress,
-                          isBreak: isBreak,
-                        ),
-                      ),
-                    ),
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    SizedBox(height: screenHeight * 0.04),
+
+                    // Circular Timer with enhanced shadow
+                    Stack(
+                      alignment: Alignment.center,
                       children: [
-                        Text(
-                          formatTime(timeLeft),
-                          style: TextStyle(
-                            fontSize: screenWidth * 0.095,
-                            color: const Color(0xFF0F172A),
-                            fontWeight: FontWeight.w300,
-                            letterSpacing: 0.5,
+                        // Outer white circle with shadow
+                        Container(
+                          width: timerDiameter,
+                          height: timerDiameter,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.15),
+                                blurRadius: 35,
+                                spreadRadius: 5,
+                                offset: const Offset(0, 12),
+                              ),
+                            ],
                           ),
                         ),
-                        SizedBox(height: screenHeight * 0.008),
-                        Text(
-                          isPaused
-                              ? 'Paused'
-                              : (isBreak ? 'Relax & recharge' : 'Stay focused'),
-                          style: TextStyle(
-                            color: const Color(0xFF64748B),
-                            fontSize: screenWidth * 0.032,
-                            fontWeight: FontWeight.w600,
+                        // Progress ring (wider)
+                        SizedBox(
+                          width: timerDiameter * 0.92,
+                          height: timerDiameter * 0.92,
+                          child: CustomPaint(
+                            painter: _ProgressRingPainter(
+                              progress: progress,
+                              color: ringColor,
+                            ),
                           ),
+                        ),
+                        // Time and info
+                        Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              formatTime(timeLeft),
+                              style: TextStyle(
+                                fontSize: screenWidth * 0.13,
+                                fontWeight: FontWeight.w600, // Made bold from w300 to w600
+                                color: primaryTextDark,
+                                letterSpacing: 2,
+                              ),
+                            ),
+                            SizedBox(height: screenHeight * 0.01),
+                            // Block counter for Pomodoro (inside timer)
+                            if (isPomodoro && !isBreak)
+                              Text(
+                                '$currentBlock/$totalBlocks Sessions',
+                                style: TextStyle(
+                                  fontSize: screenWidth * 0.036,
+                                  color: secondaryTextGrey,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              )
+                            else if (isBreak)
+                              Text(
+                                'Take a rest',
+                                style: TextStyle(
+                                  fontSize: screenWidth * 0.036,
+                                  color: secondaryTextGrey,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              )
+                            else
+                              Text(
+                                'Stay focused',
+                                style: TextStyle(
+                                  fontSize: screenWidth * 0.036,
+                                  color: secondaryTextGrey,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
-                SizedBox(height: screenHeight * 0.05),
 
-                // Control buttons
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.7),
-                    borderRadius: BorderRadius.circular(controlContainerRadius),
-                    border: Border.all(color: Colors.white.withOpacity(0.5)),
-                  ),
-                  padding: EdgeInsets.all(screenWidth * 0.04),
-                  child: Column(
-                    children: [
-                      Text(
-                        isPomodoro
-                            ? 'Block $currentBlock of $totalBlocks'
-                            : 'Focus Duration',
-                        style: TextStyle(
-                          color: const Color(0xFF0F172A),
-                          fontWeight: FontWeight.w700,
-                          fontSize: screenWidth * 0.04,
+                    SizedBox(height: screenHeight * 0.04),
+
+                    // Control Buttons - now in white section
+                    if (!isBreak)
+                      Container(
+                        decoration: BoxDecoration(
+                          color: backgroundColor,
+                          borderRadius: BorderRadius.circular(30),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
-                      ),
-                      SizedBox(height: screenHeight * 0.015),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: isBreak
-                                ? ElevatedButton.icon(
-                                      onPressed: onGames,
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.orange,
-                                        padding: EdgeInsets.symmetric(
-                                            vertical: screenHeight * 0.018),
-                                        shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                                screenWidth * 0.035)),
-                                      ),
-                                      icon: Icon(Icons.videogame_asset,
-                                          color: Colors.white,
-                                          size: screenWidth * 0.06),
-                                      label: Text(
-                                        'Games',
-                                        style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: screenWidth * 0.04),
-                                      ),
-                                    )
-                                : PlayAndPauseButton(
-                                      isPaused: isPaused,
-                                      onPressed: onPauseResume,
-                                    ),
-                          ),
-                          SizedBox(width: screenWidth * 0.03),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: onQuit,
-                              style: OutlinedButton.styleFrom(
-                                padding: EdgeInsets.symmetric(
-                                    vertical: screenHeight * 0.018),
-                                side: const BorderSide(color: Colors.red),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(
-                                      screenWidth * 0.035),
-                                ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(30),
+                            onTap: onPauseResume,
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: screenWidth * 0.08,
+                                vertical: screenWidth * 0.038,
                               ),
-                              icon: Icon(Icons.stop,
-                                  color: Colors.red, size: screenWidth * 0.06),
-                              label: Text(
-                                'Quit',
-                                style: TextStyle(
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: screenWidth * 0.04),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    isPaused ? Icons.play_arrow : Icons.pause,
+                                    color: Colors.white,
+                                    size: screenWidth * 0.06,
+                                  ),
+                                  SizedBox(width: screenWidth * 0.02),
+                                  Text(
+                                    isPaused ? 'Resume' : 'Pause',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: screenWidth * 0.04,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
+                        ),
+                      )
+                    else
+                      // Games button during break
+                      Container(
+                        decoration: BoxDecoration(
+                          color: backgroundColor,
+                          borderRadius: BorderRadius.circular(30),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(30),
+                            onTap: () => Navigator.of(context).pushNamed('/games'),
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: screenWidth * 0.08,
+                                vertical: screenWidth * 0.038,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.videogame_asset,
+                                    color: Colors.white,
+                                    size: screenWidth * 0.06,
+                                  ),
+                                  SizedBox(width: screenWidth * 0.02),
+                                  Text(
+                                    'Play Games',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: screenWidth * 0.04,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                    SizedBox(height: screenHeight * 0.02),
+
+                    // End Session Button (matching pause button shape)
+                    Container(
+                      decoration: BoxDecoration(
+                        color: errorIndicatorRed,
+                        borderRadius: BorderRadius.circular(30),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
                         ],
                       ),
-                    ],
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(30),
+                          onTap: onQuit,
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: screenWidth * 0.08,
+                              vertical: screenWidth * 0.038,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.close,
+                                  color: Colors.white,
+                                  size: screenWidth * 0.05,
+                                ),
+                                SizedBox(width: screenWidth * 0.015),
+                                Text(
+                                  'End Session',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: screenWidth * 0.04,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    SizedBox(height: screenHeight * 0.03),
+                  ],
+                ),
+
+                // Sound Section - scrollable if needed
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.05),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.08),
+                              blurRadius: 15,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Padding(
+                          padding: EdgeInsets.all(screenWidth * 0.04),
+                          child: const SoundSection(),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-                SizedBox(height: screenHeight * 0.05),
 
-                // Pomodoro blocks or sound controls
-                if (isPomodoro)
-                  Column(
-                    children: [
-                      Wrap(
-                        alignment: WrapAlignment.center,
-                        spacing: screenWidth * 0.04,
-                        runSpacing: screenWidth * 0.04,
-                        children: List.generate(totalBlocks, (i) {
-                          final blockNum = i + 1;
-                          final isActive =
-                              mode == 'focus' && currentBlock == blockNum;
-                          final isCompleted = completedBlocks.contains(blockNum);
-                          return _PomodoroBlock(
-                            blockNum: blockNum,
-                            isActive: isActive,
-                            isCompleted: isCompleted,
-                            isRunning: status == 'running',
-                            controller: pulseController,
-                          );
-                        }),
-                      ),
-                      SizedBox(height: screenHeight * 0.04),
-                      const SoundSection(),
-                    ],
-                  )
-                else
-                  const SoundSection(),
+                SizedBox(height: screenHeight * 0.02),
               ],
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 }
 
 // ============================================================================
-// CUSTOM PAINTER FOR CIRCULAR PROGRESS RING
+// PROGRESS RING PAINTER
 // ============================================================================
-class _GradientRingPainter extends CustomPainter {
+class _ProgressRingPainter extends CustomPainter {
   final double progress;
-  final bool isBreak;
-  
-  _GradientRingPainter({required this.progress, required this.isBreak});
+  final Color color;
+
+  _ProgressRingPainter({required this.progress, required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
-    const strokeWidth = 8.0;
+    const strokeWidth = 12.0; // Made wider from 6.0 to 12.0
     final rect = Offset.zero & size;
-    
-    final gradient = SweepGradient(
-      startAngle: -pi / 2,
-      endAngle: 2 * pi - pi / 2,
-      colors: isBreak
-          ? const [
-              Color(0xFFFBBF24),
-              Color(0xFFF59E0B),
-              Color(0xFFF97316),
-              Color(0xFFFBBF24),
-            ]
-          : const [
-              Color(0xFF3B82F6),
-              Color(0xFF6366F1),
-              Color(0xFF8B5CF6),
-              Color(0xFF3B82F6),
-            ],
-      stops: const [0.0, 0.33, 0.66, 1.0],
-    );
 
     final paint = Paint()
-      ..shader = gradient.createShader(rect)
+      ..color = color
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth;
@@ -1369,102 +1337,12 @@ class _GradientRingPainter extends CustomPainter {
       -pi / 2,
       2 * pi * progress,
       false,
-      paint
+      paint,
     );
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
-}
-
-// ============================================================================
-// POMODORO BLOCK INDICATOR
-// ============================================================================
-class _PomodoroBlock extends StatelessWidget {
-  final int blockNum;
-  final bool isActive;
-  final bool isCompleted;
-  final bool isRunning;
-  final AnimationController controller;
-
-  const _PomodoroBlock({
-    required this.blockNum,
-    required this.isActive,
-    required this.isCompleted,
-    required this.isRunning,
-    required this.controller,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-    final blockDiameter = screenWidth * 0.14;
-    final blockFontSize = screenWidth * 0.04;
-
-    final Color bgColor = isCompleted
-        ? Colors.green
-        : (isActive ? const Color.fromRGBO(33, 150, 243, 1) : Colors.white);
-
-    final Color shadowColor = isCompleted
-        ? Colors.green.withOpacity(0.35)
-        : isActive
-            ? Colors.blue.withOpacity(0.35)
-            : Colors.black.withOpacity(0.15);
-
-    return Column(
-      children: [
-        ScaleTransition(
-          scale: isActive && isRunning
-              ? Tween(begin: 1.0, end: 1.06).animate(
-                  CurvedAnimation(
-                    parent: controller,
-                    curve: Curves.easeInOut,
-                  ),
-                )
-              : const AlwaysStoppedAnimation(1.0),
-          child: Container(
-            width: blockDiameter,
-            height: blockDiameter,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: bgColor,
-              boxShadow: [
-                BoxShadow(
-                  color: shadowColor,
-                  blurRadius: 14,
-                  spreadRadius: 2,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            alignment: Alignment.center,
-            child: isCompleted
-                ? Icon(Icons.check,
-                    color: Colors.white, size: screenWidth * 0.06)
-                : Text(
-                    '$blockNum',
-                    style: TextStyle(
-                      color: isActive ? Colors.white : Colors.grey.shade700,
-                      fontWeight: FontWeight.bold,
-                      fontSize: blockFontSize,
-                    ),
-                  ),
-          ),
-        ),
-        SizedBox(height: screenHeight * 0.008),
-        Text(
-          isCompleted
-              ? 'Done'
-              : isActive
-                  ? (isRunning ? 'Active' : 'Pending')
-                  : 'Pending',
-          style: TextStyle(
-              fontSize: screenWidth * 0.03, color: const Color(0xFF64748B)),
-        ),
-      ],
-    );
-  }
 }
 
 // ============================================================================
@@ -1527,7 +1405,7 @@ class SoundSection extends StatefulWidget {
 class _SoundSectionState extends State<SoundSection> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   late Future<List<SoundOption>> _soundsFuture;
-  late SoundOption _currentSound; 
+  late SoundOption _currentSound;
   bool _isSoundPlaying = false;
   bool _isExpanded = false;
 
@@ -1577,7 +1455,7 @@ class _SoundSectionState extends State<SoundSection> {
 
     await _audioPlayer.stop();
     if (selectedSound.id == 'off' || selectedSound.filePathUrl == null) {
-      setState(() { 
+      setState(() {
         _currentSound = SoundOption.off();
         _isSoundPlaying = false;
         _isExpanded = false;
@@ -1622,117 +1500,120 @@ class _SoundSectionState extends State<SoundSection> {
     final screenWidth = MediaQuery.of(context).size.width;
 
     final displayIcon = _isSoundPlaying ? _currentSound.icon : Icons.volume_off_rounded;
-    final displayColor = _isSoundPlaying ? _currentSound.color : const Color(0xFF64748B);
+    final displayColor = _isSoundPlaying ? _currentSound.color : secondaryTextGrey;
     final String displayText = _isSoundPlaying
-        ? 'Playing: ${_currentSound.name}'
-        : (_currentSound.id == 'off' ? 'Background Sound' : 'Paused: ${_currentSound.name}');
+        ? _currentSound.name
+        : 'Background Sound';
 
-    return FrostedGlassContainer(
-      child: Column(
-        children: [
-          InkWell(
-            onTap: () {
-              if (!mounted) return;
-              setState(() {
-                _isExpanded = !_isExpanded;
-              });
-            },
-            child: Padding(
-              padding: EdgeInsets.all(screenWidth * 0.04),
-              child: Row(
-                children: [
-                  Container(
-                    width: screenWidth * 0.09,
-                    height: screenWidth * 0.09,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(screenWidth * 0.025),
-                      color: displayColor.withOpacity(0.1),
-                    ),
-                    child: Icon(
-                      displayIcon,
-                      color: displayColor,
-                      size: screenWidth * 0.045,
-                    ),
-                  ),
-                  SizedBox(width: screenWidth * 0.03),
-                  Expanded(
-                    child: Text(
-                      displayText,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF0F172A),
-                        fontSize: screenWidth * 0.04,
-                      ),
-                    ),
-                  ),
-                  if (_currentSound.id != 'off')
-                    Padding(
-                      padding: EdgeInsets.only(right: screenWidth * 0.03),
-                      child: IconButton(
-                        icon: Icon(
-                          _isSoundPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
-                          color: displayColor,
-                          size: screenWidth * 0.08,
-                        ),
-                        onPressed: _onPlayPauseTapped,
-                      ),
-                    ),
-                  Icon(
-                    _isExpanded
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.keyboard_arrow_down_rounded,
-                    color: const Color(0xFF64748B),
-                    size: screenWidth * 0.06,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          AnimatedCrossFade(
-            duration: const Duration(milliseconds: 300),
-            crossFadeState:
-                _isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-            firstChild: const SizedBox.shrink(),
-            secondChild: Column(
-              children: [
-                const Divider(height: 1, color: Color.fromRGBO(255, 255, 255, 0.4), thickness: 1),
-                FutureBuilder<List<SoundOption>>(
-                  future: _soundsFuture,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Padding(
-                        padding: EdgeInsets.all(16.0),
-                        child: Center(child: CircularProgressIndicator()),
-                      );
-                    }
-                    if (snapshot.hasError) {
-                      return const Padding(
-                        padding: EdgeInsets.all(16.0),
-                        child: Center(child: Text('Could not load sounds')),
-                      );
-                    }
-                    if (snapshot.hasData) {
-                      final sounds = snapshot.data!;
-                      return Column(
-                        children: sounds.map((sound) {
-                          final bool isThisOneSelected =
-                              sound.id == _currentSound.id && _isSoundPlaying;
-                          return _SoundRow(
-                            sound: sound,
-                            isSelected: isThisOneSelected,
-                            onTap: () => _onSoundSelected(sound),
-                          );
-                        }).toList(),
-                      );
-                    }
-                    return const SizedBox.shrink();
-                  },
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        InkWell(
+          onTap: () {
+            if (!mounted) return;
+            setState(() {
+              _isExpanded = !_isExpanded;
+            });
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Row(
+            children: [
+              Container(
+                width: screenWidth * 0.09,
+                height: screenWidth * 0.09,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  color: displayColor.withOpacity(0.1),
                 ),
-              ],
-            ),
+                child: Icon(
+                  displayIcon,
+                  color: displayColor,
+                  size: screenWidth * 0.045,
+                ),
+              ),
+              SizedBox(width: screenWidth * 0.03),
+              Expanded(
+                child: Text(
+                  displayText,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: primaryTextDark,
+                    fontSize: screenWidth * 0.04,
+                  ),
+                ),
+              ),
+              if (_currentSound.id != 'off')
+                IconButton(
+                  icon: Icon(
+                    _isSoundPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
+                    color: displayColor,
+                    size: screenWidth * 0.07,
+                  ),
+                  onPressed: _onPlayPauseTapped,
+                ),
+              Icon(
+                _isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                color: secondaryTextGrey,
+                size: screenWidth * 0.06,
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+        AnimatedCrossFade(
+          duration: const Duration(milliseconds: 300),
+          crossFadeState:
+              _isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+          firstChild: const SizedBox.shrink(),
+          secondChild: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(height: 8),
+              Divider(height: 1, color: secondaryTextGrey.withOpacity(0.2), thickness: 1),
+              FutureBuilder<List<SoundOption>>(
+                future: _soundsFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return Padding(
+                      padding: EdgeInsets.all(screenWidth * 0.04),
+                      child: Center(child: CircularProgressIndicator(color: accentThemeColor)),
+                    );
+                  }
+                  if (snapshot.hasError) {
+                    return Padding(
+                      padding: EdgeInsets.all(screenWidth * 0.04),
+                      child: Center(
+                        child: Text(
+                          'Could not load sounds',
+                          style: TextStyle(color: secondaryTextGrey),
+                        ),
+                      ),
+                    );
+                  }
+                  if (snapshot.hasData) {
+                    final sounds = snapshot.data!;
+                    return ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: sounds.length,
+                      itemBuilder: (context, index) {
+                        final sound = sounds[index];
+                        final bool isThisOneSelected =
+                            sound.id == _currentSound.id && _isSoundPlaying;
+                        return _SoundRow(
+                          sound: sound,
+                          isSelected: isThisOneSelected,
+                          onTap: () => _onSoundSelected(sound),
+                        );
+                      },
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1751,20 +1632,19 @@ class _SoundRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final rowHorizontalPadding = screenWidth * 0.04;
 
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: rowHorizontalPadding, vertical: screenWidth * 0.03),
+        padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.04, vertical: screenWidth * 0.03),
         child: Row(
           children: [
             Container(
               width: screenWidth * 0.08,
               height: screenWidth * 0.08,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(screenWidth * 0.02),
-                color: sound.color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+                color: sound.color.withOpacity(0.1),
               ),
               child: Icon(
                 sound.icon,
@@ -1778,15 +1658,15 @@ class _SoundRow extends StatelessWidget {
                 sound.name,
                 style: TextStyle(
                   fontWeight: FontWeight.w500,
-                  color: const Color(0xFF0F172A),
-                  fontSize: screenWidth * 0.04,
+                  color: primaryTextDark,
+                  fontSize: screenWidth * 0.037,
                 ),
               ),
             ),
             if (isSelected)
               Icon(
-                Icons.check,
-                color: Colors.green.shade600,
+                Icons.check_circle,
+                color: accentThemeColor,
                 size: screenWidth * 0.05,
               ),
           ],
