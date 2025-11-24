@@ -1,30 +1,46 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
+// =============================================================================
+// THEME COLORS
+// =============================================================================
+const Color dfDeepTeal = Color(0xFF175B73); 
+const Color dfTealCyan = Color(0xFF287C85); 
+const Color dfLightSeafoam = Color(0xFF87ACA3); 
+const Color dfDeepBlue = Color(0xFF162893); 
+const Color dfNavyIndigo = Color(0xFF0C1446); 
+
+const Color primaryThemeColor = dfDeepBlue;      
+const Color accentThemeColor = dfTealCyan;       
+const Color lightestAccentColor = dfLightSeafoam; 
+
+const Color primaryBackground = Color(0xFFF7F7F7); 
+const Color cardBackground = Color(0xFFFFFFFF);  
+
+const Color primaryTextDark = dfNavyIndigo;      
+const Color secondaryTextGrey = Color(0xFF6B6B78); 
+
+const Color errorIndicatorRed = Color(0xFFE57373); 
+
 // ========= Constants =========
 const String _rikazLogoPath = "assets/images/RikazLogo.png";
-// Get the Supabase client instance using the alias 'sb'
 final supabase = sb.Supabase.instance.client;
 
 // ========= Helpers =========
-
-// Basic email format check: e.g., 'user@domain.com'
 final RegExp _emailRegex = RegExp(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$");
-
-// Password complexity check:
-final RegExp _passwordRegex = RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$');
-
 
 void _showAlert(BuildContext context, String title, String message) {
   showDialog(
     context: context,
     builder: (BuildContext context) {
       return AlertDialog(
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        content: Text(message),
+        backgroundColor: cardBackground,
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: primaryTextDark)),
+        content: Text(message, style: const TextStyle(color: primaryTextDark)),
         actions: <Widget>[
           TextButton(
-            child: const Text("OK", style: TextStyle(color: Color(0xFF4f46e5))),
+            child: const Text("OK", style: TextStyle(color: primaryThemeColor)),
             onPressed: () => Navigator.of(context).pop(),
           ),
         ],
@@ -45,83 +61,178 @@ class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  // Controller for confirming the password
   final TextEditingController _confirmPasswordController = TextEditingController(); 
 
-  // State to hold the post-signup success/error message
-  String _postSignupMessage = ''; 
-  // State to control the message color (true for green, false for red)
-  bool _isSuccessMessage = true; 
+  // UX State: Track which fields have errors to change border color
+  bool _emailHasError = false;
+  bool _passwordHasError = false;
+  bool _confirmPasswordHasError = false;
 
+  // UX State: Specific error message strings
+  String _passwordErrorMessage = '';
+  String _postSignupMessage = ''; 
+  bool _isSuccessMessage = true; 
   bool _isSubmitting = false;
 
-  // State to manage password visibility
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+
+  StreamSubscription<sb.AuthState>? _authStateSubscription;
+  bool _verificationDialogShown = false; 
+
+  @override
+  void initState() {
+    super.initState();
+    _setupAuthListener();
+  }
+
+  void _setupAuthListener() {
+    _authStateSubscription = supabase.auth.onAuthStateChange.listen((data) {
+      final sb.AuthChangeEvent event = data.event;
+      if (event == sb.AuthChangeEvent.signedIn && !_isSubmitting && !_verificationDialogShown) {
+        supabase.auth.signOut();
+        setState(() => _verificationDialogShown = true);
+        if (mounted) _showVerifiedSuccessDialog();
+      }
+    });
+  }
+
+  void _showVerifiedSuccessDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: cardBackground,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          contentPadding: const EdgeInsets.all(24),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.check_circle_rounded, color: accentThemeColor, size: 70),
+              const SizedBox(height: 20),
+              const Text("Account Verified!", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: primaryTextDark)),
+              const SizedBox(height: 12),
+              const Text("Your email has been successfully verified.\nPlease log in to continue.", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, color: secondaryTextGrey)),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop(); 
+                    Navigator.of(context).pushReplacementNamed('/login');
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: primaryThemeColor, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                  child: const Text("Back to Login", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ➕ NEW: Dialog to show when email is sent (replaces the low green text)
+  void _showEmailSentDialog(String email) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: cardBackground,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          contentPadding: const EdgeInsets.all(24),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.mark_email_read_outlined, color: primaryThemeColor, size: 70),
+              const SizedBox(height: 20),
+              const Text("Check Your Email", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: primaryTextDark)),
+              const SizedBox(height: 12),
+              Text("We have sent a verification link to:\n$email", textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, color: secondaryTextGrey)),
+              const SizedBox(height: 8),
+              const Text("Please check your inbox (and spam) to activate your account.", textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: secondaryTextGrey)),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: ElevatedButton.styleFrom(backgroundColor: primaryThemeColor, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                  child: const Text("OK", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
-    //  Dispose the new controller
     _confirmPasswordController.dispose();
+    _authStateSubscription?.cancel(); 
     super.dispose();
   }
 
-// SUPABASE SIGN UP LOGIC WITH ON-SCREEN ERROR
+  String? _validatePasswordRequirements(String password) {
+    if (password.length < 12) return "Must be at least 12 characters.";
+    if (!RegExp(r'[A-Z]').hasMatch(password)) return "Must contain an uppercase letter.";
+    if (!RegExp(r'[a-z]').hasMatch(password)) return "Must contain a lowercase letter.";
+    if (!RegExp(r'\d').hasMatch(password)) return "Must contain a number.";
+    if (!RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(password)) return "Must contain a special character.";
+    return null; 
+  }
+
   Future<void> _handleSignup() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
     final password = _passwordController.text;
-    //  Get the confirmed password
     final confirmPassword = _confirmPasswordController.text;
 
-    // --- Validation Checks ---
+    setState(() {
+      _emailHasError = false;
+      _passwordHasError = false;
+      _confirmPasswordHasError = false;
+      _passwordErrorMessage = '';
+      _postSignupMessage = '';
+    });
+
     if (name.isEmpty || email.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
       _showAlert(context, "Missing Info", "Please fill in all fields.");
       return;
     }
+
     if (!_emailRegex.hasMatch(email)) {
+      setState(() => _emailHasError = true);
       _showAlert(context, "Invalid Email", "Please enter a valid email address.");
       return;
     }
     
-    // ➕ NEW: Check if passwords match
     if (password != confirmPassword) {
-      _showAlert(context, "Password Mismatch", "Passwords do not match.");
+      setState(() {
+        _passwordHasError = true;
+        _confirmPasswordHasError = true;
+        _passwordErrorMessage = "Passwords do not match.";
+      });
       return;
     }
 
-    // Updated password validation with specific error messages
-    if (password.length < 12) {
-      _showAlert(context, "Weak Password", "Password must be at least 12 characters long.");
-      return;
-    }
-    if (!RegExp(r'[A-Z]').hasMatch(password)) {
-      _showAlert(context, "Weak Password", "Password must contain at least one uppercase letter.");
-      return;
-    }
-    if (!RegExp(r'[a-z]').hasMatch(password)) {
-      _showAlert(context, "Weak Password", "Password must contain at least one lowercase letter.");
-      return;
-    }
-    if (!RegExp(r'\d').hasMatch(password)) {
-      _showAlert(context, "Weak Password", "Password must contain at least one number.");
-      return;
-    }
-    if (!RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(password)) {
-      _showAlert(context, "Weak Password", "Password must contain at least one special character (e.g., !@#\$%^&*).");
+    String? requirementError = _validatePasswordRequirements(password);
+    if (requirementError != null) {
+      setState(() {
+        _passwordHasError = true;
+        _passwordErrorMessage = requirementError;
+      });
       return;
     }
 
-    setState(() {
-      _isSubmitting = true;
-      _postSignupMessage = ''; // Clear previous messages
-    });
+    setState(() => _isSubmitting = true);
 
     try {
-      // Attempt to sign up
       final sb.AuthResponse response = await supabase.auth.signUp(
         email: email,
         password: password,
@@ -131,74 +242,60 @@ class _SignupScreenState extends State<SignupScreen> {
 
       if (!mounted) return;
       
-      // --- START OF NEW "IDENTITIES" LOGIC ---
-
-      // Check if the user object and identities list exist.
-      // A fake user object (for an existing user) will have response.user.identities as an empty list [].
-      // A real new user will have one identity in the list.
+      // --- IDENTITIES LOGIC ---
       if (response.user != null && (response.user!.identities == null || response.user!.identities!.isEmpty)) {
-        
-        // --- CASE 1: USER ALREADY EXISTS ---
-        // Supabase returned a fake user with no identities.
+        // User already exists
         setState(() {
+          _emailHasError = true; 
           _postSignupMessage = "This email is already registered. Please log in instead.";
-          _isSuccessMessage = false; // This is an "error" for the signup form
+          _isSuccessMessage = false; 
         });
 
       } else if (response.user != null) {
+        // Success
+        // 🌟 UPDATED: Instead of setting text, show the beautiful dialog
+        _passwordController.clear();
+        _confirmPasswordController.clear();
         
-        // --- CASE 2: USER IS NEW ---
-        // We got a user AND they have an identity. Send the verification email.
-        setState(() {
-          _postSignupMessage = 'A verification email has been sent to $email. Please click the link to confirm your account, then log in.';
-          _isSuccessMessage = true;
-          // Clear password fields on successful sign up
-          _passwordController.clear();
-          _confirmPasswordController.clear();
-        });
+        _showEmailSentDialog(email); 
 
       } else {
-        // Fallback for any other unexpected null response
         setState(() {
           _postSignupMessage = 'An error occurred. Please try again.';
           _isSuccessMessage = false;
         });
       }
-      // --- END OF VERIFICATION LOGIC ---
       
     } on sb.AuthException catch (e) { 
       if (!mounted) return;
       
-      // This catch block is still a good fallback
       String errorMessage = e.message;
       if (errorMessage.contains('User already registered') || 
           errorMessage.contains('already has an account')) {
-         
         setState(() {
+          _emailHasError = true; 
           _postSignupMessage = "This email is in use. Please log in.";
           _isSuccessMessage = false;
         });
-         
       } else {
          _showAlert(context, "Signup Error", errorMessage);
       }
       
     } catch (e) {
       if (!mounted) return;
-      _showAlert(context, "Signup Error", "An unexpected error occurred: ${e.toString()}");
+      _showAlert(context, "Signup Error", "An unexpected error occurred.");
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
-  // included obscureText and onToggleVisibility
   Widget _buildTextInput({
     required TextEditingController controller,
     required String hintText,
     required TextInputType keyboardType,
     bool obscureText = false,
     bool autocorrect = true,
-    // ➕ NEW: Parameters for visibility toggle
+    bool hasError = false, 
     VoidCallback? onToggleVisibility, 
   }) {
     return TextField(
@@ -206,15 +303,28 @@ class _SignupScreenState extends State<SignupScreen> {
       keyboardType: keyboardType,
       obscureText: obscureText,
       autocorrect: autocorrect,
-      style: const TextStyle(fontSize: 16),
+      cursorColor: primaryThemeColor,
+      style: const TextStyle(fontSize: 16, color: primaryTextDark),
       decoration: InputDecoration(
         hintText: hintText,
+        hintStyle: const TextStyle(color: secondaryTextGrey),
         contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-        // ➕ NEW: Add the suffix icon for visibility toggle if the callback is provided
+        enabledBorder: UnderlineInputBorder(
+          borderSide: BorderSide(
+            color: hasError ? errorIndicatorRed : secondaryTextGrey, 
+            width: hasError ? 2.0 : 1.0
+          ),
+        ),
+        focusedBorder: UnderlineInputBorder(
+          borderSide: BorderSide(
+            color: hasError ? errorIndicatorRed : primaryThemeColor, 
+            width: 2
+          ),
+        ),
         suffixIcon: onToggleVisibility != null ? IconButton(
           icon: Icon(
             obscureText ? Icons.visibility : Icons.visibility_off,
-            color: const Color(0xFF666666),
+            color: hasError ? errorIndicatorRed : secondaryTextGrey,
           ),
           onPressed: onToggleVisibility,
         ) : null,
@@ -225,25 +335,23 @@ class _SignupScreenState extends State<SignupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: primaryBackground,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              // Logo
               Image.asset(_rikazLogoPath, height: 150, width: 150),
               const SizedBox(height: 10),
 
               const Text(
                 'Create Account',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF222222)),
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: primaryTextDark),
               ),
               const SizedBox(height: 24),
 
-              // Full Name
               _buildTextInput(
                 controller: _nameController,
                 hintText: "Full Name",
@@ -251,58 +359,61 @@ class _SignupScreenState extends State<SignupScreen> {
               ),
               const SizedBox(height: 12),
               
-              // Email
               _buildTextInput(
                 controller: _emailController,
                 hintText: "Email",
                 keyboardType: TextInputType.emailAddress,
                 autocorrect: false,
+                hasError: _emailHasError, 
               ),
               const SizedBox(height: 12),
               
-              // Password use visibility toggle
               _buildTextInput(
                 controller: _passwordController,
                 hintText: "Password",
                 keyboardType: TextInputType.visiblePassword,
                 obscureText: _obscurePassword,
                 autocorrect: false,
-                onToggleVisibility: () {
-                  setState(() {
-                    _obscurePassword = !_obscurePassword;
-                  });
-                },
+                hasError: _passwordHasError, 
+                onToggleVisibility: () => setState(() => _obscurePassword = !_obscurePassword),
               ),
               const SizedBox(height: 12),
               
-              // Confirm Password
               _buildTextInput(
                 controller: _confirmPasswordController,
                 hintText: "Confirm Password",
                 keyboardType: TextInputType.visiblePassword,
                 obscureText: _obscureConfirmPassword,
                 autocorrect: false,
-                onToggleVisibility: () {
-                  setState(() {
-                    _obscureConfirmPassword = !_obscureConfirmPassword;
-                  });
-                },
+                hasError: _confirmPasswordHasError, 
+                onToggleVisibility: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
               ),
 
-              // Password requirements note
-              const Padding(
-                padding: EdgeInsets.only(top: 8.0, bottom: 16.0),
-                child: Text(
-                  'Password must be at least 12 characters long and contain:\n• One uppercase letter • One lowercase letter\n• One number • One special character (!@#\$%^&*)',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF666666),
+              if (_passwordErrorMessage.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline, color: errorIndicatorRed, size: 16),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _passwordErrorMessage,
+                          style: const TextStyle(fontSize: 12, color: errorIndicatorRed, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ),
-              
+                )
+              else 
+                const SizedBox(height: 24), 
+
               ElevatedButton(
                 onPressed: _isSubmitting ? null : _handleSignup,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryThemeColor,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
                 child: Text(
                   _isSubmitting ? "Creating..." : "Sign Up",
                   style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
@@ -310,7 +421,7 @@ class _SignupScreenState extends State<SignupScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Conditional message for successful signup or error
+              // Only show this for ERRORS now. Success uses the Dialog.
               if (_postSignupMessage.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 20),
@@ -320,13 +431,11 @@ class _SignupScreenState extends State<SignupScreen> {
                     style: TextStyle(
                       fontSize: 14, 
                       fontWeight: FontWeight.w500,
-                      // Green for success, Red for error based on the state variable
-                      color: _isSuccessMessage ? Colors.green.shade700 : Colors.red.shade700, 
+                      color: _isSuccessMessage ? accentThemeColor : errorIndicatorRed, 
                     ),
                   ),
                 ),
                 
-              // Log In link
               GestureDetector(
                 onTap: _isSubmitting ? null : () => Navigator.of(context).pushReplacementNamed('/login'),
                 child: const Padding(
@@ -334,11 +443,10 @@ class _SignupScreenState extends State<SignupScreen> {
                   child: Text(
                     'Already have an account? Log in',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Color(0xFF4f46e5), fontSize: 15),
+                    style: TextStyle(color: primaryThemeColor, fontSize: 15),
                   ),
                 ),
               ),
-              
             ],
           ),
         ),

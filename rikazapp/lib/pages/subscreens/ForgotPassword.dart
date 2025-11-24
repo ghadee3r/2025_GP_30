@@ -1,33 +1,48 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
+// =============================================================================
+// THEME COLORS
+// =============================================================================
+const Color dfDeepTeal = Color(0xFF175B73); 
+const Color dfTealCyan = Color(0xFF287C85); 
+const Color dfLightSeafoam = Color(0xFF87ACA3); 
+const Color dfDeepBlue = Color(0xFF162893); 
+const Color dfNavyIndigo = Color(0xFF0C1446); 
+
+const Color primaryThemeColor = dfDeepBlue;      
+const Color accentThemeColor = dfTealCyan;       
+const Color lightestAccentColor = dfLightSeafoam; 
+
+const Color primaryBackground = Color(0xFFF7F7F7); 
+const Color cardBackground = Color(0xFFFFFFFF);  
+
+const Color primaryTextDark = dfNavyIndigo;      
+const Color secondaryTextGrey = Color(0xFF6B6B78); 
+
+const Color errorIndicatorRed = Color(0xFFE57373); 
+
 // --- Constants ---
-const String loginRoute = "/login"; // Route to navigate back to the login screen
-
-// Get the Supabase client instance, assumed to be initialized globally
+const String loginRoute = "/login"; 
 final supabase = sb.Supabase.instance.client;
-
-// Deep Link for Supabase to redirect back to the app after clicking the email link.
-// IMPORTANT: This URL must be configured in your Supabase Auth settings 
-// and your native Flutter project (iOS/Android) for Deep Linking to work.
 const String supabaseRedirectUrl = 'io.rikaz.app://reset-password'; 
 
 // --- Custom Alert Dialog Helper ---
-// Displays a custom AlertDialog and optionally executes a callback on 'OK'
 void showAlert(BuildContext context, String title, String message, {VoidCallback? onOK}) {
   showDialog(
     context: context,
     builder: (BuildContext context) {
       return AlertDialog(
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        content: Text(message),
+        backgroundColor: cardBackground,
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: primaryTextDark)),
+        content: Text(message, style: const TextStyle(color: primaryTextDark)),
         actions: <Widget>[
           TextButton(
-            child: const Text("OK", style: TextStyle(color: Color(0xFF4f46e5))),
+            child: const Text("OK", style: TextStyle(color: primaryThemeColor)),
             onPressed: () {
-              Navigator.of(context).pop(); // Close the dialog
+              Navigator.of(context).pop(); 
               if (onOK != null) {
-                onOK(); // Execute optional action, like navigation
+                onOK(); 
               }
             },
           ),
@@ -37,7 +52,6 @@ void showAlert(BuildContext context, String title, String message, {VoidCallback
   );
 }
 
-// Widget for the Forgot Password Page
 class ForgotPassword extends StatefulWidget {
   const ForgotPassword({super.key});
 
@@ -47,7 +61,7 @@ class ForgotPassword extends StatefulWidget {
 
 class ForgotPasswordState extends State<ForgotPassword> {
   final TextEditingController emailController = TextEditingController();
-  bool isSubmitting = false; // State to handle button loading animation
+  bool isSubmitting = false; 
 
   @override
   void dispose() {
@@ -55,7 +69,6 @@ class ForgotPasswordState extends State<ForgotPassword> {
     super.dispose();
   }
 
-  // --- Supabase Reset Password Logic ---
   Future<void> handlePasswordReset() async {
     final email = emailController.text.trim();
 
@@ -69,22 +82,18 @@ class ForgotPasswordState extends State<ForgotPassword> {
     });
 
     try {
-      // SUPABASE RESET PASSWORD REQUEST
-      // This sends the email with the reset link.
       await supabase.auth.resetPasswordForEmail(
         email,
-        redirectTo: supabaseRedirectUrl, // Redirects the user back to the app via deep link
+        redirectTo: supabaseRedirectUrl, 
       );
       
       if (!mounted) return;
 
-      // SUCCESS: Show a generic message to prevent malicious actors from guessing emails
       showAlert(
         context, 
         "Check Your Email", 
         "If an account is associated with $email, a password reset link has been sent. Please check your spam folder.",
         onOK: () {
-           // Navigate back to login after showing success message
           Navigator.of(context).pushReplacementNamed(loginRoute);
         }
       );
@@ -93,12 +102,9 @@ class ForgotPasswordState extends State<ForgotPassword> {
       final message = e.message;
       debugPrint("Supabase Reset Error: $message");
 
-      // Detect Supabase rate-limit message
       if (message.contains("For security purposes")) {
-        // Extract the remaining seconds (if present)
         final secondsMatch = RegExp(r'(\d+)\s*seconds?').firstMatch(message);
-        final seconds =
-            secondsMatch != null ? secondsMatch.group(1) ?? "a few" : "a few";
+        final seconds = secondsMatch != null ? secondsMatch.group(1) ?? "a few" : "a few";
 
         showAlert(
           context,
@@ -106,7 +112,6 @@ class ForgotPasswordState extends State<ForgotPassword> {
           "You can only request another password reset after $seconds seconds.\n\nTry again shortly.",
         );
       } else {
-        // Other auth-related errors
         showAlert(
           context,
           "Request Error",
@@ -114,7 +119,6 @@ class ForgotPasswordState extends State<ForgotPassword> {
         );
       }
     } catch (e) {
-      // Handle generic errors
       debugPrint("Generic Reset Error: $e");
       if (mounted) {
         showAlert(context, "Request Error", "An unexpected error occurred.");
@@ -128,7 +132,6 @@ class ForgotPasswordState extends State<ForgotPassword> {
     }
   }
 
-  // --- Helper widget for consistent input styling (reused from login) ---
   Widget buildTextInput({
     required TextEditingController controller,
     required String hintText,
@@ -137,30 +140,31 @@ class ForgotPasswordState extends State<ForgotPassword> {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
-      style: const TextStyle(fontSize: 16),
+      cursorColor: primaryThemeColor,
+      style: const TextStyle(fontSize: 16, color: primaryTextDark),
       decoration: InputDecoration(
         hintText: hintText,
+        hintStyle: const TextStyle(color: secondaryTextGrey),
         contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8.0),
-          borderSide: BorderSide.none,
+        focusedBorder: const UnderlineInputBorder(
+          borderSide: BorderSide(color: primaryThemeColor, width: 2),
         ),
-        filled: true,
-        fillColor: const Color(0xFFF3F4F6),
+        enabledBorder: const UnderlineInputBorder(
+          borderSide: BorderSide(color: secondaryTextGrey),
+        ),
       ),
     );
   }
 
-  // --- UI Build ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: primaryBackground,
       appBar: AppBar(
         title: const Text('Forgot Password'),
-        backgroundColor: Colors.white,
+        backgroundColor: primaryBackground,
         elevation: 0,
-        foregroundColor: const Color(0xFF222222),
+        foregroundColor: primaryTextDark,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -175,7 +179,7 @@ class ForgotPasswordState extends State<ForgotPassword> {
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF222222),
+                    color: primaryTextDark,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -183,12 +187,11 @@ class ForgotPasswordState extends State<ForgotPassword> {
                   'Enter your email and we will send you a link to reset your password.',
                   style: TextStyle(
                     fontSize: 16,
-                    color: Color(0xFF666666),
+                    color: secondaryTextGrey,
                   ),
                 ),
                 const SizedBox(height: 32),
 
-                // Email Input
                 buildTextInput(
                   controller: emailController,
                   hintText: "Email Address",
@@ -196,11 +199,10 @@ class ForgotPasswordState extends State<ForgotPassword> {
                 ),
                 const SizedBox(height: 24),
 
-                // Send Reset Link Button
                 ElevatedButton(
                   onPressed: isSubmitting ? null : handlePasswordReset,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4f46e5),
+                    backgroundColor: primaryThemeColor,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8.0),

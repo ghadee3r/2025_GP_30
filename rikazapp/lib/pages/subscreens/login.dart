@@ -1,28 +1,48 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
-// --- Constants ---
-const String _rikazLogoPath = "assets/images/RikazLogo.png"; // Path to the app logo asset
-const String _signupRoute = "/signup"; // Route name for the Sign Up screen
-const String _forgotPasswordRoute = "/forgot-password"; // New route name for the Forgot Password screen
+// =============================================================================
+// THEME COLORS
+// =============================================================================
+const Color dfDeepTeal = Color(0xFF175B73); 
+const Color dfTealCyan = Color(0xFF287C85); 
+const Color dfLightSeafoam = Color(0xFF87ACA3); 
+const Color dfDeepBlue = Color(0xFF162893); 
+const Color dfNavyIndigo = Color(0xFF0C1446); 
 
-// Get the Supabase client instance, initialized elsewhere in the app (e.g., main.dart)
+const Color primaryThemeColor = dfDeepBlue;      
+const Color accentThemeColor = dfTealCyan;       
+const Color lightestAccentColor = dfLightSeafoam; 
+
+const Color primaryBackground = Color(0xFFF7F7F7); 
+const Color cardBackground = Color(0xFFFFFFFF);  
+
+const Color primaryTextDark = dfNavyIndigo;      
+const Color secondaryTextGrey = Color(0xFF6B6B78); 
+
+const Color errorIndicatorRed = Color(0xFFE57373); 
+
+// --- Constants ---
+const String _rikazLogoPath = "assets/images/RikazLogo.png"; 
+const String _signupRoute = "/signup"; 
+const String _forgotPasswordRoute = "/forgot-password"; 
+
 final supabase = sb.Supabase.instance.client;
 
 // --- Custom Alert Dialog Helper ---
-// Displays a custom AlertDialog for showing messages and errors to the user
 void _showAlert(BuildContext context, String title, String message) {
   showDialog(
     context: context,
     builder: (BuildContext context) {
       return AlertDialog(
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        content: Text(message),
+        backgroundColor: cardBackground,
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: primaryTextDark)),
+        content: Text(message, style: const TextStyle(color: primaryTextDark)),
         actions: <Widget>[
           TextButton(
-            child: const Text("OK", style: TextStyle(color: Color(0xFF4f46e5))),
+            child: const Text("OK", style: TextStyle(color: primaryThemeColor)),
             onPressed: () {
-              Navigator.of(context).pop(); // Close the dialog
+              Navigator.of(context).pop(); 
             },
           ),
         ],
@@ -31,7 +51,6 @@ void _showAlert(BuildContext context, String title, String message) {
   );
 }
 
-// Stateful widget for the main Login Screen
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -40,89 +59,82 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // Controllers for handling input from the email and password text fields
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  // State variable to manage the loading/submission status of the button
   bool _isSubmitting = false;
+
+  // UX State: Track if login failed to turn borders red
+  bool _hasLoginError = false;
+
+  // UX State: Password Visibility Toggle
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
-    // Clean up the controllers when the widget is removed from the tree
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
-  // --- Login Logic (Uses Supabase Auth) ---
   Future<void> _handleLogin() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
 
-    // Basic form validation checks
+    // Reset error state at the start of a new attempt
+    setState(() {
+      _hasLoginError = false;
+    });
+
     if (email.isEmpty || password.isEmpty) {
       _showAlert(context, "Missing Info", "Please fill in all fields.");
       return;
     }
     
-    // Simple password length validation
     if (password.length < 6) { 
-        _showAlert(context, "Password Error", "Password must be at least 6 characters long.");
+        setState(() {
+          _hasLoginError = true; // Turn borders red
+        });
+        _showAlert(context, "Login Error", "Incorrect email or password.");
         return;
     }
 
-    // Set loading state to true and disable the button
     setState(() {
       _isSubmitting = true;
     });
 
     try {
-      // 🚨 SUPABASE SIGN IN LOGIC 🚨
-      // Attempt to sign in the user using the email and password
       final sb.AuthResponse response = await supabase.auth.signInWithPassword(
         email: email,
         password: password,
       );
 
-      // Check if a user session was successfully created
       if (response.user == null) {
-        // If sign-in fails but no explicit exception is thrown,
-        // it often means credentials were bad or email confirmation is pending.
-         throw const sb.AuthException('Invalid login credentials or email confirmation required.');
+         throw const sb.AuthException('Invalid login credentials.');
       }
       
       if (!mounted) return;
 
-      // Show success message and user's email
-      _showAlert(context, "Welcome Back!", "Logged in as ${response.user!.email}");
-      
-      // Navigate to the main application screen ('/tabs') and remove all previous routes
-      // NOTE: Ensure '/tabs' is defined in your main route table.
       Navigator.of(context).pushNamedAndRemoveUntil(
         '/tabs',
-        (route) => false, // Remove all routes below the new route
-        arguments: 0, // Pass argument (e.g., initial tab index)
+        (route) => false, 
+        arguments: 0, 
       );
 
     } on sb.AuthException catch (e) {
-      // Handle authentication exceptions thrown by Supabase
       debugPrint("Supabase Login Error: ${e.message}");
       if (mounted) {
-        // Display a user-friendly error message
-        String errorMessage = "Login failed. Check your email and password.";
-        if (e.message.contains('Invalid login credentials')) {
-          errorMessage = "Incorrect email or password.";
-        }
-        _showAlert(context, "Login Error", errorMessage);
+        setState(() {
+          _hasLoginError = true; // Turn borders red
+        });
+        
+        _showAlert(context, "Login Error", "Incorrect email or password.");
       }
     } catch (e) {
-      // Handle generic errors (e.g., network issues)
       debugPrint("Generic Login Error: $e");
       if (mounted) {
         _showAlert(context, "Login Error", "An unexpected network or server error occurred.");
       }
     } finally {
-      // Re-enable the button regardless of success or failure
       if (mounted) {
         setState(() {
           _isSubmitting = false;
@@ -131,38 +143,55 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // --- Helper widget for consistent input styling ---
   Widget _buildTextInput({
     required TextEditingController controller,
     required String hintText,
     required TextInputType keyboardType,
     bool obscureText = false,
     bool autocorrect = true,
+    bool hasError = false,
+    VoidCallback? onToggleVisibility, // Added visibility toggle callback
   }) {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
-      obscureText: obscureText, // Hides input for password fields
+      obscureText: obscureText,
       autocorrect: autocorrect,
-      style: const TextStyle(fontSize: 16),
+      cursorColor: primaryThemeColor,
+      style: const TextStyle(fontSize: 16, color: primaryTextDark),
       decoration: InputDecoration(
         hintText: hintText,
+        hintStyle: const TextStyle(color: secondaryTextGrey),
         contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8.0),
-          borderSide: BorderSide.none,
+        // Red border on error, Grey otherwise
+        enabledBorder: UnderlineInputBorder(
+          borderSide: BorderSide(
+            color: hasError ? errorIndicatorRed : secondaryTextGrey, 
+            width: hasError ? 2.0 : 1.0
+          ),
         ),
-        filled: true,
-        fillColor: const Color(0xFFF3F4F6), // Light gray background for input
+        focusedBorder: UnderlineInputBorder(
+          borderSide: BorderSide(
+            color: hasError ? errorIndicatorRed : primaryThemeColor, 
+            width: 2
+          ),
+        ),
+        // Add the Eye Icon if onToggleVisibility is provided
+        suffixIcon: onToggleVisibility != null ? IconButton(
+          icon: Icon(
+            obscureText ? Icons.visibility : Icons.visibility_off,
+            color: hasError ? errorIndicatorRed : secondaryTextGrey,
+          ),
+          onPressed: onToggleVisibility,
+        ) : null,
       ),
     );
   }
 
-  // --- UI Build ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: primaryBackground,
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
@@ -186,7 +215,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF222222),
+                    color: primaryTextDark,
                   ),
                 ),
                 // Subtitle
@@ -195,26 +224,33 @@ class _LoginScreenState extends State<LoginScreen> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 14,
-                    color: Color(0xFF666666),
+                    color: secondaryTextGrey,
                   ),
                 ),
                 const SizedBox(height: 32),
 
-                // Email Input field
                 _buildTextInput(
                   controller: _emailController,
                   hintText: "Email",
                   keyboardType: TextInputType.emailAddress,
                   autocorrect: false,
+                  hasError: _hasLoginError, 
                 ),
                 const SizedBox(height: 12),
-                // Password Input field
+                
+                // Password Field with Visibility Toggle
                 _buildTextInput(
                   controller: _passwordController,
                   hintText: "Password",
                   keyboardType: TextInputType.visiblePassword,
-                  obscureText: true,
+                  obscureText: _obscurePassword,
                   autocorrect: false,
+                  hasError: _hasLoginError,
+                  onToggleVisibility: () {
+                    setState(() {
+                      _obscurePassword = !_obscurePassword;
+                    });
+                  },
                 ),
                 const SizedBox(height: 16),
                 
@@ -224,14 +260,13 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: GestureDetector(
                     onTap: () {
                        if (!_isSubmitting) {
-                          // Navigate to the dedicated Forgot Password screen
                           Navigator.of(context).pushNamed(_forgotPasswordRoute);
                        }
                     },
                     child: const Text(
                       'Forgot Password?',
                       style: TextStyle(
-                        color: Color(0xFF4f46e5), // Primary accent color
+                        color: primaryThemeColor,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                       ),
@@ -242,9 +277,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 // Log In Button
                 ElevatedButton(
-                  onPressed: _isSubmitting ? null : _handleLogin, // Disable if submitting
+                  onPressed: _isSubmitting ? null : _handleLogin, 
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4f46e5), // Primary button color
+                    backgroundColor: primaryThemeColor, 
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8.0),
@@ -252,7 +287,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     elevation: 5,
                   ),
                   child: Text(
-                    _isSubmitting ? "Logging in..." : "Log In", // Change text when loading
+                    _isSubmitting ? "Logging in..." : "Log In", 
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
@@ -262,11 +297,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // Sign Up Link (Navigates to /signup)
+                // Sign Up Link
                 GestureDetector(
                   onTap: () {
                     if (!_isSubmitting) {
-                      // Navigate to Sign Up screen and replace the current login route
                       Navigator.of(context).pushReplacementNamed(_signupRoute);
                     }
                   },
@@ -276,14 +310,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       TextSpan(
                         text: 'Don’t have an account? ',
                         style: TextStyle(
-                          color: Color(0xFF666666),
+                          color: secondaryTextGrey,
                           fontSize: 15,
                         ),
                         children: [
                           TextSpan(
                             text: 'Sign Up',
                             style: TextStyle(
-                              color: Color(0xFF4f46e5), // Highlighted link text
+                              color: primaryThemeColor,
                               fontWeight: FontWeight.bold,
                             ),
                           ),

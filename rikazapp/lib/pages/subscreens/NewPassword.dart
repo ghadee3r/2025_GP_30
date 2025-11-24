@@ -1,6 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
+// =============================================================================
+// THEME COLORS
+// =============================================================================
+const Color dfDeepTeal = Color(0xFF175B73); 
+const Color dfTealCyan = Color(0xFF287C85); 
+const Color dfLightSeafoam = Color(0xFF87ACA3); 
+const Color dfDeepBlue = Color(0xFF162893); 
+const Color dfNavyIndigo = Color(0xFF0C1446); 
+
+const Color primaryThemeColor = dfDeepBlue;      
+const Color accentThemeColor = dfTealCyan;       
+const Color lightestAccentColor = dfLightSeafoam; 
+
+const Color primaryBackground = Color(0xFFF7F7F7); 
+const Color cardBackground = Color(0xFFFFFFFF);  
+
+const Color primaryTextDark = dfNavyIndigo;      
+const Color secondaryTextGrey = Color(0xFF6B6B78); 
+
+const Color errorIndicatorRed = Color(0xFFE57373); 
+
 final supabase = sb.Supabase.instance.client;
 
 class NewPassword extends StatefulWidget {
@@ -13,32 +34,30 @@ class NewPassword extends StatefulWidget {
 class _NewPasswordState extends State<NewPassword> {
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  
   bool _isLoading = false;
   bool _obscureNewPassword = true;
   bool _obscureConfirmPassword = true;
   String? _currentUserEmail;
   bool _sessionChecked = false;
 
+  // UX State for validation errors
+  bool _passwordHasError = false;
+  bool _confirmPasswordHasError = false;
+  String _validationErrorMessage = '';
+
   @override
   void initState() {
     super.initState();
-    debugPrint("NewPassword screen initialized");
     _checkSessionAndGetEmail();
   }
 
   void _checkSessionAndGetEmail() async {
-    // Wait a bit for the session to be established (in case coming from deep link)
     await Future.delayed(const Duration(milliseconds: 500));
-    
     final session = supabase.auth.currentSession;
-    debugPrint("Session in NewPassword: ${session != null}");
     
     if (session != null) {
       _currentUserEmail = session.user?.email;
-      debugPrint("Current user email: $_currentUserEmail");
-    } else {
-      debugPrint("No session found - user might need to complete the reset flow");
-      // Don't show error immediately - wait to see if session gets established
     }
     
     setState(() {
@@ -51,12 +70,13 @@ class _NewPasswordState extends State<NewPassword> {
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-          content: Text(message),
+          backgroundColor: cardBackground,
+          title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: primaryTextDark)),
+          content: Text(message, style: const TextStyle(color: primaryTextDark)),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text("OK", style: TextStyle(color: Color(0xFF4f46e5))),
+              child: const Text("OK", style: TextStyle(color: primaryThemeColor)),
             ),
           ],
         ),
@@ -69,15 +89,16 @@ class _NewPasswordState extends State<NewPassword> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Success', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: Text(message),
+        backgroundColor: cardBackground,
+        title: const Text('Success', style: TextStyle(fontWeight: FontWeight.bold, color: primaryTextDark)),
+        content: Text(message, style: const TextStyle(color: primaryTextDark)),
         actions: [
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
               Navigator.of(context).pushNamedAndRemoveUntil('/tabs', (route) => false);
             },
-            child: const Text("OK", style: TextStyle(color: Color(0xFF4f46e5))),
+            child: const Text("OK", style: TextStyle(color: primaryThemeColor)),
           ),
         ],
       ),
@@ -85,24 +106,24 @@ class _NewPasswordState extends State<NewPassword> {
   }
 
   void _goBackToLogin() {
-    // Show confirmation dialog if user has started entering data
     if (_newPasswordController.text.isNotEmpty || _confirmPasswordController.text.isNotEmpty) {
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Cancel Password Reset?', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: const Text('Are you sure you want to cancel? Your password reset progress will be lost.'),
+          backgroundColor: cardBackground,
+          title: const Text('Cancel Reset?', style: TextStyle(fontWeight: FontWeight.bold, color: primaryTextDark)),
+          content: const Text('Are you sure you want to cancel? Your progress will be lost.', style: TextStyle(color: primaryTextDark)),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Continue Reset', style: TextStyle(color: Color(0xFF666666))),
+              child: const Text('Continue', style: TextStyle(color: secondaryTextGrey)),
             ),
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
                 _navigateToLogin();
               },
-              child: const Text('Cancel Reset', style: TextStyle(color: Color(0xFF4f46e5))),
+              child: const Text('Cancel', style: TextStyle(color: primaryThemeColor)),
             ),
           ],
         ),
@@ -116,48 +137,54 @@ class _NewPasswordState extends State<NewPassword> {
     Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
   }
 
+  // Helper to validate password
+  String? _validatePasswordRequirements(String password) {
+    if (password.length < 12) return "Must be at least 12 characters.";
+    if (!RegExp(r'[A-Z]').hasMatch(password)) return "Must contain an uppercase letter.";
+    if (!RegExp(r'[a-z]').hasMatch(password)) return "Must contain a lowercase letter.";
+    if (!RegExp(r'\d').hasMatch(password)) return "Must contain a number.";
+    if (!RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(password)) return "Must contain a special character.";
+    return null; 
+  }
+
   Future<void> _updatePassword() async {
-    // Final session check before updating password
     final session = supabase.auth.currentSession;
     if (session == null) {
-      _showErrorDialog("Session Error", "No valid session found. Please request a new password reset link and make sure you click the link in your email.");
+      _showErrorDialog("Session Error", "No valid session found. Please request a new link.");
       return;
     }
 
     final newPassword = _newPasswordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
 
-    // Basic validations
+    // Reset errors
+    setState(() {
+      _passwordHasError = false;
+      _confirmPasswordHasError = false;
+      _validationErrorMessage = '';
+    });
+
     if (newPassword.isEmpty || confirmPassword.isEmpty) {
       _showErrorDialog("Missing Info", "Please fill in both password fields.");
       return;
     }
 
     if (newPassword != confirmPassword) {
-      _showErrorDialog("Password Mismatch", "Passwords do not match.");
+      setState(() {
+        _passwordHasError = true;
+        _confirmPasswordHasError = true;
+        _validationErrorMessage = "Passwords do not match.";
+      });
       return;
     }
 
-    // Updated password validation with specific error messages
-    if (newPassword.length < 12) {
-      _showErrorDialog("Weak Password", "Password must be at least 12 characters long.");
-      return;
-    }
-    if (!RegExp(r'[A-Z]').hasMatch(newPassword)) {
-      _showErrorDialog("Weak Password", "Password must contain at least one uppercase letter.");
-      return;
-    }
-    if (!RegExp(r'[a-z]').hasMatch(newPassword)) {
-      _showErrorDialog("Weak Password", "Password must contain at least one lowercase letter.");
-      return;
-    }
-    if (!RegExp(r'\d').hasMatch(newPassword)) {
-      _showErrorDialog("Weak Password", "Password must contain at least one number.");
-      return;
-    }
-    // Updated to allow any special character, not just @, &, _
-    if (!RegExp(r'[!@#$%^&*(),.?":{}|<>]').hasMatch(newPassword)) {
-      _showErrorDialog("Weak Password", "Password must contain at least one special character (e.g., !@#\$%^&*).");
+    // Check requirements
+    String? requirementError = _validatePasswordRequirements(newPassword);
+    if (requirementError != null) {
+      setState(() {
+        _passwordHasError = true;
+        _validationErrorMessage = requirementError;
+      });
       return;
     }
 
@@ -170,15 +197,14 @@ class _NewPasswordState extends State<NewPassword> {
 
       if (response.user != null) {
         if (!mounted) return;
-        _showSuccessDialog('Your password has been updated successfully. You can now log in with your new password.');
+        _showSuccessDialog('Your password has been updated successfully. You will be logged into your account.');
       }
     } on sb.AuthException catch (e) {
       if (!mounted) return;
       
       if (e.message.contains('password should be different') || 
-          e.message.contains('same as old') ||
-          e.message.contains('password reuse')) {
-        _showErrorDialog("Password Error", "You cannot use the same password as your current one. Please choose a different password.");
+          e.message.contains('same as old')) {
+        _showErrorDialog("Password Error", "Please choose a different password from your current one.");
       } else {
         _showErrorDialog("Update Error", "Error updating password: ${e.message}");
       }
@@ -197,24 +223,33 @@ class _NewPasswordState extends State<NewPassword> {
     required String hintText,
     required bool obscureText,
     required VoidCallback onToggleVisibility,
+    bool hasError = false,
   }) {
     return TextField(
       controller: controller,
       obscureText: obscureText,
-      style: const TextStyle(fontSize: 16),
+      cursorColor: primaryThemeColor,
+      style: const TextStyle(fontSize: 16, color: primaryTextDark),
       decoration: InputDecoration(
         hintText: hintText,
+        hintStyle: const TextStyle(color: secondaryTextGrey),
         contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8.0),
-          borderSide: BorderSide.none,
+        enabledBorder: UnderlineInputBorder(
+          borderSide: BorderSide(
+            color: hasError ? errorIndicatorRed : secondaryTextGrey,
+            width: hasError ? 2.0 : 1.0,
+          ),
         ),
-        filled: true,
-        fillColor: const Color(0xFFF3F4F6),
+        focusedBorder: UnderlineInputBorder(
+          borderSide: BorderSide(
+            color: hasError ? errorIndicatorRed : primaryThemeColor,
+            width: 2,
+          ),
+        ),
         suffixIcon: IconButton(
           icon: Icon(
             obscureText ? Icons.visibility : Icons.visibility_off,
-            color: const Color(0xFF666666),
+            color: hasError ? errorIndicatorRed : secondaryTextGrey,
           ),
           onPressed: onToggleVisibility,
         ),
@@ -231,22 +266,18 @@ class _NewPasswordState extends State<NewPassword> {
 
   @override
   Widget build(BuildContext context) {
-    // Show loading while checking session
     if (!_sessionChecked) {
       return Scaffold(
-        backgroundColor: Colors.white,
-        body: Center(
+        backgroundColor: primaryBackground,
+        body: const Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(color: Color(0xFF4f46e5)),
+              CircularProgressIndicator(color: primaryThemeColor),
               SizedBox(height: 20),
               Text(
                 'Setting up password reset...',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Color(0xFF666666),
-                ),
+                style: TextStyle(fontSize: 16, color: secondaryTextGrey),
               ),
             ],
           ),
@@ -255,25 +286,23 @@ class _NewPasswordState extends State<NewPassword> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: primaryBackground,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              // Back button with confirmation
               Align(
                 alignment: Alignment.centerLeft,
                 child: IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Color(0xFF4f46e5)),
+                  icon: const Icon(Icons.arrow_back, color: primaryThemeColor),
                   onPressed: _goBackToLogin,
                 ),
               ),
               
               const SizedBox(height: 20),
 
-              // Logo
               Image.asset(
                 "assets/images/RikazLogo.png",
                 height: 120,
@@ -281,18 +310,16 @@ class _NewPasswordState extends State<NewPassword> {
               ),
               const SizedBox(height: 16),
 
-              // Title
               const Text(
                 'Create New Password',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF222222),
+                  color: primaryTextDark,
                 ),
               ),
               
-              // Subtitle
               Text(
                 _currentUserEmail != null 
                   ? 'Enter a new password for $_currentUserEmail'
@@ -300,53 +327,55 @@ class _NewPasswordState extends State<NewPassword> {
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 14,
-                  color: Color(0xFF666666),
+                  color: secondaryTextGrey,
                 ),
               ),
               const SizedBox(height: 32),
 
-              // New Password Field
               _buildTextInput(
                 controller: _newPasswordController,
                 hintText: "New Password",
                 obscureText: _obscureNewPassword,
+                hasError: _passwordHasError,
                 onToggleVisibility: () {
-                  setState(() {
-                    _obscureNewPassword = !_obscureNewPassword;
-                  });
+                  setState(() => _obscureNewPassword = !_obscureNewPassword);
                 },
               ),
               const SizedBox(height: 16),
               
-              // Confirm Password Field
               _buildTextInput(
                 controller: _confirmPasswordController,
                 hintText: "Confirm Password",
                 obscureText: _obscureConfirmPassword,
+                hasError: _confirmPasswordHasError,
                 onToggleVisibility: () {
-                  setState(() {
-                    _obscureConfirmPassword = !_obscureConfirmPassword;
-                  });
+                  setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
                 },
               ),
 
-              // Password requirements note - UPDATED
-              const Padding(
-                padding: EdgeInsets.only(top: 16.0, bottom: 24.0),
-                child: Text(
-                  'Password must be at least 12 characters long and contain:\n• One uppercase letter • One lowercase letter\n• One number • One special character (!@#\$%^&*)',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF666666),
+              if (_validationErrorMessage.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline, color: errorIndicatorRed, size: 16),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _validationErrorMessage,
+                          style: const TextStyle(fontSize: 12, color: errorIndicatorRed, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
 
-              // Update Button
+              const SizedBox(height: 32),
+
               ElevatedButton(
                 onPressed: _isLoading ? null : _updatePassword,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF4f46e5),
+                  backgroundColor: primaryThemeColor,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8.0),
@@ -364,12 +393,11 @@ class _NewPasswordState extends State<NewPassword> {
               ),
               const SizedBox(height: 20),
 
-              // Session status message
               if (_currentUserEmail == null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: Text(
-                    'Note: Make sure you clicked the reset link from your email to set up your session.',
+                    'Note: Make sure you clicked the reset link from your email.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 12,
@@ -378,13 +406,12 @@ class _NewPasswordState extends State<NewPassword> {
                   ),
                 ),
 
-              // Cancel option
               TextButton(
                 onPressed: _goBackToLogin,
                 child: const Text(
                   'Cancel and return to login',
                   style: TextStyle(
-                    color: Color(0xFF666666),
+                    color: secondaryTextGrey,
                     fontSize: 14,
                   ),
                 ),
