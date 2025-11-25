@@ -288,11 +288,11 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
       context: context,
       builder: (context) => _buildThemedDialog(
         title: 'Hardware Not Connected',
-        content: 'You haven\'t connected your Rikaz Tools hardware yet.\n\nConnecting enables:\n• Smart light feedback\n• Screen monitoring\n\nYou can still start the session without it.',
+        content: 'You haven\'t connected your Rikaz Tools hardware yet.',
         icon: Icons.lightbulb_outline,
         iconColor: accentThemeColor,
         cancelText: 'Connect Now',
-        confirmText: 'Continue Anyway',
+        confirmText: 'Start Anyway',
         onCancel: () {
           Navigator.pop(context);
           // User can scroll up to connect
@@ -1047,7 +1047,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
           ] else ...[
             // Not connected - show slider
             Text(
-              'Connect your Rikaz Tools hardware via Bluetooth to enable smart light control, screen monitoring, and camera detection.',
+              'Connect your Rikaz Tools hardware via Bluetooth.',
               style: TextStyle(
                 fontSize: _adaptiveFontSize(0.033),
                 color: secondaryTextGrey,
