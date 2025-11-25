@@ -14,7 +14,7 @@ enum ScheduleView { all, rikaz }
 enum CalendarFormatView { list, month }
 
 // =============================================================================
-// THEME COLORS
+// THEME COLORS (matching SetSession.dart teal/cyan theme)
 // =============================================================================
 
 const Color dfDeepTeal = Color(0xFF175B73);
@@ -23,25 +23,34 @@ const Color dfLightSeafoam = Color(0xFF87ACA3);
 const Color dfDeepBlue = Color(0xFF162893);
 const Color dfNavyIndigo = Color(0xFF0C1446);
 
-const Color primaryThemeColor = dfDeepBlue;
-const Color accentThemeColor = dfTealCyan;
+// Primary theme colors - NOW USING TEAL
+const Color primaryThemeColor = dfDeepTeal;      // Changed to teal
+const Color accentThemeColor = dfTealCyan;       // Teal cyan accent
 const Color lightestAccentColor = dfLightSeafoam;
 
-const Color primaryBackground = Color(0xFFF7F7F7);
-const Color cardBackground = Color(0xFFFFFFFF);
+const Color primaryBackground = Color(0xFFFFFFFF); // White background
+const Color cardBackground = Color(0xFFFFFFFF);    // White cards
 
 const Color primaryTextDark = dfNavyIndigo;
 const Color secondaryTextGrey = Color(0xFF6B6B78);
 
 const Color errorIndicatorRed = Color(0xFFE57373);
 
-const double cardBorderRadius = 16.0;
+const double cardBorderRadius = 24.0;
 
 List<BoxShadow> get subtleShadow => [
       BoxShadow(
         color: dfNavyIndigo.withOpacity(0.08),
         blurRadius: 10,
         offset: const Offset(0, 5),
+      ),
+    ];
+
+List<BoxShadow> get cardShadow => [
+      BoxShadow(
+        color: Colors.black.withOpacity(0.05),
+        offset: const Offset(0, 5),
+        blurRadius: 10,
       ),
     ];
 

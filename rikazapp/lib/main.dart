@@ -12,7 +12,8 @@ import 'pages/subscreens/login.dart';
 import 'pages/subscreens/ForgotPassword.dart';
 import 'pages/subscreens/NewPassword.dart';
 
-const Color primaryThemePurple = Color(0xFF7A68FF);
+
+const Color primaryThemePurple =  Color(0xFF175B73);
 const Color primaryTextDark = Color(0xFF30304D);
 const Color primaryBackground = Color(0xFFFFFFFF);
 const double cardBorderRadius = 24.0;
