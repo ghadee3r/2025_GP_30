@@ -4,92 +4,80 @@ import 'package:googleapis/calendar/v3.dart' as calendar;
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
+import 'dart:async';
+// Ensure SessionMode is imported from your file
 import 'package:rikazapp/pages/subscreens/SetSession.dart'; 
-import 'package:supabase_flutter/supabase_flutter.dart' as sb; 
 
 // These enums help us keep track of which view mode the user has selected
 enum ScheduleView { all, rikaz }
 enum CalendarFormatView { list, month }
 
 // =============================================================================
-// THEME COLORS - All the colors we use throughout the app
+// THEME COLORS
 // =============================================================================
 
-// Our main color palette
-const Color dfDeepTeal = Color(0xFF175B73); 
-const Color dfTealCyan = Color(0xFF287C85); 
-const Color dfLightSeafoam = Color(0xFF87ACA3); 
-const Color dfDeepBlue = Color(0xFF162893); 
-const Color dfNavyIndigo = Color(0xFF0C1446); 
+const Color dfDeepTeal = Color(0xFF175B73);
+const Color dfTealCyan = Color(0xFF287C85);
+const Color dfLightSeafoam = Color(0xFF87ACA3);
+const Color dfDeepBlue = Color(0xFF162893);
+const Color dfNavyIndigo = Color(0xFF0C1446);
 
-// Primary colors used across the app
-const Color primaryThemeColor = dfDeepBlue;      
-const Color accentThemeColor = dfTealCyan;      
-const Color lightestAccentColor = dfLightSeafoam; 
+const Color primaryThemeColor = dfDeepBlue;
+const Color accentThemeColor = dfTealCyan;
+const Color lightestAccentColor = dfLightSeafoam;
 
-// Background colors
-const Color primaryBackground = Color(0xFFF7F7F7); 
-const Color cardBackground = Color(0xFFFFFFFF);  
+const Color primaryBackground = Color(0xFFF7F7F7);
+const Color cardBackground = Color(0xFFFFFFFF);
 
-// Text colors
-const Color primaryTextDark = dfNavyIndigo;      
-const Color secondaryTextGrey = Color(0xFF6B6B78); 
+const Color primaryTextDark = dfNavyIndigo;
+const Color secondaryTextGrey = Color(0xFF6B6B78);
 
-// Error/alert color
-const Color errorIndicatorRed = Color(0xFFE57373); 
+const Color errorIndicatorRed = Color(0xFFE57373);
 
-// Standard border radius for cards
-const double cardBorderRadius = 16.0; 
+const double cardBorderRadius = 16.0;
 
-// Standard shadow for elevated cards
 List<BoxShadow> get subtleShadow => [
       BoxShadow(
-        color: dfNavyIndigo.withOpacity(0.08), 
+        color: dfNavyIndigo.withOpacity(0.08),
         blurRadius: 10,
         offset: const Offset(0, 5),
       ),
     ];
 
-// Colors we use to mark importance levels in the app
 Map<String, Color> importanceColors = {
-  'High': const Color(0xFFEA4335),        // Red 
-  'Medium': const Color(0xFFFBBC04),      // Yellow
-  'Low': const Color(0xFF34A853),         // Green 
-  'Default': const Color(0xFF4285F4),     // Blue 
+  'High': const Color(0xFFEA4335),        
+  'Medium': const Color(0xFFFBBC04),      
+  'Low': const Color(0xFF34A853),         
+  'Default': const Color(0xFF4285F4),     
 };
 
-// Google Calendar uses numbered color IDs, so we map our importance levels to those
-// This ensures the colors in Google Calendar match what we show in the app
 Map<String, String> googleColorMap = {
-  'High': '11',   // Red in Google Calendar
-  'Medium': '5',  // Yellow in Google Calendar (FIXED from '6' which was orange)
-  'Low': '10',    // Green in Google Calendar
-  'Default': '9', // Blue in Google Calendar
+  'High': '11',
+  'Medium': '5',
+  'Low': '10',
+  'Default': '9',
 };
 
 // -----------------------------------------------------------------------------
 // GOOGLE CALENDAR API CLIENT
-// This class handles all communication with Google Calendar
 // -----------------------------------------------------------------------------
 
-// We need these permissions to read and write calendar events
 const List<String> _scopes = <String>[
   'https://www.googleapis.com/auth/calendar',
   'email',
 ];
 
 class CalendarClient {
-  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: _scopes); 
+  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: _scopes);
   calendar.CalendarApi? calendarApi;
 
-  // Check if we're currently connected to Google Calendar
   bool get isConnected => calendarApi != null;
 
-  // Sign in to Google and get calendar access
   Future<bool> signIn() async {
     try {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) return false; // User cancelled the sign-in
+      if (googleUser == null) return false;
 
       final authenticatedClient = await _googleSignIn.authenticatedClient();
 
@@ -104,30 +92,27 @@ class CalendarClient {
     }
   }
 
-  // Sign out and disconnect from Google Calendar
   Future<void> signOut() async {
     await _googleSignIn.signOut();
     calendarApi = null;
   }
 
-  // Fetch all events from Google Calendar for the next 30 days
   Future<List<calendar.Event>> fetchUpcomingEvents() async {
-    if (calendarApi == null) return []; 
+    if (calendarApi == null) return [];
 
-    final now = DateTime.now().toUtc();
-    final thirtyDaysFromNow = now.add(const Duration(days: 30)).toUtc(); 
+    // Fetch wider range to support Month View navigation
+    final now = DateTime.now().subtract(const Duration(days: 60)).toUtc();
+    final future = DateTime.now().add(const Duration(days: 120)).toUtc();
 
     try {
       final events = await calendarApi!.events.list(
         'primary',
-        maxResults: 250, 
+        maxResults: 500,
         timeMin: now,
-        timeMax: thirtyDaysFromNow, 
+        timeMax: future,
         singleEvents: true,
         orderBy: 'startTime',
       );
-
-      // Only return events that have a title and start time
       return events.items?.where((e) => e.summary != null && e.start != null).toList() ?? [];
     } catch (e) {
       debugPrint('Error fetching events: $e');
@@ -135,27 +120,107 @@ class CalendarClient {
     }
   }
 
-  // Update an existing event in Google Calendar
+  Future<calendar.Event?> fetchEventById(String eventId) async {
+    if (calendarApi == null) return null;
+    
+    try {
+      final event = await calendarApi!.events.get('primary', eventId);
+      return event;
+    } catch (e) {
+      debugPrint('Error fetching event by ID: $e');
+      return null;
+    }
+  }
+
+  Future<calendar.Event?> getRecurringEventMaster(String recurringEventId) async {
+    if (calendarApi == null) return null;
+    
+    try {
+      // Fetch the master recurring event (without instance ID)
+      final event = await calendarApi!.events.get('primary', recurringEventId);
+      return event;
+    } catch (e) {
+      debugPrint('Error fetching recurring event master: $e');
+      return null;
+    }
+  }
+
+  Future<List<calendar.Event>> checkForConflicts({
+    required DateTime startTime,
+    required DateTime endTime,
+    String? excludeEventId,
+  }) async {
+    if (calendarApi == null) return [];
+
+    try {
+      final events = await calendarApi!.events.list(
+        'primary',
+        timeMin: startTime.toUtc(),
+        timeMax: endTime.toUtc(),
+        singleEvents: true,
+      );
+
+      return events.items?.where((event) {
+        if (event.id == excludeEventId) return false;
+        if (event.start?.dateTime == null || event.end?.dateTime == null) return false;
+        
+        final eventStart = event.start!.dateTime!.toLocal();
+        final eventEnd = event.end!.dateTime!.toLocal();
+        
+        return (startTime.isBefore(eventEnd) && endTime.isAfter(eventStart));
+      }).toList() ?? [];
+    } catch (e) {
+      debugPrint('Error checking conflicts: $e');
+      return [];
+    }
+  }
+
   Future<calendar.Event?> updateEvent({
-    required calendar.Event originalEvent,
+    required String eventId,
     required DateTime startTime,
     required DateTime endTime,
     required String title,
+    required String importanceKey,
+    String? recurrenceRule,
+    DateTime? recurrenceUntil,
+    bool isRikazSession = true,
+    bool updateAllOccurrences = true,
   }) async {
-    if (calendarApi == null || originalEvent.id == null) return null;
-
-    // Create a copy of the event with updated information
-    final updatedEvent = calendar.Event.fromJson(originalEvent.toJson());
-    
-    updatedEvent.summary = title;
-    updatedEvent.start = calendar.EventDateTime(dateTime: startTime.toUtc(), timeZone: 'UTC');
-    updatedEvent.end = calendar.EventDateTime(dateTime: endTime.toUtc(), timeZone: 'UTC');
+    if (calendarApi == null) return null;
 
     try {
+      // Create a fresh event object instead of copying from existing
+      final updatedEvent = calendar.Event();
+      
+      updatedEvent.summary = title;
+      updatedEvent.start = calendar.EventDateTime(dateTime: startTime.toUtc(), timeZone: 'UTC');
+      updatedEvent.end = calendar.EventDateTime(dateTime: endTime.toUtc(), timeZone: 'UTC');
+      
+      final googleColorId = googleColorMap[importanceKey] ?? googleColorMap['Default']!;
+      updatedEvent.colorId = googleColorId;
+      
+      updatedEvent.extendedProperties = calendar.EventExtendedProperties(
+        private: {
+          'isRikazSession': isRikazSession.toString(),
+          'importance': importanceKey,
+        }
+      );
+      
+      if (recurrenceRule != null) {
+        String rrule = recurrenceRule;
+        if (recurrenceUntil != null) {
+          final untilUtc = recurrenceUntil.toUtc();
+          rrule += ';UNTIL=${DateFormat('yyyyMMdd').format(untilUtc)}T${DateFormat('HHmmss').format(untilUtc)}Z';
+        }
+        updatedEvent.recurrence = [rrule];
+      } else {
+        updatedEvent.recurrence = [];
+      }
+
       final result = await calendarApi!.events.update(
         updatedEvent, 
         'primary', 
-        originalEvent.id!,
+        eventId,
       );
       return result;
     } catch (e) {
@@ -164,8 +229,6 @@ class CalendarClient {
     }
   }
 
-  // Create one or more events in Google Calendar
-  // Can handle single events, multiple individual events, or recurring events
   Future<List<calendar.Event?>> createEvents({
     required String title,
     required List<DateTime> startTimes,
@@ -178,16 +241,12 @@ class CalendarClient {
     if (calendarApi == null) return List.generate(startTimes.length, (index) => null);
 
     List<calendar.Event?> createdEvents = [];
-    
-    // Get the correct Google Calendar color ID for this importance level
     final googleColorId = googleColorMap[importanceKey] ?? googleColorMap['Default']!;
 
-    // If user wants a recurring event (daily, weekly, monthly)
     if (recurrenceRule != null && startTimes.isNotEmpty) {
       final startTime = startTimes.first;
       final endTime = startTime.add(duration);
       
-      // Build the recurrence rule with an end date if provided
       String rrule = recurrenceRule;
       if (recurrenceUntil != null) {
           final untilUtc = recurrenceUntil.toUtc();
@@ -216,7 +275,6 @@ class CalendarClient {
       return createdEvents;
     }
 
-    // If user wants multiple individual sessions (not recurring)
     for (var startTime in startTimes) {
       final endTime = startTime.add(duration);
       final event = calendar.Event(
@@ -242,24 +300,59 @@ class CalendarClient {
     return createdEvents;
   }
 
-  // Delete an event from Google Calendar
-  Future<bool> deleteEvent(String eventId) async {
+  Future<bool> deleteEvent(String eventId, {bool deleteAllFuture = false}) async {
     if (calendarApi == null) return false;
-
     try {
-      await calendarApi!.events.delete('primary', eventId);
+      if (deleteAllFuture) {
+        // Delete all future occurrences by deleting the master event
+        await calendarApi!.events.delete('primary', eventId);
+      } else {
+        // Delete just this instance
+        await calendarApi!.events.delete('primary', eventId);
+      }
       return true;
     } catch (e) {
       debugPrint('Error deleting event: $e');
       return false;
     }
   }
-}
 
+  Future<bool> deleteRecurringEventFromDate(String recurringEventId, DateTime fromDate) async {
+    if (calendarApi == null) return false;
+    
+    try {
+      // Fetch the master event
+      final masterEvent = await calendarApi!.events.get('primary', recurringEventId);
+      
+      if (masterEvent.recurrence == null || masterEvent.recurrence!.isEmpty) {
+        return false;
+      }
+      
+      // Update the UNTIL date to end recurrence at the day before this date
+      String rrule = masterEvent.recurrence!.first;
+      
+      // Remove existing UNTIL if present
+      if (rrule.contains('UNTIL=')) {
+        rrule = rrule.split(';UNTIL=')[0];
+      }
+      
+      // Set UNTIL to the day before fromDate to exclude fromDate and all future
+      final untilDate = fromDate.subtract(const Duration(days: 1)).toUtc();
+      rrule += ';UNTIL=${DateFormat('yyyyMMdd').format(untilDate)}T235959Z';
+      
+      masterEvent.recurrence = [rrule];
+      
+      await calendarApi!.events.update(masterEvent, 'primary', recurringEventId);
+      return true;
+    } catch (e) {
+      debugPrint('Error deleting from date: $e');
+      return false;
+    }
+  }
+}
 
 // -----------------------------------------------------------------------------
 // MAIN HOME PAGE
-// This is the main screen users see when they open the app
 // -----------------------------------------------------------------------------
 
 class HomePage extends StatefulWidget {
@@ -271,37 +364,35 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   
-  // Our Google Calendar API client
   final CalendarClient _client = CalendarClient();
   
-  // Connection and loading states
   bool _isCalendarConnected = false;
+  // ignore: unused_field
   bool _isSigningIn = false;
   
-  // Event lists
-  List<calendar.Event> _events = [];  // All events from Google Calendar
-  List<calendar.Event> _displayedEvents = [];  // Events after filtering
+  List<calendar.Event> _events = [];
+  List<calendar.Event> _displayedEvents = [];
   
-  // View preferences
   ScheduleView _scheduleView = ScheduleView.all;
   CalendarFormatView _calendarFormatView = CalendarFormatView.list; 
 
-  // User information
   final supabase = sb.Supabase.instance.client; 
   String _userName = 'User Name'; 
 
-  // Calendar navigation
+  // Initialize to Today
   DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime.now(); 
 
-  // Focus session mode selection
   int? selectedModeIndex;
   
-  // Bulk deletion
+  // -- Selection Mode State --
   Set<String> _selectedEventsToDelete = {}; 
+  bool _isSelectionMode = false;
   bool _isBulkDeleting = false; 
 
-  // Available focus modes
+  // -- Auto-refresh timer --
+  Timer? _autoRefreshTimer;
+
   final List<Map<String, String>> modes = const [
     {
       'title': 'Pomodoro Mode',
@@ -313,56 +404,64 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     },
   ];
 
-
   @override
   void initState() {
     super.initState();
-    // Listen for app lifecycle changes (like coming back from background)
     WidgetsBinding.instance.addObserver(this);
-    
-    // Get the user's name from Supabase
     _fetchUserName(); 
 
-    // Listen for changes in Google sign-in status
     _client._googleSignIn.onCurrentUserChanged.listen((GoogleSignInAccount? account) {
       final wasConnected = _isCalendarConnected;
       if (account != null) {
-        // User just signed in
         _client.signIn().then((success) {
           if (success) {
             _fetchSchedule();
+            _startAutoRefresh();
           }
           setState(() {
             _isCalendarConnected = success;
           });
         });
       } else if (wasConnected) {
-        // User just signed out
-         setState(() {
+          _stopAutoRefresh();
+          setState(() {
             _isCalendarConnected = false;
             _events = [];
             _displayedEvents = [];
             _selectedEventsToDelete.clear();
+            _isSelectionMode = false;
           });
           _filterEvents(); 
       }
     });
     
-    // Try to sign in silently if user was previously signed in
     _client._googleSignIn.signInSilently();
   }
 
   @override
   void dispose() {
+    _stopAutoRefresh();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
+  void _startAutoRefresh() {
+    _stopAutoRefresh();
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (_client.isConnected) {
+        _fetchSchedule();
+      }
+    });
+  }
+
+  void _stopAutoRefresh() {
+    _autoRefreshTimer?.cancel();
+    _autoRefreshTimer = null;
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // When user comes back to the app, refresh the calendar
     if (state == AppLifecycleState.resumed && _client.isConnected) { 
-      debugPrint('App resumed from background, fetching schedule...');
       _fetchSchedule();
     }
   }
@@ -370,29 +469,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Fetch schedule when dependencies change
     if (_client.isConnected) { 
       _fetchSchedule();
     }
   }
   
-  // Get the user's name from Supabase
   Future<void> _fetchUserName() async {
     final user = supabase.auth.currentUser;
     if (user != null) {
       final metadata = user.userMetadata;
       String fetchedName = 'User';
-      
-      // Try to get full name from metadata
       final metadataName = metadata?['full_name'] as String?;
       if (metadataName != null && metadataName.isNotEmpty) {
           fetchedName = metadataName;
       } else {
-        // Fallback to email username
         fetchedName = user.email?.split('@')[0] ?? 'User';
       }
-      
-      // Capitalize first letter of each word
       final formattedName = fetchedName.split(' ').map((word) {
           if (word.isEmpty) return '';
           return word[0].toUpperCase() + word.substring(1).toLowerCase();
@@ -408,8 +500,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-
-  // Filter events based on current view settings (All vs Rikaz only)
+  // --- Strict Filtering Logic ---
   void _filterEvents() {
     List<calendar.Event> sourceEvents;
     
@@ -419,20 +510,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       sourceEvents = [];
     }
     
-    // Remove events that already happened
-    sourceEvents = sourceEvents.where((e) => e.start?.dateTime?.toLocal()?.isAfter(DateTime.now().subtract(const Duration(minutes: 1))) ?? false).toList();
+    // Strict date filter: Only show events for _selectedDay
+    sourceEvents = sourceEvents.where((e) {
+      final start = e.start?.dateTime?.toLocal() ?? e.start?.date;
+      if (start == null) return false;
+      return isSameDay(start, _selectedDay);
+    }).toList();
 
-    // Apply the All vs Rikaz filter
-    if (_scheduleView == ScheduleView.all) {
-      _displayedEvents = sourceEvents;
-    } else {
-      // Only show sessions created in Rikaz app
-      _displayedEvents = sourceEvents.where((event) {
+    if (_scheduleView == ScheduleView.rikaz) {
+      sourceEvents = sourceEvents.where((event) {
         return event.extendedProperties?.private?['isRikazSession'] == 'true';
       }).toList();
     }
     
-    // Sort events by time (earliest first)
+    _displayedEvents = sourceEvents;
+    
     _displayedEvents.sort((a, b) {
       final timeA = a.start?.dateTime?.toLocal() ?? a.start?.date;
       final timeB = b.start?.dateTime?.toLocal() ?? b.start?.date;
@@ -441,31 +533,65 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     });
   }
 
-  // Toggle selection of an event for bulk deletion
+  // --- Selection / Deletion Logic ---
+
+  void _enterSelectionMode(String initialId) {
+    setState(() {
+      _isSelectionMode = true;
+      _selectedEventsToDelete.add(initialId);
+    });
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _isSelectionMode = false;
+      _selectedEventsToDelete.clear();
+    });
+  }
+
   void _toggleEventSelection(String eventId) {
     setState(() {
       if (_selectedEventsToDelete.contains(eventId)) {
         _selectedEventsToDelete.remove(eventId);
+        if (_selectedEventsToDelete.isEmpty) {
+           // Optional behavior: could auto-exit mode
+        }
       } else {
         _selectedEventsToDelete.add(eventId);
       }
     });
   }
   
-  // Delete all selected events
   Future<void> _handleBulkDelete() async {
     if (_selectedEventsToDelete.isEmpty || !_client.isConnected) return;
 
+    // Check if any selected event is a recurring instance
+    final selectedEvents = _displayedEvents.where((e) => 
+      e.id != null && _selectedEventsToDelete.contains(e.id)
+    ).toList();
+    
+    final hasRecurring = selectedEvents.any((e) => e.recurringEventId != null);
+
+    String? recurringChoice;
+    if (hasRecurring) {
+      // Ask user about recurring events
+      recurringChoice = await showDialog<String>(
+        context: context,
+        builder: (context) => _buildRecurringDeleteDialog(),
+      );
+      
+      if (recurringChoice == null) return; // User cancelled
+    }
+
     final count = _selectedEventsToDelete.length;
 
-    // Ask user to confirm deletion
     final confirmDelete = await showDialog<bool>(
       context: context,
       builder: (context) => _buildThemedDialog(
-        title: 'Delete Selected Sessions?',
-        content: 'You are about to permanently delete $count session${count > 1 ? 's' : ''} from your Google Calendar. This action cannot be undone.',
+        title: 'Delete Selected?',
+        content: 'Are you sure you want to delete $count session${count > 1 ? 's' : ''}?',
         cancelText: 'Cancel',
-        confirmText: 'Delete $count Session${count > 1 ? 's' : ''}',
+        confirmText: 'Delete',
         isDestructive: true,
       ),
     );
@@ -475,50 +601,56 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _isBulkDeleting = true;
       });
 
-      // Delete each selected event
-      int successfulDeletes = 0;
       for (var id in _selectedEventsToDelete) {
-        final success = await _client.deleteEvent(id);
-        if (success) {
-          successfulDeletes++;
+        final event = _displayedEvents.firstWhere((e) => e.id == id, orElse: () => _displayedEvents.first);
+        
+        if (event.recurringEventId != null && recurringChoice != null) {
+          // Handle recurring event based on choice
+          if (recurringChoice == 'this') {
+            await _client.deleteEvent(id);
+          } else if (recurringChoice == 'future') {
+            final eventDate = event.start!.dateTime!.toLocal();
+            await _client.deleteRecurringEventFromDate(event.recurringEventId!, eventDate);
+          } else if (recurringChoice == 'all') {
+            await _client.deleteEvent(event.recurringEventId!);
+          }
+        } else {
+          // Regular event
+          await _client.deleteEvent(id);
         }
       }
       
-      // Clear selection and refresh
-      _selectedEventsToDelete.clear();
       await _fetchSchedule();
-
+      
       if (mounted) {
         setState(() {
           _isBulkDeleting = false;
+          _isSelectionMode = false;
+          _selectedEventsToDelete.clear();
         });
-        _showSnackbar('$successfulDeletes of $count sessions deleted.', Colors.green);
+        _showSnackbar('Deleted successfully.', Colors.green);
       }
     }
   }
 
-
-  // Change between All Sessions and Rikaz Focus views
   void _setScheduleView(ScheduleView view) {
     setState(() {
       _scheduleView = view;
       _filterEvents(); 
       _selectedEventsToDelete.clear(); 
+      _isSelectionMode = false;
     });
   }
   
-  // Change between List and Month calendar views
   void _setCalendarFormatView(CalendarFormatView view) {
     setState(() {
       _calendarFormatView = view;
       if (view == CalendarFormatView.list) {
         _filterEvents();
       }
-      _selectedEventsToDelete.clear(); 
     });
   }
 
-  // Fetch all events from Google Calendar
   Future<void> _fetchSchedule() async {
     if (!_client.isConnected) { 
       if (mounted) {
@@ -539,12 +671,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  // Handle Google Calendar sign-in
   Future<void> _handleCalendarSignIn() async {
     if (_isCalendarConnected) return;
-
     setState(() { _isSigningIn = true; });
-
     final success = await _client.signIn();
     
     if (!mounted) return; 
@@ -556,43 +685,37 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     if (success) {
       await _fetchSchedule();
-      if (mounted) {
-        _showSnackbar('Successfully connected to Google Calendar!', Colors.green);
-      }
+      _startAutoRefresh();
+      if (mounted) _showSnackbar('Connected!', Colors.green);
     } else {
-      if (mounted) {
-        _showSnackbar('Connection failed or cancelled. Check permissions.', errorIndicatorRed);
-      }
+      if (mounted) _showSnackbar('Connection failed.', errorIndicatorRed);
     }
   }
 
-  // Handle Google Calendar sign-out
   Future<void> _handleCalendarSignOut() async {
+    _stopAutoRefresh();
     await _client.signOut();
     setState(() {
       _isCalendarConnected = false;
       _events = [];
       _displayedEvents = [];
       _selectedEventsToDelete.clear();
+      _isSelectionMode = false;
     });
-    _showSnackbar('Disconnected from Google.', primaryThemeColor);
+    _showSnackbar('Disconnected.', primaryThemeColor);
     _filterEvents();
   }
 
-  // Navigate to the Set Session screen
   void handleSetSession() {
     if (selectedModeIndex == null) return;
-
     final initialMode = selectedModeIndex == 0 ? SessionMode.pomodoro : SessionMode.custom;
-
+    
     Navigator.of(context).pushNamed(
       '/SetSession',
       arguments: initialMode, 
     );
   }
 
-
-  // Show a snackbar message at the bottom of the screen
   void _showSnackbar(String message, Color color) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -605,20 +728,24 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  // Handle when user taps a day in the month view
   void _onMonthDayTapped(DateTime day) {
+    // Prevent selection of past days (older than today's date)
+    final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+    if (day.isBefore(today)) {
+        _showSnackbar('Cannot select past dates.', errorIndicatorRed);
+        return;
+    }
+
     setState(() {
       _selectedDay = day;
       _focusedDay = day;
     });
-    _showEventOverlay(selectedDate: day);
+    _filterEvents();
   }
 
-  // Show the add/edit session overlay
   void _showEventOverlay({calendar.Event? eventToEdit, DateTime? selectedDate}) {
-    // FIXED: Alert user if not connected instead of saying "stored locally"
     if (!_client.isConnected && eventToEdit == null) { 
-        _showSnackbar('Please connect to Google Calendar first to add sessions.', errorIndicatorRed);
+       _showSnackbar('Please connect to Google Calendar first.', errorIndicatorRed);
       return;
     }
     
@@ -627,6 +754,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           context: context,
           isScrollControlled: true,
           backgroundColor: Colors.transparent,
+          isDismissible: false, 
+          enableDrag: true,
           builder: (context) {
             return Padding(
               padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
@@ -637,6 +766,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   _fetchSchedule(); 
                 },
                 initialDate: selectedDate,
+                allEvents: _events,
               ),
             );
           },
@@ -644,24 +774,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
   
-  // Calculate font size that adapts to screen size and user's text scaling
   double _adaptiveFontSize(double baseScreenWidthMultiplier) {
     final screenWidth = MediaQuery.of(context).size.width;
     final baseSize = screenWidth * baseScreenWidthMultiplier;
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
-    
-    // Reduce the effect of extreme text scaling
     final mitigationFactor = 0.9; 
     return baseSize / (1.0 + (textScaleFactor - 1.0) * mitigationFactor);
   }
   
-  // Get the color to display for an event based on its importance
   Color _getEventColor(calendar.Event event) {
     final importanceKey = event.extendedProperties?.private?['importance'];
     return importanceColors[importanceKey] ?? importanceColors['Default']!;
   }
   
-  // Get all the importance colors for events on a specific day (for month view markers)
   List<Color> _getEventColorsForDay(DateTime day) {
     if (!_isCalendarConnected) return []; 
     
@@ -670,7 +795,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return start != null && isSameDay(day, start);
     }).toList();
     
-    // Get unique importance levels for this day
     final uniqueImportanceKeys = eventsOnDay
         .map((e) => e.extendedProperties?.private?['importance'] ?? 'Default')
         .toSet();
@@ -680,38 +804,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         .toList();
   }
   
-  // Build the info note that explains what the current view shows
-  Widget _buildSessionInfoNote(double screenWidth) {
-      String message;
-
-      if (_isCalendarConnected) {
-          if (_scheduleView == ScheduleView.all) {
-              message = "All Sessions: Displays every event from Google Calendar and the Rikaz App.";
-          } else {
-              message = "Rikaz Focus: Only shows sessions explicitly created in the Rikaz App.";
-          }
-      } else {
-           if (_scheduleView == ScheduleView.all) {
-              message = "All Sessions: Shows only sessions created in the Rikaz App (Connect Google to see more).";
-          } else {
-              message = "Rikaz Focus: Shows sessions created in the Rikaz App (Pure local mode).";
-          }
-      }
-
-      return Padding(
-          padding: EdgeInsets.symmetric(vertical: screenWidth * 0.01),
-          child: Text(
-              message,
-              style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.027),
-                  color: secondaryTextGrey,
-                  fontWeight: FontWeight.w500,
-              ),
-          ),
-      );
-  }
-
-  // Build a themed dialog with consistent styling
   Widget _buildThemedDialog({
     required String title,
     required String content,
@@ -751,25 +843,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               children: [
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
-                  style: TextButton.styleFrom(
-                    foregroundColor: secondaryTextGrey,
-                    padding: EdgeInsets.symmetric(
-                      horizontal: MediaQuery.of(context).size.width * 0.04,
-                      vertical: MediaQuery.of(context).size.height * 0.015,
-                    ),
-                  ),
-                  child: Text(cancelText, style: TextStyle(fontSize: _adaptiveFontSize(0.035))),
+                  child: Text(cancelText, style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: secondaryTextGrey)),
                 ),
-                SizedBox(width: MediaQuery.of(context).size.width * 0.02),
+                SizedBox(width: 8),
                 ElevatedButton(
                   onPressed: () => Navigator.of(context).pop(true),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: isDestructive ? errorIndicatorRed : primaryThemeColor,
                     foregroundColor: Colors.white,
-                    padding: EdgeInsets.symmetric(
-                      horizontal: MediaQuery.of(context).size.width * 0.04,
-                      vertical: MediaQuery.of(context).size.height * 0.015,
-                    ),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                   child: Text(confirmText, style: TextStyle(fontSize: _adaptiveFontSize(0.035))),
@@ -782,12 +863,163 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  Widget _buildRecurringDeleteDialog() {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      backgroundColor: cardBackground,
+      child: Padding(
+        padding: EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Icon
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: errorIndicatorRed.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.delete_outline,
+                color: errorIndicatorRed,
+                size: 28,
+              ),
+            ),
+            SizedBox(height: 16),
+            
+            // Title
+            Text(
+              'Delete Recurring Session',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: primaryTextDark,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 8),
+            
+            // Description
+            Text(
+              'Choose which occurrences to remove',
+              style: TextStyle(
+                fontSize: 14,
+                color: secondaryTextGrey,
+                height: 1.4,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 24),
+            
+            // Options
+            _buildDeleteDialogOption(
+              title: 'Only This Session',
+              subtitle: 'Remove just this one',
+              icon: Icons.event,
+              color: primaryThemeColor,
+              onTap: () => Navigator.of(context).pop('this'),
+            ),
+            SizedBox(height: 10),
+            _buildDeleteDialogOption(
+              title: 'This & Future Sessions',
+              subtitle: 'Remove this and upcoming',
+              icon: Icons.event_repeat,
+              color: Colors.orange[700]!,
+              onTap: () => Navigator.of(context).pop('future'),
+            ),
+            SizedBox(height: 10),
+            _buildDeleteDialogOption(
+              title: 'All Sessions',
+              subtitle: 'Remove entire series',
+              icon: Icons.calendar_month,
+              color: errorIndicatorRed,
+              onTap: () => Navigator.of(context).pop('all'),
+            ),
+            SizedBox(height: 16),
+            
+            // Cancel
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(null),
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              ),
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  fontSize: 15,
+                  color: secondaryTextGrey,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeleteDialogOption({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          border: Border.all(color: color.withOpacity(0.3), width: 1.5),
+          borderRadius: BorderRadius.circular(12),
+          color: color.withOpacity(0.05),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: primaryTextDark,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: secondaryTextGrey,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios, size: 14, color: secondaryTextGrey),
+          ],
+        ),
+      ),
+    );
+  }
 
   // ---------------------------------------------------------------------------
   // UI BUILDING METHODS
   // ---------------------------------------------------------------------------
 
-  // Build the focus session panel at the top of the screen
   Widget buildFocusSessionPanel() {
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
@@ -821,19 +1053,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           SizedBox(height: screenHeight * 0.015),
           Text(
             'Select a mode to begin your productive session',
-            style: TextStyle(
-              fontSize: _adaptiveFontSize(0.032),
-              color: secondaryTextGrey,
-            ),
+            style: TextStyle(fontSize: _adaptiveFontSize(0.032), color: secondaryTextGrey),
           ),
           SizedBox(height: screenHeight * 0.02),
-
-          // Mode selection cards
           Column(
             children: List.generate(modes.length, (i) {
               final mode = modes[i];
               final selected = selectedModeIndex == i;
-
               return GestureDetector(
                 onTap: () => setState(() => selectedModeIndex = i),
                 child: Container(
@@ -849,7 +1075,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   ),
                   child: Row(
                     children: [
-                      // Radio indicator
                       Container(
                         width: screenWidth * 0.06,
                         height: screenWidth * 0.06,
@@ -866,7 +1091,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                             : null,
                       ),
                       SizedBox(width: screenWidth * 0.04),
-                      // Icon
                       Container(
                         padding: EdgeInsets.all(screenWidth * 0.025),
                         decoration: BoxDecoration(
@@ -880,7 +1104,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                         ),
                       ),
                       SizedBox(width: screenWidth * 0.04),
-                      // Text
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -910,10 +1133,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               );
             }),
           ),
-
           SizedBox(height: screenHeight * 0.01),
-
-          // Set Session Button
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
@@ -921,9 +1141,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               style: ElevatedButton.styleFrom(
                 backgroundColor: hasSelectedMode ? primaryThemeColor : primaryThemeColor.withOpacity(0.5),
                 padding: EdgeInsets.symmetric(vertical: screenHeight * 0.018),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(cardBorderRadius),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(cardBorderRadius)),
                 elevation: hasSelectedMode ? 4 : 0,
               ),
               child: Row(
@@ -933,11 +1151,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   SizedBox(width: screenWidth * 0.02),
                   Text(
                     'Set Session',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: _adaptiveFontSize(0.04),
-                      color: Colors.white,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: _adaptiveFontSize(0.04), color: Colors.white),
                   ),
                 ],
               ),
@@ -948,7 +1162,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  // Build the schedule container (calendar/list view)
   Widget buildScheduleContainer() {
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
@@ -964,7 +1177,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Row(
             children: [
               Icon(Icons.event_note, color: primaryThemeColor, size: _adaptiveFontSize(0.055)),
@@ -980,16 +1192,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ],
           ),
           SizedBox(height: screenHeight * 0.02),
-
-          // View toggle buttons
           _buildViewToggle(),
           SizedBox(height: screenHeight * 0.02),
-
-          // Google connection status
           _buildGoogleConnectPanel(screenWidth),
           SizedBox(height: screenHeight * 0.02),
-
-          // Show either month view or list view
           if (_calendarFormatView == CalendarFormatView.month)
             _buildMonthCalendarView(screenHeight, screenWidth)
           else 
@@ -999,7 +1205,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  // Build the toggle between List and Month views
   Widget _buildViewToggle() {
     final screenWidth = MediaQuery.of(context).size.width;
     final activeColor = primaryThemeColor;
@@ -1036,16 +1241,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  // Build the month calendar view
   Widget _buildMonthCalendarView(double screenHeight, double screenWidth) {
-    final calendarAccent = accentThemeColor;
-
     if (!_isCalendarConnected) {
       return Padding(
         padding: EdgeInsets.symmetric(vertical: screenHeight * 0.05),
         child: Center(
           child: Text(
-            'Connect Google Calendar to see priority color markers on a full Month View.',
+            'Connect Google Calendar to see your schedule.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: _adaptiveFontSize(0.035), color: secondaryTextGrey),
           ),
@@ -1057,26 +1259,29 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       children: [
         TableCalendar(
           locale: 'en_US',
-          firstDay: DateTime.utc(2023, 1, 1),
+          firstDay: DateTime(DateTime.now().year, DateTime.now().month, 1), // Disable months before current
           lastDay: DateTime.utc(2030, 12, 31),
           focusedDay: _focusedDay,
           currentDay: DateTime.now(),
           headerStyle: HeaderStyle(
             formatButtonVisible: false,
             titleCentered: true,
-            titleTextStyle: TextStyle(
-                fontSize: _adaptiveFontSize(0.04), fontWeight: FontWeight.bold, color: primaryTextDark),
+            titleTextStyle: TextStyle(fontSize: _adaptiveFontSize(0.04), fontWeight: FontWeight.bold, color: primaryTextDark),
           ),
           calendarFormat: CalendarFormat.month,
           calendarStyle: CalendarStyle(
-            todayDecoration: BoxDecoration(color: calendarAccent.withOpacity(0.3), shape: BoxShape.circle),
+            todayDecoration: BoxDecoration(color: accentThemeColor.withOpacity(0.3), shape: BoxShape.circle),
             selectedDecoration: BoxDecoration(color: primaryThemeColor, shape: BoxShape.circle),
             outsideDaysVisible: false,
             weekendTextStyle: TextStyle(color: errorIndicatorRed),
+            disabledTextStyle: TextStyle(color: Colors.grey.withOpacity(0.5)),
           ),
-          selectedDayPredicate: (day) {
-            return isSameDay(_selectedDay, day);
+          // Disable selection of past days
+          enabledDayPredicate: (day) {
+            final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+            return !day.isBefore(today);
           },
+          selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
           onDaySelected: (selectedDay, focusedDay) {
             _onMonthDayTapped(selectedDay);
           },
@@ -1084,7 +1289,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           calendarBuilders: CalendarBuilders(
             markerBuilder: (context, day, colors) {
               if (colors.isEmpty) return const SizedBox.shrink();
-              
               return Positioned(
                 bottom: screenHeight * 0.005,
                 child: Row(
@@ -1095,10 +1299,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       width: screenWidth * 0.015,
                       height: screenWidth * 0.015,
                       margin: EdgeInsets.symmetric(horizontal: screenWidth * 0.005),
-                      decoration: BoxDecoration(
-                        color: colors[index] as Color, 
-                        shape: BoxShape.circle,
-                      ),
+                      decoration: BoxDecoration(color: colors[index] as Color, shape: BoxShape.circle),
                     ),
                   ),
                 ),
@@ -1106,16 +1307,61 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             },
           ),
         ),
+        SizedBox(height: screenHeight * 0.02),
+        // Consistent Add Session Button in Month View
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () => _showEventOverlay(selectedDate: _selectedDay),
+            icon: Icon(Icons.add_circle, color: Colors.white),
+            label: Text('Add Session', style: TextStyle(color: Colors.white, fontSize: _adaptiveFontSize(0.032))),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryThemeColor,
+              padding: EdgeInsets.symmetric(vertical: screenHeight * 0.015),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(cardBorderRadius)),
+            ),
+          ),
+        ),
+        SizedBox(height: screenHeight * 0.02),
+        
+        // Schedule toggle in month view
+        _buildScheduleToggle(screenWidth),
+        SizedBox(height: screenHeight * 0.015),
+        
+        // Month view strictly filtered list
+        if (_displayedEvents.isNotEmpty)
+          ListView.builder(
+            physics: const NeverScrollableScrollPhysics(),
+            shrinkWrap: true,
+            itemCount: _displayedEvents.length,
+            itemBuilder: (context, index) {
+              final event = _displayedEvents[index];
+              return _buildSessionCard(
+                event: event,
+                color: _getEventColor(event),
+                startTime: event.start!.dateTime!.toLocal(),
+                endTime: event.end?.dateTime?.toLocal(),
+                screenWidth: screenWidth,
+                screenHeight: screenHeight,
+                isSelected: _selectedEventsToDelete.contains(event.id),
+                onTap: null,
+              );
+            },
+          )
+        else
+            Center(
+                child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Text('No sessions on this day.', style: TextStyle(color: secondaryTextGrey)),
+            )),
       ],
     );
   }
 
-  // Build the list view of upcoming sessions
   Widget _buildListView(double screenHeight, double screenWidth) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Horizontal date selector
         _DateRibbon(
           selectedDay: _selectedDay,
           onDaySelected: (day) {
@@ -1123,11 +1369,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               _selectedDay = day;
               _focusedDay = day;
             });
+            _filterEvents(); // Strict filter
           },
         ),
         SizedBox(height: screenHeight * 0.015),
 
-        // Section header
         Container(
           padding: EdgeInsets.symmetric(vertical: screenHeight * 0.015),
           decoration: BoxDecoration(
@@ -1137,7 +1383,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text( 
-                'Upcoming Sessions',
+                'Sessions',
                 style: TextStyle(fontSize: _adaptiveFontSize(0.04), fontWeight: FontWeight.bold, color: primaryTextDark),
               ),
             ],
@@ -1145,96 +1391,33 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
         SizedBox(height: screenHeight * 0.015),
 
-        // Filter toggle (All vs Rikaz)
         _buildScheduleToggle(screenWidth),
         SizedBox(height: screenHeight * 0.015),
         
-        // Info note about current view
-        _buildSessionInfoNote(screenWidth),
-        SizedBox(height: screenHeight * 0.015),
-        
-        // Help text for selection
-        if (_isCalendarConnected && _selectedEventsToDelete.isEmpty)
-          Container(
-            padding: EdgeInsets.all(screenWidth * 0.03),
-            decoration: BoxDecoration(
-              color: lightestAccentColor.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: accentThemeColor.withOpacity(0.3)),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.info_outline, color: accentThemeColor, size: _adaptiveFontSize(0.04)),
-                SizedBox(width: screenWidth * 0.02),
-                Expanded(
-                  child: Text(
-                    'Tap any session to select it for deletion. Tap the three-dot menu to edit or delete individual sessions.',
-                    style: TextStyle(
-                      fontSize: _adaptiveFontSize(0.028),
-                      color: primaryTextDark,
-                    ),
-                  ),
-                ),
-              ],
+        // Only show Add button if not selecting items
+        if (!_isSelectionMode)
+        SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => _showEventOverlay(selectedDate: _selectedDay),
+              icon: Icon(Icons.add_circle, color: Colors.white),
+              label: Text('Add Session', style: TextStyle(color: Colors.white, fontSize: _adaptiveFontSize(0.032))),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryThemeColor,
+                padding: EdgeInsets.symmetric(vertical: screenHeight * 0.015),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(cardBorderRadius)),
+              ),
             ),
           ),
         
-        if (_isCalendarConnected && _selectedEventsToDelete.isEmpty)
-          SizedBox(height: screenHeight * 0.015),
-        
-        // Action buttons row
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            // Bulk delete button (only show when items are selected)
-            if (_isCalendarConnected && _selectedEventsToDelete.isNotEmpty)
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _isBulkDeleting ? null : _handleBulkDelete,
-                  icon: _isBulkDeleting
-                      ? SizedBox(
-                          width: screenWidth * 0.04,
-                          height: screenWidth * 0.04,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : Icon(Icons.delete_forever, color: Colors.white),
-                  label: Text(
-                    _isBulkDeleting ? 'Deleting...' : 'Delete (${_selectedEventsToDelete.length})', 
-                    style: TextStyle(color: Colors.white, fontSize: _adaptiveFontSize(0.032))
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: errorIndicatorRed,
-                    padding: EdgeInsets.symmetric(vertical: screenHeight * 0.015),
-                  ),
-                ),
-              ),
-            
-            if (_isCalendarConnected && _selectedEventsToDelete.isNotEmpty)
-              SizedBox(width: screenWidth * 0.02),
-
-            // Add session button
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: () => _showEventOverlay(selectedDate: _selectedDay),
-                icon: Icon(Icons.add_circle, color: Colors.white),
-                label: Text('Add Session', style: TextStyle(color: Colors.white, fontSize: _adaptiveFontSize(0.032))),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryThemeColor,
-                  padding: EdgeInsets.symmetric(vertical: screenHeight * 0.015),
-                ),
-              ),
-            ),
-          ],
-        ),
         SizedBox(height: screenHeight * 0.015),
 
-        // List of sessions
         _displayedEvents.isEmpty
             ? Center(
           child: Padding(
             padding: EdgeInsets.symmetric(vertical: screenHeight * 0.03),
             child: Text(
-              'No upcoming sessions found in the selected view.',
+              'No sessions found for selected date.',
               style: TextStyle(fontStyle: FontStyle.italic, color: secondaryTextGrey, fontSize: _adaptiveFontSize(0.032)),
             ),
           ),
@@ -1251,7 +1434,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             final endTime = event.end?.dateTime?.toLocal() ?? event.end?.date;
             
             final isSelected = eventId != null && _selectedEventsToDelete.contains(eventId);
-            final canSelect = _isCalendarConnected && eventId != null;
 
             if (startTime == null) return const SizedBox.shrink();
 
@@ -1263,9 +1445,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               screenWidth: screenWidth,
               screenHeight: screenHeight,
               isSelected: isSelected,
-              onTap: canSelect 
-                  ? () => _toggleEventSelection(eventId)
-                  : null, 
+              onTap: null, // Logic handled inside card
             );
           },
         ),
@@ -1273,7 +1453,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
   
-  // Build a single session card
+  // WHATSAPP STYLE SELECTION CARD
   Widget _buildSessionCard({
     required calendar.Event event,
     required Color color,
@@ -1284,10 +1464,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     required bool isSelected,
     required VoidCallback? onTap,
   }) {
+    
     return Padding(
       padding: EdgeInsets.only(bottom: screenHeight * 0.01),
       child: GestureDetector(
-        onTap: onTap,
+        onTap: () {
+            if (_isSelectionMode && event.id != null) {
+                _toggleEventSelection(event.id!);
+            }
+        },
+        onLongPress: () {
+            if (event.id != null) {
+                _enterSelectionMode(event.id!);
+            }
+        },
         child: Container(
           decoration: BoxDecoration(
             color: isSelected ? color.withOpacity(0.15) : cardBackground,
@@ -1303,23 +1493,25 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
           child: Row(
             children: [
-              // Selection indicator or color strip
-              if (isSelected) 
-                Padding(
-                  padding: EdgeInsets.only(left: screenWidth * 0.02),
-                  child: Icon(Icons.check_circle, color: color, size: screenWidth * 0.05),
-                )
+              // Checkbox if in selection mode
+              if (_isSelectionMode)
+                 Padding(
+                   padding: EdgeInsets.symmetric(horizontal: 12),
+                   child: Icon(
+                       isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
+                       color: isSelected ? color : secondaryTextGrey,
+                   ),
+                 )
               else 
-                Container(
-                  width: screenWidth * 0.02,
-                  height: screenHeight * 0.08, 
-                  decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(cardBorderRadius/2)),
-                  ),
-                ),
+                 Container(
+                    width: screenWidth * 0.02,
+                    height: screenHeight * 0.08, 
+                    decoration: BoxDecoration(
+                        color: color,
+                        borderRadius: const BorderRadius.horizontal(left: Radius.circular(cardBorderRadius/2)),
+                    ),
+                 ),
               
-              // Session details
               Expanded(
                 child: Padding(
                   padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.04, vertical: screenHeight * 0.01),
@@ -1334,7 +1526,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       SizedBox(height: screenHeight * 0.005),
                       Text(
                         endTime != null
-                            ? '${DateFormat('MMM d, h:mm a').format(startTime)} - ${DateFormat('h:mm a').format(endTime)}'
+                            ? '${DateFormat('h:mm a').format(startTime)} - ${DateFormat('h:mm a').format(endTime)}'
                             : DateFormat('MMM d, yyyy').format(startTime),
                         style: TextStyle(color: secondaryTextGrey, fontSize: _adaptiveFontSize(0.028)),
                       ),
@@ -1343,34 +1535,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 ),
               ),
               
-              // Three-dot menu
-              if (!isSelected && _isCalendarConnected && event.id != null) 
+              if (!_isSelectionMode && _isCalendarConnected && event.id != null) 
                 PopupMenuButton<String>(
                   icon: Icon(Icons.more_vert, color: secondaryTextGrey, size: screenWidth * 0.055),
                   onSelected: (value) async {
                     if (value == 'edit') {
                       _showEventOverlay(eventToEdit: event);
-                    } else if (value == 'delete') {
-                      final confirmDelete = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => _buildThemedDialog(
-                          title: 'Delete This Session?',
-                          content: 'Are you sure you want to permanently delete "${event.summary ?? 'Untitled'}"? This action cannot be undone.',
-                          cancelText: 'Cancel',
-                          confirmText: 'Delete Session',
-                          isDestructive: true,
-                        ),
-                      );
-                      
-                      if (confirmDelete == true && event.id != null) {
-                        final success = await _client.deleteEvent(event.id!);
-                        if (success) {
-                          _fetchSchedule();
-                          _showSnackbar('Session deleted successfully!', Colors.green);
-                        } else {
-                          _showSnackbar('Failed to delete session.', errorIndicatorRed);
-                        }
-                      }
+                    } else if (value == 'select_delete') {
+                      // Enter selection mode for delete
+                      _enterSelectionMode(event.id!);
                     }
                   },
                   itemBuilder: (context) => [
@@ -1385,19 +1558,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       ),
                     ),
                     const PopupMenuItem(
-                      value: 'delete',
+                      value: 'select_delete',
                       child: Row(
                         children: [
-                          Icon(Icons.delete, size: 20, color: Colors.red),
+                          Icon(Icons.delete_outline, size: 20, color: Colors.red),
                           SizedBox(width: 8),
-                          Text('Delete', style: TextStyle(color: Colors.red)),
+                          Text('Select to Delete'),
                         ],
                       ),
                     ),
                   ],
-                )
-              else if (!isSelected)
-                 Icon(Icons.lock, color: secondaryTextGrey.withOpacity(0.5), size: screenWidth * 0.055),
+                ),
             ],
           ),
         ),
@@ -1405,7 +1576,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  // Build the toggle between All Sessions and Rikaz Focus
   Widget _buildScheduleToggle(double screenWidth) {
     final activeColor = primaryThemeColor;
     final inactiveColor = secondaryTextGrey;
@@ -1442,13 +1612,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     return Row(
       children: [
-        buildButton(ScheduleView.all, 'All Sessions'),
+        buildButton(ScheduleView.all, 'All Calendar'),
         buildButton(ScheduleView.rikaz, 'Rikaz Focus'),
       ],
     );
   }
   
-  // Build the Google Calendar connection panel
   Widget _buildGoogleConnectPanel(double screenWidth) {
     final statusColor = _isCalendarConnected ? accentThemeColor : errorIndicatorRed;
     final statusText = _isCalendarConnected ? 'Google Calendar Connected' : 'Google Calendar Disconnected';
@@ -1524,51 +1693,146 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
     return Scaffold(
       extendBody: true,
-      resizeToAvoidBottomInset: false, 
+      resizeToAvoidBottomInset: true,
       backgroundColor: primaryBackground,
       
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.only(
-              left: proportionalHorizontalPadding,
-              right: proportionalHorizontalPadding,
-              top: screenHeight * 0.02,
-              bottom: screenHeight * 0.05
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Welcome message
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Good Evening,',
-                    style: TextStyle(
-                      fontSize: _adaptiveFontSize(0.035), 
-                      fontWeight: FontWeight.w500,
-                      color: secondaryTextGrey,
+        bottom: false,
+        child: Stack(
+          children: [
+            Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.only(
+                        left: proportionalHorizontalPadding,
+                        right: proportionalHorizontalPadding,
+                        top: screenHeight * 0.02,
+                        bottom: _isSelectionMode ? screenHeight * 0.12 : 100 
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Welcome
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Good Evening,',
+                              style: TextStyle(
+                                fontSize: _adaptiveFontSize(0.035), 
+                                fontWeight: FontWeight.w500,
+                                color: secondaryTextGrey,
+                              ),
+                            ),
+                            Text(
+                              '$_userName !', 
+                              style: TextStyle(
+                                fontSize: _adaptiveFontSize(0.05), 
+                                fontWeight: FontWeight.w800,
+                                color: primaryTextDark,
+                              ),
+                            ),
+                            SizedBox(height: screenHeight * 0.03),
+                          ],
+                        ),
+                        
+                        buildFocusSessionPanel(),
+                        buildScheduleContainer(),
+                      ],
                     ),
                   ),
-                  Text(
-                    '$_userName !', 
-                    style: TextStyle(
-                      fontSize: _adaptiveFontSize(0.05), 
-                      fontWeight: FontWeight.w800,
-                      color: primaryTextDark,
-                    ),
+                ),
+              ],
+            ),
+            
+            // Floating action bar for selection mode - positioned better
+            if (_isSelectionMode)
+              Positioned(
+                bottom: MediaQuery.of(context).padding.bottom + 16,
+                left: 16,
+                right: 16,
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 20,
+                        offset: Offset(0, 10),
+                        spreadRadius: 0,
+                      ),
+                    ],
                   ),
-                  SizedBox(height: screenHeight * 0.03),
-                ],
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      TextButton.icon(
+                        onPressed: _exitSelectionMode,
+                        icon: Icon(Icons.close, color: secondaryTextGrey, size: 20),
+                        label: Text(
+                          "Cancel",
+                          style: TextStyle(
+                            color: secondaryTextGrey, 
+                            fontSize: 15, 
+                            fontWeight: FontWeight.w600
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        ),
+                      ),
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: primaryThemeColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          "${_selectedEventsToDelete.length} selected",
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: primaryThemeColor,
+                          ),
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: _isBulkDeleting ? null : _handleBulkDelete,
+                        icon: _isBulkDeleting
+                            ? SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : Icon(Icons.delete_outline, color: Colors.white, size: 20),
+                        label: Text(
+                          "Delete",
+                          style: TextStyle(
+                            color: Colors.white, 
+                            fontSize: 15, 
+                            fontWeight: FontWeight.w600
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: errorIndicatorRed,
+                          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              
-              // Focus session panel
-              buildFocusSessionPanel(),
-              
-              // Schedule container
-              buildScheduleContainer(),
-            ],
-          ),
+          ],
         ),
       ),
     );
@@ -1576,10 +1840,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 }
 
 // =============================================================================
-// DATE RIBBON - Horizontal scrolling date selector
+// DATE RIBBON (Fix: Opens at Today's Week)
 // =============================================================================
 
-class _DateRibbon extends StatelessWidget {
+class _DateRibbon extends StatefulWidget {
   final DateTime selectedDay;
   final ValueChanged<DateTime> onDaySelected;
 
@@ -1589,24 +1853,50 @@ class _DateRibbon extends StatelessWidget {
   });
 
   @override
+  State<_DateRibbon> createState() => _DateRibbonState();
+}
+
+class _DateRibbonState extends State<_DateRibbon> {
+  late ScrollController _scrollController;
+  late DateTime _startDate;
+  late DateTime _endDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    final today = DateTime.now();
+    _startDate = today.subtract(const Duration(days: 3)); 
+    _endDate = today.add(const Duration(days: 60));
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final today = DateTime.now();
-    final startDay = today.subtract(const Duration(days: 3));
-    final endDay = today.add(const Duration(days: 10));
+    final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
     return SizedBox(
       height: screenWidth * 0.2,
       child: ListView.builder(
+        controller: _scrollController,
         scrollDirection: Axis.horizontal,
-        itemCount: endDay.difference(startDay).inDays,
+        itemCount: _endDate.difference(_startDate).inDays + 1,
         itemBuilder: (context, index) {
-          final day = startDay.add(Duration(days: index));
-          final isSelected = isSameDay(selectedDay, day);
-          final isToday = isSameDay(today, day);
+          final day = _startDate.add(Duration(days: index));
           
+          final bool isSelected = isSameDay(widget.selectedDay, day);
+          final bool isToday = isSameDay(DateTime.now(), day);
+          
+          final bool isPast = day.isBefore(today);
+
           return GestureDetector(
-            onTap: () => onDaySelected(day),
+            onTap: isPast ? null : () => widget.onDaySelected(day),
             child: Container(
               width: screenWidth * 0.14,
               margin: EdgeInsets.symmetric(horizontal: screenWidth * 0.01),
@@ -1615,7 +1905,7 @@ class _DateRibbon extends StatelessWidget {
                     ? primaryThemeColor 
                     : isToday 
                         ? lightestAccentColor.withOpacity(0.5) 
-                        : cardBackground,
+                        : isPast ? Colors.grey[200] : cardBackground,
                 borderRadius: BorderRadius.circular(10),
                 boxShadow: isSelected ? subtleShadow : null,
               ),
@@ -1627,7 +1917,7 @@ class _DateRibbon extends StatelessWidget {
                     style: TextStyle(
                       fontSize: screenWidth * 0.03,
                       fontWeight: FontWeight.w600,
-                      color: isSelected ? Colors.white : primaryTextDark,
+                      color: isPast ? Colors.grey : (isSelected ? Colors.white : primaryTextDark),
                     ),
                   ),
                   SizedBox(height: 4),
@@ -1636,7 +1926,7 @@ class _DateRibbon extends StatelessWidget {
                     style: TextStyle(
                       fontSize: screenWidth * 0.05,
                       fontWeight: FontWeight.w900,
-                      color: isSelected ? Colors.white : primaryTextDark,
+                      color: isPast ? Colors.grey : (isSelected ? Colors.white : primaryTextDark),
                     ),
                   ),
                 ],
@@ -1651,7 +1941,7 @@ class _DateRibbon extends StatelessWidget {
 
 
 // -----------------------------------------------------------------------------
-// EVENT MANAGEMENT OVERLAY - Add or edit sessions
+// EVENT MANAGEMENT OVERLAY (COMPLETELY FIXED)
 // -----------------------------------------------------------------------------
 
 class _EventManagementOverlay extends StatefulWidget {
@@ -1659,12 +1949,14 @@ class _EventManagementOverlay extends StatefulWidget {
   final calendar.Event? eventToEdit;
   final VoidCallback onEventUpdated;
   final DateTime? initialDate;
+  final List<calendar.Event> allEvents;
 
   const _EventManagementOverlay({
     required this.client,
     required this.onEventUpdated,
     this.eventToEdit,
     this.initialDate,
+    required this.allEvents,
   });
 
   @override
@@ -1673,33 +1965,41 @@ class _EventManagementOverlay extends StatefulWidget {
 
 class __EventManagementOverlayState extends State<_EventManagementOverlay> {
   final _formKey = GlobalKey<FormState>();
+  final _scrollController = ScrollController();
+  
   late String _title;
   late DateTime _startDate;
   late TimeOfDay _startTime;
   late TimeOfDay _endTime;
   bool _isLoading = false;
   
-  String _selectedImportance = 'Default'; 
-  
+  late String _selectedImportance; 
   String? _selectedRecurrence; 
   List<DateTime> _selectedDates = []; 
-  
   DateTime? _recurrenceEndDate; 
-
-  // Check if we're editing an existing event
-  bool get isEditing => widget.eventToEdit != null;
   
-  // Check which mode we're in for creating events
+  String? _initialRecurrence;
+  bool _wasRecurring = false;
+  bool _isFormDirty = false;
+  
+  // NEW: Track if this is a recurring instance
+  bool _isRecurringInstance = false;
+  String? _masterEventId;
+
+  bool get isEditing => widget.eventToEdit != null;
   bool get isRecurringMode => _selectedRecurrence != null && !isEditing;
   bool get isMultiDateMode => _selectedRecurrence == null && !isEditing;
 
   @override
   void initState() {
     super.initState();
+    _initializeForm();
+  }
+
+  Future<void> _initializeForm() async {
     final now = DateTime.now();
 
     if (isEditing) {
-      // Pre-fill form with existing event data
       _title = widget.eventToEdit!.summary ?? 'Untitled Session';
       final start = widget.eventToEdit!.start!.dateTime?.toLocal() ?? now;
       final end = widget.eventToEdit!.end!.dateTime?.toLocal() ?? now.add(const Duration(hours: 1));
@@ -1710,22 +2010,106 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
       
       _selectedImportance = widget.eventToEdit!.extendedProperties?.private?['importance'] ?? 'Default';
       
-      _selectedRecurrence = null;
+      // Check if this is a recurring event instance
+      _isRecurringInstance = widget.eventToEdit!.recurringEventId != null;
+      
+      if (_isRecurringInstance) {
+        // This is an instance - fetch the master event to get recurrence info
+        _masterEventId = widget.eventToEdit!.recurringEventId;
+        final masterEvent = await widget.client.getRecurringEventMaster(_masterEventId!);
+        
+        if (masterEvent != null && masterEvent.recurrence != null && masterEvent.recurrence!.isNotEmpty) {
+          _wasRecurring = true;
+          final rrule = masterEvent.recurrence!.first;
+          
+          if (rrule.contains('FREQ=DAILY')) {
+            _selectedRecurrence = 'RRULE:FREQ=DAILY';
+          } else if (rrule.contains('FREQ=WEEKLY')) {
+            _selectedRecurrence = 'RRULE:FREQ=WEEKLY';
+          } else if (rrule.contains('FREQ=MONTHLY')) {
+            _selectedRecurrence = 'RRULE:FREQ=MONTHLY';
+          }
+          
+          if (rrule.contains('UNTIL=')) {
+            try {
+              final untilStr = rrule.split('UNTIL=')[1].split(';')[0].split('T')[0];
+              _recurrenceEndDate = DateTime.parse(
+                '${untilStr.substring(0, 4)}-${untilStr.substring(4, 6)}-${untilStr.substring(6, 8)}'
+              );
+            } catch (e) {
+              _recurrenceEndDate = _startDate.add(const Duration(days: 30));
+            }
+          } else {
+            _recurrenceEndDate = _startDate.add(const Duration(days: 30));
+          }
+        } else {
+          _wasRecurring = false;
+          _selectedRecurrence = null;
+          _recurrenceEndDate = _startDate.add(const Duration(days: 30));
+        }
+      } else {
+        // Check the event itself for recurrence
+        _wasRecurring = widget.eventToEdit!.recurrence != null && widget.eventToEdit!.recurrence!.isNotEmpty;
+        
+        if (_wasRecurring) {
+          final rrule = widget.eventToEdit!.recurrence!.first;
+          if (rrule.contains('FREQ=DAILY')) {
+            _selectedRecurrence = 'RRULE:FREQ=DAILY';
+          } else if (rrule.contains('FREQ=WEEKLY')) {
+            _selectedRecurrence = 'RRULE:FREQ=WEEKLY';
+          } else if (rrule.contains('FREQ=MONTHLY')) {
+            _selectedRecurrence = 'RRULE:FREQ=MONTHLY';
+          }
+          
+          if (rrule.contains('UNTIL=')) {
+            try {
+              final untilStr = rrule.split('UNTIL=')[1].split(';')[0].split('T')[0];
+              _recurrenceEndDate = DateTime.parse(
+                '${untilStr.substring(0, 4)}-${untilStr.substring(4, 6)}-${untilStr.substring(6, 8)}'
+              );
+            } catch (e) {
+              _recurrenceEndDate = _startDate.add(const Duration(days: 30));
+            }
+          } else {
+            _recurrenceEndDate = _startDate.add(const Duration(days: 30));
+          }
+        } else {
+          // Not recurring - this is a one-time or custom event
+          // Custom events are just individual one-time events, not recurring
+          _selectedRecurrence = null;
+          _recurrenceEndDate = _startDate.add(const Duration(days: 30));
+        }
+      }
+      
+      _initialRecurrence = _selectedRecurrence;
       _selectedDates = [_startDate];
+      
+      if (mounted) setState(() {});
     } else {
-      // Set up form for new event
       final selectedDate = widget.initialDate ?? now;
-
       _title = '';
       _startDate = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
       _startTime = TimeOfDay.fromDateTime(now.add(const Duration(hours: 1)));
       _endTime = TimeOfDay.fromDateTime(now.add(const Duration(hours: 2)));
       _selectedDates = [_startDate];
-      _recurrenceEndDate = _startDate.add(const Duration(days: 7));
+      _recurrenceEndDate = _startDate.add(const Duration(days: 30));
+      _selectedImportance = 'Default';
+      _wasRecurring = false;
     }
   }
 
-  // Combine a date and time into a single DateTime
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+  
+  void _markDirty() {
+    if (!_isFormDirty) {
+        setState(() => _isFormDirty = true);
+    }
+  }
+
   DateTime _combineDateTime(DateTime date, TimeOfDay time) {
     return DateTime(
       date.year,
@@ -1736,12 +2120,9 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
     );
   }
 
-  // Handle saving the session
   Future<void> _handleSave() async {
-    // Hide keyboard
     FocusScope.of(context).unfocus(); 
     
-    // Validate form
     if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
 
@@ -1751,74 +2132,312 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
     final endDateTime = _combineDateTime(_startDate, _endTime);
     final duration = endDateTime.difference(startDateTime);
 
-    // Check if end time is before start time
     if (duration.isNegative) {
-      _showErrorDialog('Time Error', 'The session end time cannot be before the start time.');
+      _showErrorDialog('Time Error', 'End time cannot be before start time.');
       setState(() => _isLoading = false);
       return;
     }
     
-    // Check if start and end times are the same
-    if (duration.inMinutes == 0) {
-      _showErrorDialog('Time Error', 'Start and end times cannot be identical. Please set a valid duration.');
+    if (startDateTime.isBefore(DateTime.now())) {
+      _showErrorDialog('Invalid Date', 'You cannot set a session in the past.');
       setState(() => _isLoading = false);
       return;
     }
     
-    // FIXED: Check if user is trying to edit an event to a past date
-    if (isEditing && startDateTime.isBefore(DateTime.now())) {
-      _showErrorDialog('Date Error', 'Cannot schedule sessions in the past. Please select a future date and time.');
-      setState(() => _isLoading = false);
-      return;
+    // Only check conflicts if editing and time/date/frequency changed
+    bool shouldCheckConflicts = false;
+    if (isEditing) {
+      final originalStart = widget.eventToEdit!.start!.dateTime?.toLocal();
+      final originalEnd = widget.eventToEdit!.end!.dateTime?.toLocal();
+      
+      // Check if time or date changed
+      final timeChanged = originalStart != null && 
+        (originalStart.hour != startDateTime.hour || 
+         originalStart.minute != startDateTime.minute ||
+         originalEnd?.hour != endDateTime.hour ||
+         originalEnd?.minute != endDateTime.minute);
+      
+      final dateChanged = originalStart != null &&
+        (originalStart.year != startDateTime.year ||
+         originalStart.month != startDateTime.month ||
+         originalStart.day != startDateTime.day);
+      
+      // Check if frequency changed
+      final frequencyChanged = _selectedRecurrence != _initialRecurrence;
+      
+      shouldCheckConflicts = timeChanged || dateChanged || frequencyChanged;
+    } else {
+      // Always check conflicts when adding new
+      shouldCheckConflicts = true;
     }
     
-    // Check if user is trying to create a new event in the past
-    if (!isEditing && startDateTime.isBefore(DateTime.now())) {
-      _showErrorDialog('Date Error', 'Cannot add sessions in the past. Please select a future date and time.');
-      setState(() => _isLoading = false);
-      return;
-    }
-    
-    // Check if recurrence end date is before start date
-    if (isRecurringMode && _recurrenceEndDate != null && _recurrenceEndDate!.isBefore(_startDate)) {
-         _showErrorDialog('Frequency Error', 'The recurrence end date must be on or after the start date.');
-         setState(() => _isLoading = false);
-         return;
+    if (shouldCheckConflicts) {
+      final conflicts = await widget.client.checkForConflicts(
+        startTime: startDateTime,
+        endTime: endDateTime,
+        excludeEventId: isEditing ? (_masterEventId ?? widget.eventToEdit?.id) : null,
+      );
+
+      if (conflicts.isNotEmpty && mounted) {
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (context) => _buildThemedDialog(
+            title: 'Conflict Detected',
+            content: 'This overlaps with another event. ${isEditing ? 'Update' : 'Add'} anyway?',
+            cancelText: 'Cancel',
+            confirmText: '${isEditing ? 'Update' : 'Add'} Anyway',
+          ),
+        );
+        if (confirm != true) {
+            setState(() => _isLoading = false);
+            return;
+        }
+      }
     }
 
     if (isEditing) {
-      // Update existing event
+      // If this is a recurring instance, ask if user wants to edit this or all future
+      if (_isRecurringInstance && _wasRecurring) {
+        // Special case: Converting to one-time
+        if (_selectedRecurrence == null && _initialRecurrence != null) {
+          final confirmBreak = await showDialog<bool>(
+            context: context,
+            builder: (context) => _buildThemedDialog(
+              title: "Convert to One-Time?",
+              content: "This will keep only this session and delete all other recurring sessions. This action cannot be undone.",
+              cancelText: "Cancel",
+              confirmText: "Keep This Only",
+              isDestructive: true,
+            ),
+          );
+          if (confirmBreak != true) {
+            setState(() => _isLoading = false);
+            return;
+          }
+          
+          // Delete all future occurrences by updating master event's UNTIL date
+          final sessionDate = widget.eventToEdit!.start!.dateTime!.toLocal();
+          await widget.client.deleteRecurringEventFromDate(
+            widget.eventToEdit!.recurringEventId!,
+            sessionDate.add(const Duration(days: 1)), // Delete from tomorrow onwards
+          );
+          
+          // Now update this instance to be standalone
+          final updatedEvent = await widget.client.updateEvent(
+            eventId: widget.eventToEdit!.id!,
+            title: _title,
+            startTime: startDateTime,
+            endTime: endDateTime,
+            importanceKey: _selectedImportance,
+            recurrenceRule: null,
+            updateAllOccurrences: false,
+          );
+
+          if (updatedEvent != null) {
+            widget.onEventUpdated();
+            if (mounted) Navigator.pop(context);
+            _showSnackbar('Converted to one-time session!', Colors.green);
+          } else {
+            _showSnackbar('Update failed.', errorIndicatorRed);
+          }
+          setState(() => _isLoading = false);
+          return;
+        }
+        
+        final choice = await showDialog<String>(
+          context: context,
+          builder: (context) => _buildRecurringEditDialog(),
+        );
+        
+        if (choice == null) {
+          setState(() => _isLoading = false);
+          return;
+        }
+        
+        if (choice == 'this') {
+          // Edit only this instance
+          final updatedEvent = await widget.client.updateEvent(
+            eventId: widget.eventToEdit!.id!,
+            title: _title,
+            startTime: startDateTime,
+            endTime: endDateTime,
+            importanceKey: _selectedImportance,
+            recurrenceRule: null,
+            updateAllOccurrences: false,
+          );
+
+          if (updatedEvent != null) {
+            widget.onEventUpdated();
+            if (mounted) Navigator.pop(context);
+            _showSnackbar('Session updated!', Colors.green);
+          } else {
+            _showSnackbar('Update failed.', errorIndicatorRed);
+          }
+          setState(() => _isLoading = false);
+          return;
+        } else if (choice == 'future') {
+          // Edit this and all future occurrences
+          // We need to end the old recurring series before this date
+          // and create a new one starting from this date with the new settings
+          
+          final sessionDate = widget.eventToEdit!.start!.dateTime!.toLocal();
+          
+          // Step 1: End the old series the day before this session
+          final success = await widget.client.deleteRecurringEventFromDate(
+            _masterEventId!,
+            sessionDate,
+          );
+          
+          if (!success) {
+            _showSnackbar('Update failed.', errorIndicatorRed);
+            setState(() => _isLoading = false);
+            return;
+          }
+          
+          // Step 2: Create new recurring series starting from this date with new settings
+          final recurrenceUntil = (_selectedRecurrence != null && _selectedRecurrence != 'custom') 
+              ? _recurrenceEndDate 
+              : null;
+          
+          final results = await widget.client.createEvents(
+            title: _title,
+            startTimes: [startDateTime],
+            duration: duration,
+            recurrenceRule: _selectedRecurrence,
+            recurrenceUntil: recurrenceUntil,
+            importanceKey: _selectedImportance,
+            isRikazSession: true,
+          );
+
+          if (results.isNotEmpty && results.first != null) {
+            widget.onEventUpdated();
+            if (mounted) Navigator.pop(context);
+            _showSnackbar('This and future sessions updated!', Colors.green);
+          } else {
+            _showSnackbar('Update failed.', errorIndicatorRed);
+          }
+          setState(() => _isLoading = false);
+          return;
+        } else if (choice == 'all') {
+          // Edit all occurrences (including past)
+          final updatedEvent = await widget.client.updateEvent(
+            eventId: _masterEventId!,
+            title: _title,
+            startTime: startDateTime,
+            endTime: endDateTime,
+            importanceKey: _selectedImportance,
+            recurrenceRule: _selectedRecurrence == 'custom' ? null : _selectedRecurrence,
+            recurrenceUntil: (_selectedRecurrence != null && _selectedRecurrence != 'custom') ? _recurrenceEndDate : null,
+            updateAllOccurrences: true,
+          );
+
+          if (updatedEvent != null) {
+            widget.onEventUpdated();
+            if (mounted) Navigator.pop(context);
+            _showSnackbar('All sessions updated!', Colors.green);
+          } else {
+            _showSnackbar('Update failed.', errorIndicatorRed);
+          }
+          setState(() => _isLoading = false);
+          return;
+        }
+      }
+      
+      // Check if converting recurring to one-time (for non-instance recurring events)
+      if (_wasRecurring && _selectedRecurrence == null && !_isRecurringInstance) {
+        final confirmBreak = await showDialog<bool>(
+          context: context,
+          builder: (context) => _buildThemedDialog(
+            title: "Convert to One-Time Session?",
+            content: "This will convert this recurring session to a one-time session. All future occurrences will be deleted permanently. This action cannot be undone.",
+            cancelText: "Cancel",
+            confirmText: "Delete Future Sessions",
+            isDestructive: true,
+          ),
+        );
+        if (confirmBreak != true) {
+          setState(() => _isLoading = false);
+          return;
+        }
+      }
+      
+      // Check if changing recurrence pattern
+      if (_wasRecurring && _selectedRecurrence != null && _selectedRecurrence != 'custom' && _selectedRecurrence != _initialRecurrence) {
+        final confirmChange = await showDialog<bool>(
+          context: context,
+          builder: (context) => _buildThemedDialog(
+            title: "Change Recurrence Pattern?",
+            content: "Changing the recurrence pattern will affect all future occurrences of this session.",
+            cancelText: "Cancel",
+            confirmText: "Update All",
+          ),
+        );
+        if (confirmChange != true) {
+          setState(() => _isLoading = false);
+          return;
+        }
+      }
+
+      final eventIdToUpdate = _masterEventId ?? widget.eventToEdit!.id!;
       final updatedEvent = await widget.client.updateEvent(
-        originalEvent: widget.eventToEdit!,
+        eventId: eventIdToUpdate,
         title: _title,
         startTime: startDateTime,
         endTime: endDateTime,
+        importanceKey: _selectedImportance,
+        recurrenceRule: _selectedRecurrence == 'custom' ? null : _selectedRecurrence,
+        recurrenceUntil: (_selectedRecurrence != null && _selectedRecurrence != 'custom') ? _recurrenceEndDate : null,
       );
 
       if (updatedEvent != null) {
         widget.onEventUpdated();
-        Navigator.pop(context);
-        _showSnackbar('Session updated successfully!', Colors.green);
+        if (mounted) Navigator.pop(context);
+        _showSnackbar('Session updated!', Colors.green);
       } else {
-        _showSnackbar('Update failed. Check connection or event details.', errorIndicatorRed);
+        _showSnackbar('Update failed.', errorIndicatorRed);
       }
       setState(() => _isLoading = false);
       return;
     }
 
-    // Create new event(s)
     final List<DateTime> finalStartTimes = isRecurringMode
         ? [_combineDateTime(_startDate, _startTime)] 
-        : _selectedDates.map((date) => _combineDateTime(date, _startTime)).toList();
+        : [_combineDateTime(_startDate, _startTime)];
     
-    // Make sure we have at least one date selected
     if (finalStartTimes.isEmpty) {
-        _showErrorDialog('Date Error', 'Please select at least one date for the session(s).');
+        _showErrorDialog('Date Error', 'Select at least one date.');
         setState(() => _isLoading = false);
         return;
     }
 
-    // Create the event(s) in Google Calendar
+    // Check for conflicts on all dates when adding
+    for (var startTime in finalStartTimes) {
+      final endTime = startTime.add(duration);
+      final conflicts = await widget.client.checkForConflicts(
+        startTime: startTime,
+        endTime: endTime,
+        excludeEventId: null,
+      );
+
+      if (conflicts.isNotEmpty && mounted) {
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (context) => _buildThemedDialog(
+            title: 'Conflict Detected',
+            content: 'One or more sessions overlap with existing events on ${DateFormat('MMM dd').format(startTime)}. Add anyway?',
+            cancelText: 'Cancel',
+            confirmText: 'Add Anyway',
+          ),
+        );
+        if (confirm != true) {
+            setState(() => _isLoading = false);
+            return;
+        }
+        // User confirmed, break out and continue adding
+        break;
+      }
+    }
+
     final results = await widget.client.createEvents(
       title: _title,
       startTimes: finalStartTimes,
@@ -1831,16 +2450,15 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
 
     if (results.any((r) => r != null)) {
       widget.onEventUpdated();
-      Navigator.pop(context);
-      _showSnackbar('Session(s) added to Google Calendar!', Colors.green);
+      if (mounted) Navigator.pop(context);
+      _showSnackbar('Session(s) added!', Colors.green);
     } else {
-      _showSnackbar('Add failed. Check connection or console for details.', errorIndicatorRed);
+      _showSnackbar('Add failed.', errorIndicatorRed);
     }
 
     setState(() => _isLoading = false);
   }
 
-  // Show a snackbar message
   void _showSnackbar(String message, Color color) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1853,93 +2471,384 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
     }
   }
   
-  // Show an error dialog
+  String _getRecurrenceHelpText() {
+    final recurrenceOptions = {
+      'One-time': null, 
+      'Daily': 'RRULE:FREQ=DAILY',
+      'Weekly': 'RRULE:FREQ=WEEKLY',
+      'Monthly': 'RRULE:FREQ=MONTHLY',
+    };
+    
+    final currentKey = recurrenceOptions.keys.firstWhere(
+      (k) => recurrenceOptions[k] == _selectedRecurrence, 
+      orElse: () => 'One-time'
+    );
+    
+    switch (currentKey) {
+      case 'One-time':
+        return 'Session will occur only on the selected date';
+      case 'Daily':
+        return 'Session repeats every day until the end date';
+      case 'Weekly':
+        return 'Session repeats every week on this day';
+      case 'Monthly':
+        return 'Session repeats every month on this date';
+      default:
+        return '';
+    }
+  }
+  
   Future<void> _showErrorDialog(String title, String content) async {
      return showDialog(
         context: context,
-        builder: (context) => Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(cardBorderRadius)),
-          backgroundColor: cardBackground,
-          child: Padding(
-            padding: EdgeInsets.all(MediaQuery.of(context).size.width * 0.05),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+        builder: (context) => _buildThemedDialog(
+          title: title,
+          content: content,
+          cancelText: '',
+          confirmText: 'OK',
+        ),
+     );
+  }
+
+  Widget _buildThemedDialog({
+    required String title,
+    required String content,
+    required String cancelText,
+    required String confirmText,
+    bool isDestructive = false,
+  }) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(cardBorderRadius)),
+      backgroundColor: cardBackground,
+      child: Padding(
+        padding: EdgeInsets.all(MediaQuery.of(context).size.width * 0.05),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: MediaQuery.of(context).size.width * 0.045,
+                fontWeight: FontWeight.bold,
+                color: primaryTextDark,
+              ),
+            ),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.02),
+            Text(
+              content,
+              style: TextStyle(
+                fontSize: MediaQuery.of(context).size.width * 0.035,
+                color: secondaryTextGrey,
+                height: 1.5,
+              ),
+            ),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.03),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.045),
-                    fontWeight: FontWeight.bold,
-                    color: primaryTextDark,
+                if (cancelText.isNotEmpty)
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: Text(cancelText, style: TextStyle(fontSize: MediaQuery.of(context).size.width * 0.035, color: secondaryTextGrey)),
                   ),
-                ),
-                SizedBox(height: MediaQuery.of(context).size.height * 0.02),
-                Text(
-                  content,
-                  style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.035),
-                    color: secondaryTextGrey,
-                    height: 1.5,
+                if (cancelText.isNotEmpty) SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isDestructive ? errorIndicatorRed : primaryThemeColor,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                ),
-                SizedBox(height: MediaQuery.of(context).size.height * 0.03),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryThemeColor,
-                      foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: MediaQuery.of(context).size.width * 0.04,
-                        vertical: MediaQuery.of(context).size.height * 0.015,
-                      ),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    child: Text('OK', style: TextStyle(fontSize: _adaptiveFontSize(0.035))),
-                  ),
+                  child: Text(confirmText, style: TextStyle(fontSize: MediaQuery.of(context).size.width * 0.035)),
                 ),
               ],
             ),
-          ),
+          ],
         ),
-      );
+      ),
+    );
   }
 
-  // Calculate adaptive font size
+  Widget _buildRecurringEditDialog() {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      backgroundColor: cardBackground,
+      child: Padding(
+        padding: EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Icon
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: primaryThemeColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.edit_calendar,
+                color: primaryThemeColor,
+                size: 28,
+              ),
+            ),
+            SizedBox(height: 16),
+            
+            // Title
+            Text(
+              'Edit Recurring Session',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: primaryTextDark,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 8),
+            
+            // Description
+            Text(
+              'Choose which occurrences to update',
+              style: TextStyle(
+                fontSize: 14,
+                color: secondaryTextGrey,
+                height: 1.4,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 24),
+            
+            // Options
+            _buildDialogOption(
+              title: 'Only This Session',
+              subtitle: 'Update just this one',
+              icon: Icons.event,
+              color: primaryThemeColor,
+              onTap: () => Navigator.of(context).pop('this'),
+            ),
+            SizedBox(height: 10),
+            _buildDialogOption(
+              title: 'This & Future Sessions',
+              subtitle: 'Update this and upcoming',
+              icon: Icons.event_repeat,
+              color: accentThemeColor,
+              onTap: () => Navigator.of(context).pop('future'),
+            ),
+            SizedBox(height: 10),
+            _buildDialogOption(
+              title: 'All Sessions',
+              subtitle: 'Update entire series',
+              icon: Icons.calendar_month,
+              color: dfDeepTeal,
+              onTap: () => Navigator.of(context).pop('all'),
+            ),
+            SizedBox(height: 16),
+            
+            // Cancel
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(null),
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              ),
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  fontSize: 15,
+                  color: secondaryTextGrey,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecurringDeleteDialog() {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      backgroundColor: cardBackground,
+      child: Padding(
+        padding: EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Icon
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: errorIndicatorRed.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.delete_outline,
+                color: errorIndicatorRed,
+                size: 28,
+              ),
+            ),
+            SizedBox(height: 16),
+            
+            // Title
+            Text(
+              'Delete Recurring Session',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: primaryTextDark,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 8),
+            
+            // Description
+            Text(
+              'Choose which occurrences to remove',
+              style: TextStyle(
+                fontSize: 14,
+                color: secondaryTextGrey,
+                height: 1.4,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 24),
+            
+            // Options
+            _buildDialogOption(
+              title: 'Only This Session',
+              subtitle: 'Remove just this one',
+              icon: Icons.event,
+              color: primaryThemeColor,
+              onTap: () => Navigator.of(context).pop('this'),
+            ),
+            SizedBox(height: 10),
+            _buildDialogOption(
+              title: 'This & Future Sessions',
+              subtitle: 'Remove this and upcoming',
+              icon: Icons.event_repeat,
+              color: Colors.orange[700]!,
+              onTap: () => Navigator.of(context).pop('future'),
+            ),
+            SizedBox(height: 10),
+            _buildDialogOption(
+              title: 'All Sessions',
+              subtitle: 'Remove entire series',
+              icon: Icons.calendar_month,
+              color: errorIndicatorRed,
+              onTap: () => Navigator.of(context).pop('all'),
+            ),
+            SizedBox(height: 16),
+            
+            // Cancel
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(null),
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              ),
+              child: Text(
+                'Cancel',
+                style: TextStyle(
+                  fontSize: 15,
+                  color: secondaryTextGrey,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDialogOption({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          border: Border.all(color: color.withOpacity(0.3), width: 1.5),
+          borderRadius: BorderRadius.circular(12),
+          color: color.withOpacity(0.05),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: primaryTextDark,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: secondaryTextGrey,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios, size: 14, color: secondaryTextGrey),
+          ],
+        ),
+      ),
+    );
+  }
+
   double _adaptiveFontSize(double baseScreenWidthMultiplier) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final baseSize = screenWidth * baseScreenWidthMultiplier;
-    final textScaleFactor = MediaQuery.of(context).textScaleFactor;
-    
-    final mitigationFactor = 0.95;
-    return baseSize / (1.0 + (textScaleFactor - 1.0) * mitigationFactor);
+    return screenWidth * baseScreenWidthMultiplier;
   }
 
-  // Build input decoration for form fields
   InputDecoration _inputDecoration({required String label, required IconData icon, bool enabled = true}) {
     final accent = primaryThemeColor;
     return InputDecoration(
       labelText: label,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.grey.shade300, width: 1),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: enabled ? accent.withOpacity(0.5) : Colors.grey.shade300, width: 1),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: accent, width: 2),
-      ),
-      labelStyle: TextStyle(color: enabled ? primaryTextDark : secondaryTextGrey, fontSize: _adaptiveFontSize(0.032)),
-      prefixIcon: Icon(icon, color: enabled ? accent : secondaryTextGrey, size: _adaptiveFontSize(0.045)),
-      fillColor: enabled ? cardBackground : Colors.grey.shade100,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+      prefixIcon: Icon(icon, color: enabled ? accent : secondaryTextGrey),
       filled: true,
-      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8), 
+      fillColor: enabled ? cardBackground : Colors.grey.shade100,
     );
+  }
+  
+  Future<bool> _onWillPop() async {
+      if (_isFormDirty && !_isLoading) {
+          final shouldPop = await showDialog<bool>(
+             context: context,
+             builder: (context) => _buildThemedDialog(
+               title: "Unsaved Changes",
+               content: "Discard unsaved changes?",
+               cancelText: "Cancel",
+               confirmText: "Discard",
+               isDestructive: true,
+             ),
+          );
+          return shouldPop ?? false;
+      }
+      return true;
   }
 
   @override
@@ -1948,377 +2857,315 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
     
-    // Recurrence options for dropdown
     final recurrenceOptions = {
-      'One-time': null,
+      'One-time': null, 
       'Daily': 'RRULE:FREQ=DAILY',
       'Weekly': 'RRULE:FREQ=WEEKLY',
       'Monthly': 'RRULE:FREQ=MONTHLY',
     };
 
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: screenHeight * 0.9,
-      ),
-      decoration: BoxDecoration(
-        color: primaryBackground,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(cardBorderRadius)),
-        boxShadow: subtleShadow,
-      ),
-      padding: EdgeInsets.fromLTRB(
-        screenWidth * 0.05, 
-        screenHeight * 0.025, 
-        screenWidth * 0.05, 
-        MediaQuery.of(context).viewInsets.bottom + screenHeight * 0.025
-      ),
-      child: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Header with close button
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  SizedBox(width: screenWidth * 0.08),
-                  Text(
-                    isEditing ? 'Edit Session' : 'Add New Session',
-                    style: TextStyle(fontSize: _adaptiveFontSize(0.04), fontWeight: FontWeight.bold, color: primaryTextDark),
-                    textAlign: TextAlign.center,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+         if (didPop) return;
+         final shouldPop = await _onWillPop();
+         if (shouldPop && context.mounted) Navigator.pop(context);
+      },
+      child: DraggableScrollableSheet(
+        initialChildSize: 0.9,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (context, scrollController) {
+          return Container(
+            decoration: BoxDecoration(
+              color: primaryBackground,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(cardBorderRadius)),
+              boxShadow: subtleShadow,
+            ),
+            child: Column(
+              children: [
+                // Header
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    screenWidth * 0.05, 
+                    screenHeight * 0.02, 
+                    screenWidth * 0.05, 
+                    screenHeight * 0.01
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: secondaryTextGrey),
-                    onPressed: () => Navigator.pop(context),
-                    tooltip: 'Close',
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      SizedBox(width: screenWidth * 0.08),
+                      Text(
+                        isEditing ? 'Edit Session' : 'Add New Session',
+                        style: TextStyle(fontSize: _adaptiveFontSize(0.04), fontWeight: FontWeight.bold, color: primaryTextDark),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: secondaryTextGrey),
+                        onPressed: () async {
+                            if (await _onWillPop()) Navigator.pop(context);
+                        },
+                      ),
+                    ],
                   ),
-                ],
-              ),
-
-             Divider(height: screenHeight * 0.02, color: Colors.grey), 
-
-              // Title input field
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.01),
-                child: TextFormField(
-                  initialValue: isEditing ? _title : null,
-                  decoration: _inputDecoration(
-                    label: 'Session Title',
-                    icon: Icons.title,
-                    enabled: true,
-                  ),
-                  validator: (value) => value == null || value.isEmpty ? 'Title is required' : null,
-                  onSaved: (value) => _title = value!,
                 ),
-              ),
-              SizedBox(height: screenHeight * 0.01), 
-              
-              // Importance dropdown (only when creating)
-              if (!isEditing)
-                DropdownButtonFormField<String>(
-                  value: _selectedImportance,
-                  decoration: _inputDecoration(label: 'Importance', icon: Icons.flag),
-                  items: importanceColors.keys.where((key) => key != 'Info').map((String key) {
-                    return DropdownMenuItem<String>(
-                      value: key,
-                      child: Row(
+                Divider(height: 1, color: Colors.grey),
+                
+                // Scrollable Form
+                Expanded(
+                  child: Form(
+                    key: _formKey,
+                    onChanged: _markDirty,
+                    child: SingleChildScrollView(
+                      controller: scrollController,
+                      padding: EdgeInsets.fromLTRB(
+                        screenWidth * 0.05,
+                        screenHeight * 0.02,
+                        screenWidth * 0.05,
+                        screenHeight * 0.02 + MediaQuery.of(context).viewInsets.bottom,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Container(width: 10, height: 10, decoration: BoxDecoration(color: importanceColors[key], shape: BoxShape.circle)),
-                          SizedBox(width: 8),
-                          Text(key, style: TextStyle(fontSize: _adaptiveFontSize(0.032))),
+                          TextFormField(
+                            initialValue: isEditing ? _title : null,
+                            decoration: _inputDecoration(
+                              label: 'Session Title',
+                              icon: Icons.title,
+                            ),
+                            validator: (value) => value == null || value.isEmpty ? 'Title is required' : null,
+                            onSaved: (value) => _title = value!,
+                            onChanged: (value) => _markDirty(),
+                          ),
+                          SizedBox(height: screenHeight * 0.015), 
+                          
+                          DropdownButtonFormField<String>(
+                            value: _selectedImportance,
+                            decoration: _inputDecoration(label: 'Importance', icon: Icons.flag),
+                            items: importanceColors.keys.where((key) => key != 'Info').map((String key) {
+                              return DropdownMenuItem<String>(
+                                value: key,
+                                child: Row(
+                                  children: [
+                                    Container(width: 10, height: 10, decoration: BoxDecoration(color: importanceColors[key], shape: BoxShape.circle)),
+                                    SizedBox(width: 8),
+                                    Text(key, style: TextStyle(fontSize: _adaptiveFontSize(0.032))),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (String? newValue) {
+                              setState(() {
+                                _selectedImportance = newValue!;
+                                _markDirty();
+                              });
+                            },
+                          ),
+                          SizedBox(height: screenHeight * 0.015), 
+                          
+                          DropdownButtonFormField<String>(
+                            value: recurrenceOptions.keys.firstWhere(
+                                (k) => recurrenceOptions[k] == _selectedRecurrence, 
+                                orElse: () => 'One-time'
+                            ),
+                            decoration: _inputDecoration(label: 'Repeat', icon: Icons.repeat),
+                            items: recurrenceOptions.keys.map((String key) {
+                              return DropdownMenuItem<String>(
+                                value: key,
+                                child: Text(key, style: TextStyle(fontSize: _adaptiveFontSize(0.032))),
+                              );
+                            }).toList(),
+                            onChanged: (String? key) {
+                              setState(() {
+                                _selectedRecurrence = recurrenceOptions[key];
+                                if (_selectedRecurrence != null && _selectedRecurrence != 'custom') {
+                                  _selectedDates = [_startDate];
+                                } else if (key == 'Custom') {
+                                  _selectedDates = [_startDate];
+                                } else {
+                                  _selectedDates = [_startDate];
+                                }
+                                _markDirty();
+                              });
+                            },
+                          ),
+                          SizedBox(height: screenHeight * 0.008),
+                          Padding(
+                            padding: EdgeInsets.only(left: 12, right: 12),
+                            child: Text(
+                              _getRecurrenceHelpText(),
+                              style: TextStyle(
+                                fontSize: _adaptiveFontSize(0.028),
+                                color: secondaryTextGrey.withOpacity(0.8),
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: screenHeight * 0.015),
+                          
+                          Row(
+                              children: [
+                                  Expanded(
+                                      child: ListTile(
+                                          contentPadding: EdgeInsets.zero,
+                                          title: Text(
+                                            (isRecurringMode || (isEditing && _selectedRecurrence != null)) 
+                                                ? 'Start Date' 
+                                                : 'Session Date',
+                                            style: TextStyle(fontSize: _adaptiveFontSize(0.032))
+                                          ),
+                                          subtitle: Text(
+                                              DateFormat('MMM dd, yyyy').format(_startDate),
+                                              style: TextStyle(fontWeight: FontWeight.w600, fontSize: _adaptiveFontSize(0.032))), 
+                                          leading: Icon(
+                                            Icons.calendar_today,
+                                            color: accent,
+                                            size: _adaptiveFontSize(0.045)
+                                          ),
+                                          onTap: () async {
+                                              final date = await showDatePicker(
+                                                context: context,
+                                                initialDate: _startDate,
+                                                firstDate: DateTime.now(),
+                                                lastDate: DateTime.now().add(const Duration(days: 365*3)),
+                                                builder: (context, child) => Theme(
+                                                  data: ThemeData.light().copyWith(colorScheme: ColorScheme.light(primary: primaryThemeColor)), 
+                                                  child: child!
+                                                ),
+                                              );
+                                              if (date != null) setState(() { _startDate = date; _selectedDates = [date]; _isFormDirty = true; });
+                                          },
+                                      ),
+                                  ),
+                                  
+                                  if (isRecurringMode || (isEditing && _selectedRecurrence != null))
+                                      Expanded(
+                                          child: ListTile(
+                                              contentPadding: EdgeInsets.only(left: screenWidth * 0.01), 
+                                              title: Text('Repeat Until', style: TextStyle(fontSize: _adaptiveFontSize(0.032))),
+                                              subtitle: Text(DateFormat('MMM dd, yyyy').format(_recurrenceEndDate!),
+                                                style: TextStyle(fontWeight: FontWeight.w600, fontSize: _adaptiveFontSize(0.032))), 
+                                              onTap: () async {
+                                                  final date = await showDatePicker(
+                                                    context: context,
+                                                    initialDate: _recurrenceEndDate ?? _startDate.add(const Duration(days: 30)),
+                                                    firstDate: _startDate,
+                                                    lastDate: _startDate.add(const Duration(days: 365)),
+                                                    builder: (context, child) => Theme(
+                                                      data: ThemeData.light().copyWith(colorScheme: ColorScheme.light(primary: primaryThemeColor)), 
+                                                      child: child!
+                                                    ),
+                                                  );
+                                                  if (date != null) setState(() { _recurrenceEndDate = date; _isFormDirty = true; });
+                                              },
+                                          ),
+                                      ),
+                              ],
+                          ),
+                          const Divider(), 
+                
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text('Start Time', style: TextStyle(fontSize: _adaptiveFontSize(0.032))),
+                                  subtitle: Text(_startTime.format(context), style: TextStyle(fontWeight: FontWeight.w600, fontSize: _adaptiveFontSize(0.034))),
+                                  leading: Icon(Icons.schedule, color: accent, size: _adaptiveFontSize(0.045)),
+                                  onTap: () async {
+                                    final time = await showTimePicker(
+                                      context: context, 
+                                      initialTime: _startTime,
+                                      builder: (context, child) => Theme(data: ThemeData.light().copyWith(colorScheme: ColorScheme.light(primary: primaryThemeColor)), child: child!),
+                                    );
+                                    if (time != null) setState(() { _startTime = time; _isFormDirty = true; });
+                                  },
+                                ),
+                              ),
+                              Expanded(
+                                child: ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text('End Time', style: TextStyle(fontSize: _adaptiveFontSize(0.032))),
+                                  subtitle: Text(_endTime.format(context), style: TextStyle(fontWeight: FontWeight.w600, fontSize: _adaptiveFontSize(0.034))),
+                                  leading: Icon(Icons.schedule, color: accent, size: _adaptiveFontSize(0.045)),
+                                  onTap: () async {
+                                    final time = await showTimePicker(
+                                      context: context, 
+                                      initialTime: _endTime,
+                                      builder: (context, child) => Theme(data: ThemeData.light().copyWith(colorScheme: ColorScheme.light(primary: primaryThemeColor)), child: child!),
+                                    );
+                                    if (time != null) setState(() { _endTime = time; _isFormDirty = true; });
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: screenHeight * 0.03),
+                          _isLoading
+                              ? Center(child: Padding(
+                              padding: EdgeInsets.all(screenWidth * 0.025),
+                              child: CircularProgressIndicator(color: accent)))
+                              : Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              if (isEditing)
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: _handleSave, 
+                                    icon: Icon(Icons.save, color: Colors.white),
+                                    label: Text('Save Changes', style: TextStyle(fontSize: _adaptiveFontSize(0.034))),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: accent,
+                                      foregroundColor: Colors.white,
+                                      padding: EdgeInsets.symmetric(vertical: screenHeight * 0.018),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    ),
+                                  ),
+                                )
+                              else ...[
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: _handleSave, 
+                                    icon: Icon(Icons.add, color: Colors.white),
+                                    label: Text('Add Session', style: TextStyle(fontSize: _adaptiveFontSize(0.034))),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: accent,
+                                      foregroundColor: Colors.white,
+                                      padding: EdgeInsets.symmetric(vertical: screenHeight * 0.018),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(width: screenWidth * 0.025),
+                                Expanded(
+                                  child: TextButton(
+                                    onPressed: () async {
+                                       if (await _onWillPop()) Navigator.pop(context);
+                                    },
+                                    child: Text('Cancel', style: TextStyle(color: secondaryTextGrey, fontSize: _adaptiveFontSize(0.034))),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          // Extra bottom padding for Android nav bar
+                          SizedBox(height: MediaQuery.of(context).padding.bottom + 20),
                         ],
                       ),
-                    );
-                  }).toList(),
-                  onChanged: (String? newValue) {
-                    setState(() {
-                      _selectedImportance = newValue!;
-                    });
-                  },
-                ),
-              SizedBox(height: screenHeight * 0.01), 
-              
-              // Recurrence dropdown (only when creating)
-              if (!isEditing)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    DropdownButtonFormField<String>(
-                      value: recurrenceOptions.keys.firstWhere((k) => recurrenceOptions[k] == _selectedRecurrence, orElse: () => 'One-time'),
-                      decoration: _inputDecoration(label: 'Repeat', icon: Icons.repeat),
-                      items: recurrenceOptions.keys.map((String key) {
-                        return DropdownMenuItem<String>(
-                          value: key,
-                          child: Text(key, style: TextStyle(fontSize: _adaptiveFontSize(0.032))),
-                        );
-                      }).toList(),
-                      onChanged: (String? key) {
-                        setState(() {
-                          _selectedRecurrence = recurrenceOptions[key];
-                          // Reset dates when changing mode
-                          if (_selectedRecurrence != null) {
-                            _selectedDates = [_startDate];
-                          }
-                        });
-                      },
-                    ),
-                    // FIXED: Updated hint text for one-time mode
-                    if (isRecurringMode)
-                      Padding(
-                        padding: EdgeInsets.only(top: screenHeight * 0.01, left: screenWidth * 0.03),
-                        child: Text(
-                          'Pick one date - this session will repeat ${_selectedRecurrence!.contains('DAILY') ? 'daily' : _selectedRecurrence!.contains('WEEKLY') ? 'weekly' : 'monthly'}',
-                          style: TextStyle(
-                            fontSize: _adaptiveFontSize(0.028),
-                            color: accentThemeColor,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      )
-                    else if (isMultiDateMode)
-                      Padding(
-                        padding: EdgeInsets.only(top: screenHeight * 0.01, left: screenWidth * 0.03),
-                        child: Text(
-                          'Pick one or more dates for individual sessions',
-                          style: TextStyle(
-                            fontSize: _adaptiveFontSize(0.028),
-                            color: accentThemeColor,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              SizedBox(height: screenHeight * 0.015),
-              
-              // Date pickers
-              Row(
-                  children: [
-                      // Main date picker (changes based on mode)
-                      Expanded(
-                          child: ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(
-                                isRecurringMode ? 'Start Date' : (isMultiDateMode ? 'Session Dates' : 'Start Date'),
-                                style: TextStyle(fontSize: _adaptiveFontSize(0.032))
-                              ),
-                              subtitle: Text(
-                                  isMultiDateMode && _selectedDates.length > 1
-                                      ? '${_selectedDates.length} Dates Selected'
-                                      : DateFormat('MMM dd, yyyy').format(_startDate),
-                                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: _adaptiveFontSize(0.032))), 
-                              leading: Icon(
-                                isMultiDateMode && _selectedDates.length > 1 ? Icons.date_range : Icons.calendar_today,
-                                color: accent,
-                                size: _adaptiveFontSize(0.045)
-                              ),
-                              onTap: isMultiDateMode ? () async { 
-                                  // Multi-date picker dialog
-                                  final dates = await showDialog<List<DateTime>>(
-                                      context: context,
-                                      builder: (context) => _MultiDatePickerDialog(
-                                          initialDates: _selectedDates,
-                                      ),
-                                  );
-                                  if (dates != null && dates.isNotEmpty) {
-                                      setState(() {
-                                          _selectedDates = dates;
-                                          _startDate = dates.first;
-                                      });
-                                  }
-                              } : () async {
-                                  // Single date picker
-                                  final date = await _showThemedDatePicker(
-                                    context: context,
-                                    initialDate: _startDate,
-                                  );
-                                  if (date != null) setState(() => _startDate = date);
-                              },
-                          ),
-                      ),
-                      
-                      // Recurrence end date (only for recurring events)
-                      if (isRecurringMode)
-                          Expanded(
-                              child: ListTile(
-                                  contentPadding: EdgeInsets.only(left: screenWidth * 0.01), 
-                                  title: Text('Repeat Until', style: TextStyle(fontSize: _adaptiveFontSize(0.032))),
-                                  subtitle: Text(DateFormat('MMM dd').format(_recurrenceEndDate!),
-                                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: _adaptiveFontSize(0.032))), 
-                                  onTap: () async {
-                                      final date = await _showThemedDatePicker(
-                                        context: context,
-                                        initialDate: _recurrenceEndDate ?? _startDate.add(const Duration(days: 7)),
-                                        firstDate: _startDate,
-                                        lastDate: _startDate.add(const Duration(days: 365)),
-                                      );
-                                      if (date != null) setState(() => _recurrenceEndDate = date);
-                                  },
-                              ),
-                          ),
-                  ],
-              ),
-              const Divider(), 
-
-              // Time pickers
-              Row(
-                children: [
-                  Expanded(
-                    child: ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text('Start Time', style: TextStyle(fontSize: _adaptiveFontSize(0.032))),
-                      subtitle: Text(_startTime.format(context), style: TextStyle(fontWeight: FontWeight.w600, fontSize: _adaptiveFontSize(0.034))),
-                      leading: Icon(Icons.schedule, color: accent, size: _adaptiveFontSize(0.045)),
-                      onTap: () async {
-                        final time = await showTimePicker(
-                          context: context, 
-                          initialTime: _startTime,
-                          builder: (context, child) {
-                            return Theme(
-                                data: ThemeData.light().copyWith(
-                                    colorScheme: ColorScheme.light(
-                                        primary: primaryThemeColor,
-                                        onPrimary: Colors.white,
-                                        surface: cardBackground,
-                                        onSurface: primaryTextDark,
-                                    ),
-                                    textButtonTheme: TextButtonThemeData(
-                                        style: TextButton.styleFrom(foregroundColor: primaryThemeColor),
-                                    ),
-                                ),
-                                child: child!,
-                            );
-                          },
-                        );
-                        if (time != null) setState(() => _startTime = time);
-                      },
                     ),
                   ),
-                  Expanded(
-                    child: ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text('End Time', style: TextStyle(fontSize: _adaptiveFontSize(0.032))),
-                      subtitle: Text(_endTime.format(context), style: TextStyle(fontWeight: FontWeight.w600, fontSize: _adaptiveFontSize(0.034))),
-                      leading: Icon(Icons.schedule, color: accent, size: _adaptiveFontSize(0.045)),
-                      onTap: () async {
-                        final time = await showTimePicker(
-                          context: context, 
-                          initialTime: _endTime,
-                          builder: (context, child) {
-                            return Theme(
-                                data: ThemeData.light().copyWith(
-                                    colorScheme: ColorScheme.light(
-                                        primary: primaryThemeColor, 
-                                        onPrimary: Colors.white,
-                                        surface: cardBackground, 
-                                        onSurface: primaryTextDark, 
-                                    ),
-                                    textButtonTheme: TextButtonThemeData(
-                                        style: TextButton.styleFrom(foregroundColor: primaryThemeColor),
-                                    ),
-                                ),
-                                child: child!,
-                            );
-                          },
-                        );
-                        if (time != null) setState(() => _endTime = time);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: screenHeight * 0.035),
-
-              // Action buttons
-              _isLoading
-                  ? Center(child: Padding(
-                  padding: EdgeInsets.all(screenWidth * 0.025),
-                  child: CircularProgressIndicator(color: accent)))
-                  : Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  // Save or Add button
-                  if (isEditing)
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: _handleSave, 
-                        icon: Icon(Icons.save, color: Colors.white),
-                        label: Text('Save Changes', style: TextStyle(fontSize: _adaptiveFontSize(0.034))),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: accent,
-                          foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(vertical: screenHeight * 0.018),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                      ),
-                    )
-                  else ...[
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: _handleSave, 
-                        icon: Icon(Icons.add, color: Colors.white),
-                        label: Text('Add Session', style: TextStyle(fontSize: _adaptiveFontSize(0.034))),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: accent,
-                          foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(vertical: screenHeight * 0.018),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: screenWidth * 0.025),
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: Text('Cancel', style: TextStyle(color: secondaryTextGrey, fontSize: _adaptiveFontSize(0.034))),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ],
-          ),
-        ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
-    );
-  }
-  
-  // Show a themed date picker
-  Future<DateTime?> _showThemedDatePicker({
-    required BuildContext context,
-    required DateTime initialDate,
-    DateTime? firstDate,
-    DateTime? lastDate,
-  }) {
-    return showDatePicker(
-      context: context,
-      initialDate: initialDate,
-      firstDate: firstDate ?? DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: lastDate ?? DateTime.now().add(const Duration(days: 365 * 3)),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.light().copyWith(
-            colorScheme: ColorScheme.light(
-              primary: primaryThemeColor,
-              onPrimary: Colors.white,
-              surface: cardBackground,
-              onSurface: primaryTextDark,
-            ),
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(foregroundColor: primaryThemeColor),
-            ),
-          ),
-          child: child!,
-        );
-      },
     );
   }
 }
 
 // =============================================================================
 // MULTI-DATE PICKER DIALOG
-// Allows selecting multiple dates at once
 // =============================================================================
 
 class _MultiDatePickerDialog extends StatefulWidget {
@@ -2336,12 +3183,12 @@ class _MultiDatePickerDialogState extends State<_MultiDatePickerDialog> {
   @override
   void initState() {
     super.initState();
-    // Normalize dates to remove time component
     _selectedDates = widget.initialDates.map((d) => DateTime(d.year, d.month, d.day)).toList();
   }
 
-  // Toggle date selection
   void _onDaySelected(DateTime day, DateTime focusedDay) {
+    if (day.isBefore(DateTime.now().subtract(Duration(days: 1)))) return;
+
     setState(() {
       final normalizedDay = DateTime(day.year, day.month, day.day);
       if (_selectedDates.contains(normalizedDay)) {
@@ -2382,10 +3229,14 @@ class _MultiDatePickerDialogState extends State<_MultiDatePickerDialog> {
                   final normalizedDay = DateTime(day.year, day.month, day.day);
                   return _selectedDates.contains(normalizedDay);
                 },
+                enabledDayPredicate: (day) {
+                   return !day.isBefore(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day));
+                },
                 onDaySelected: _onDaySelected,
                 calendarStyle: CalendarStyle(
                   selectedDecoration: BoxDecoration(color: primaryThemeColor, shape: BoxShape.circle),
                   todayDecoration: BoxDecoration(color: primaryThemeColor.withOpacity(0.3), shape: BoxShape.circle),
+                  disabledTextStyle: TextStyle(color: Colors.grey),
                 ),
                 headerStyle: const HeaderStyle(formatButtonVisible: false, titleCentered: true),
               ),
