@@ -118,19 +118,26 @@ class MyApp extends StatelessWidget {
               ModalRoute.of(context)!.settings.arguments as SessionMode?;
           return SetSessionPage(initialMode: initialMode);
         },
-        '/session': (context) {
-          final args =
-              ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>? ?? {};
-          return SessionPage(
-            sessionType: args['sessionType'] ?? 'pomodoro',
-            duration: args['duration'] ?? '25min',
-            numberOfBlocks: args['numberOfBlocks'],
-            isCameraDetectionEnabled: args['isCameraDetectionEnabled'],
-            sensitivity: args['sensitivity'],
-            notificationStyle: args['notificationStyle'],
-            rikazConnected: args['rikazConnected'] ?? false,
-          );
-        },
+       '/session': (context) {
+  final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>? ?? {};
+  
+  // Debug log to see what's being passed
+  debugPrint('📋 Session Route Args: $args');
+  
+  return SessionPage(
+    sessionType: args['sessionType'] ?? 'pomodoro',
+    duration: args['duration'] ?? '25min',
+    numberOfBlocks: args['numberOfBlocks'],
+    isCameraDetectionEnabled: args['isCameraDetectionEnabled'],
+    sensitivity: args['sensitivity'],
+    notificationStyle: args['notificationStyle'],
+    rikazConnected: args['rikazConnected'] ?? false,
+    // ADDED: Sound parameters
+    selectedSoundId: args['selectedSoundId'],
+    selectedSoundName: args['selectedSoundName'],
+    selectedSoundUrl: args['selectedSoundUrl'],
+  );
+},
       },
       home: const AuthWrapper(),
     );

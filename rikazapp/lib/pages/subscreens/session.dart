@@ -12,7 +12,7 @@ import 'package:rikazapp/main.dart';
 // ============================================================================
 // THEME COLORS - Matching HomePage theme
 // ============================================================================
-const Color dfDeepTeal = Color(0xFF175B73);
+const Color dfDeepTeal = Color(0xFF175B73); 
 const Color dfTealCyan = Color(0xFF287C85);
 const Color dfLightSeafoam = Color(0xFF87ACA3);
 const Color dfDeepBlue = Color(0xFF162893);
@@ -27,8 +27,8 @@ const Color primaryTextDark = dfNavyIndigo;
 const Color secondaryTextGrey = Color(0xFF6B6B78);
 const Color errorIndicatorRed = Color(0xFFE57373);
 
-// Session-specific colors
-const Color focusBgColor = dfLightSeafoam; // #87ACA3
+// Session-specific colors - SWAPPED FOR BETTER CONTRAST
+const Color focusBgColor = dfDeepTeal; // Background uses darker dfDeepTeal
 const Color breakBgColor = Color(0xFFE6B400); // Yellow for break
 const Color pausedBgColor = Color(0xFF9E9E9E); // Gray for paused
 
@@ -43,6 +43,9 @@ class SessionPage extends StatefulWidget {
   final double? sensitivity;
   final String? notificationStyle;
   final bool? rikazConnected;
+  final String? selectedSoundId;
+  final String? selectedSoundName;
+  final String? selectedSoundUrl;
 
   const SessionPage({
     super.key,
@@ -53,6 +56,9 @@ class SessionPage extends StatefulWidget {
     this.sensitivity,
     this.notificationStyle,
     this.rikazConnected,
+    this.selectedSoundId,
+    this.selectedSoundName,
+    this.selectedSoundUrl,
   });
 
   @override
@@ -951,13 +957,13 @@ class _SessionPageState extends State<SessionPage>
   Color get backgroundColor {
     if (status == 'paused') return pausedBgColor;
     if (mode == 'break') return const Color.fromARGB(255, 247, 181, 0);
-    return focusBgColor;
+    return focusBgColor; // Now dfDeepTeal (darker background)
   }
 
   Color get ringColor {
     if (status == 'paused') return pausedBgColor.withOpacity(0.6);
-    if (mode == 'break') return const Color.fromARGB(255, 255, 169, 8); // Darker yellow
-    return dfTealCyan; // Darker teal
+    if (mode == 'break') return const Color.fromARGB(255, 255, 169, 8);
+    return accentThemeColor; // Using accentThemeColor (lighter teal) for better contrast
   }
 
   // ========================================================================
@@ -971,7 +977,7 @@ class _SessionPageState extends State<SessionPage>
     final bool isPaused = status == 'paused';
     final bool isBreak = mode == 'break';
 
-    final timerDiameter = screenWidth * 0.75; // Made bigger from 0.65 to 0.75
+    final timerDiameter = screenWidth * 0.75;
 
     return Scaffold(
       body: Stack(
@@ -984,14 +990,14 @@ class _SessionPageState extends State<SessionPage>
           // Bottom white section with fully circular/rounded top
           Positioned(
             top: screenHeight * 0.38,
-            left: -screenWidth * 0.5, // Extend left to create circle effect
-            right: -screenWidth * 0.5, // Extend right to create circle effect
+            left: -screenWidth * 0.5,
+            right: -screenWidth * 0.5,
             bottom: 0,
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(screenWidth * 1.5), // Huge radius for circle effect
+                  topLeft: Radius.circular(screenWidth * 1.5),
                   topRight: Radius.circular(screenWidth * 1.5),
                 ),
                 boxShadow: [
@@ -1059,7 +1065,7 @@ class _SessionPageState extends State<SessionPage>
                             ],
                           ),
                         ),
-                        // Progress ring (wider)
+                        // Progress ring
                         SizedBox(
                           width: timerDiameter * 0.92,
                           height: timerDiameter * 0.92,
@@ -1078,13 +1084,13 @@ class _SessionPageState extends State<SessionPage>
                               formatTime(timeLeft),
                               style: TextStyle(
                                 fontSize: screenWidth * 0.13,
-                                fontWeight: FontWeight.w600, // Made bold from w300 to w600
+                                fontWeight: FontWeight.w600,
                                 color: primaryTextDark,
                                 letterSpacing: 2,
                               ),
                             ),
                             SizedBox(height: screenHeight * 0.01),
-                            // Block counter for Pomodoro (inside timer)
+                            // Block counter for Pomodoro
                             if (isPomodoro && !isBreak)
                               Text(
                                 '$currentBlock/$totalBlocks Sessions',
@@ -1119,11 +1125,11 @@ class _SessionPageState extends State<SessionPage>
 
                     SizedBox(height: screenHeight * 0.04),
 
-                    // Control Buttons - now in white section
+                    // Control Buttons
                     if (!isBreak)
                       Container(
                         decoration: BoxDecoration(
-                          color: backgroundColor,
+                          color: isPaused ? pausedBgColor : accentThemeColor, // accentThemeColor when running, gray when paused
                           borderRadius: BorderRadius.circular(30),
                           boxShadow: [
                             BoxShadow(
@@ -1216,7 +1222,7 @@ class _SessionPageState extends State<SessionPage>
 
                     SizedBox(height: screenHeight * 0.02),
 
-                    // End Session Button (matching pause button shape)
+                    // End Session Button
                     Container(
                       decoration: BoxDecoration(
                         color: errorIndicatorRed,
@@ -1286,7 +1292,11 @@ class _SessionPageState extends State<SessionPage>
                         ),
                         child: Padding(
                           padding: EdgeInsets.all(screenWidth * 0.04),
-                          child: const SoundSection(),
+                          child: SoundSection(
+                            preselectedSoundId: widget.selectedSoundId,
+                            preselectedSoundName: widget.selectedSoundName,
+                            preselectedSoundUrl: widget.selectedSoundUrl,
+                          ),
                         ),
                       ),
                     ),
@@ -1314,7 +1324,7 @@ class _ProgressRingPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const strokeWidth = 12.0; // Made wider from 6.0 to 12.0
+    const strokeWidth = 12.0;
     final rect = Offset.zero & size;
 
     final paint = Paint()
@@ -1393,10 +1403,19 @@ class SoundOption {
 }
 
 // ============================================================================
-// SOUND CONTROL SECTION
+// SOUND CONTROL SECTION - UPDATED TO AUTO-PLAY PRESELECTED SOUND
 // ============================================================================
 class SoundSection extends StatefulWidget {
-  const SoundSection({super.key});
+  final String? preselectedSoundId;
+  final String? preselectedSoundName;
+  final String? preselectedSoundUrl;
+  
+  const SoundSection({
+    super.key,
+    this.preselectedSoundId,
+    this.preselectedSoundName,
+    this.preselectedSoundUrl,
+  });
 
   @override
   State<SoundSection> createState() => _SoundSectionState();
@@ -1408,13 +1427,71 @@ class _SoundSectionState extends State<SoundSection> {
   late SoundOption _currentSound;
   bool _isSoundPlaying = false;
   bool _isExpanded = false;
+  bool _hasAutoPlayed = false;
 
   @override
   void initState() {
     super.initState();
     _audioPlayer.setReleaseMode(ReleaseMode.loop);
-    _currentSound = SoundOption.off();
+    
+    // Debug logging
+    print('🎵 SoundSection init:');
+    print('   - preselectedSoundId: ${widget.preselectedSoundId}');
+    print('   - preselectedSoundName: ${widget.preselectedSoundName}');
+    print('   - preselectedSoundUrl: ${widget.preselectedSoundUrl}');
+    
+    // Initialize with preselected sound or off
+    if (widget.preselectedSoundId != null && 
+        widget.preselectedSoundId != 'off' &&
+        widget.preselectedSoundUrl != null) {
+      _currentSound = SoundOption(
+        id: widget.preselectedSoundId!,
+        name: widget.preselectedSoundName ?? widget.preselectedSoundId!,
+        filePathUrl: widget.preselectedSoundUrl,
+        iconName: 'water_drop_outlined',
+        colorHex: '#287C85',
+      );
+      
+      print('🎵 Initialized with sound: ${_currentSound.name}');
+      
+      // Auto-play the preselected sound
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted && !_hasAutoPlayed) {
+          _autoPlayPreselectedSound();
+        }
+      });
+    } else {
+      _currentSound = SoundOption.off();
+      print('🎵 Initialized with no sound (off)');
+    }
+    
     _soundsFuture = _fetchSoundsFromDB();
+  }
+
+  Future<void> _autoPlayPreselectedSound() async {
+    if (_hasAutoPlayed || _currentSound.id == 'off' || _currentSound.filePathUrl == null) {
+      return;
+    }
+    
+    try {
+      await _audioPlayer.play(UrlSource(_currentSound.filePathUrl!));
+      if (mounted) {
+        setState(() {
+          _isSoundPlaying = true;
+          _hasAutoPlayed = true;
+        });
+      }
+      print('🎵 AUTO-PLAY: Started playing ${_currentSound.name}');
+    } catch (e) {
+      print('❌ Error auto-playing sound: $e');
+      if (mounted) {
+        setState(() {
+          _currentSound = SoundOption.off();
+          _isSoundPlaying = false;
+          _hasAutoPlayed = true;
+        });
+      }
+    }
   }
 
   @override
@@ -1443,6 +1520,19 @@ class _SoundSectionState extends State<SoundSection> {
         ));
       }
 
+      // Update current sound with proper icon and color if it matches fetched data
+      if (_currentSound.id != 'off') {
+        final matchingSound = fetchedSounds.firstWhere(
+          (s) => s.id == _currentSound.id,
+          orElse: () => _currentSound,
+        );
+        if (mounted && matchingSound.id == _currentSound.id) {
+          setState(() {
+            _currentSound = matchingSound;
+          });
+        }
+      }
+
       return fetchedSounds;
     } catch (e) {
       print('❌ Error fetching sounds: $e');
@@ -1468,6 +1558,7 @@ class _SoundSectionState extends State<SoundSection> {
           _isSoundPlaying = true;
           _isExpanded = false;
         });
+        print('🎵 Playing: ${selectedSound.name}');
       } catch (e) {
         print('Error playing sound from URL: $e');
         setState(() {
@@ -1487,11 +1578,13 @@ class _SoundSectionState extends State<SoundSection> {
       if (mounted) {
         setState(() => _isSoundPlaying = false);
       }
+      print('⏸️ Paused: ${_currentSound.name}');
     } else {
       await _audioPlayer.resume();
       if (mounted) {
         setState(() => _isSoundPlaying = true);
       }
+      print('▶️ Resumed: ${_currentSound.name}');
     }
   }
 
@@ -1499,9 +1592,11 @@ class _SoundSectionState extends State<SoundSection> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
 
-    final displayIcon = _isSoundPlaying ? _currentSound.icon : Icons.volume_off_rounded;
-    final displayColor = _isSoundPlaying ? _currentSound.color : secondaryTextGrey;
-    final String displayText = _isSoundPlaying
+    // Always show current sound's icon and color if it's not 'off'
+    final displayIcon = _currentSound.id != 'off' ? _currentSound.icon : Icons.volume_off_rounded;
+    final displayColor = _currentSound.id != 'off' ? _currentSound.color : secondaryTextGrey;
+    // Show actual sound name when a sound is selected (not 'off'), otherwise show "Background Sound"
+    final String displayText = _currentSound.id != 'off' && _currentSound.name.isNotEmpty
         ? _currentSound.name
         : 'Background Sound';
 

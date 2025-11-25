@@ -25,7 +25,7 @@ const Color dfDeepBlue = Color(0xFF162893);
 const Color dfNavyIndigo = Color(0xFF0C1446); 
 
 // Primary theme colors
-const Color primaryThemeColor = dfDeepBlue;      
+const Color primaryThemeColor = dfDeepTeal;      // CHANGED: Now using dfDeepTeal
 const Color accentThemeColor = dfTealCyan;      
 const Color lightestAccentColor = dfLightSeafoam; 
 
@@ -153,10 +153,6 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
   bool _deviceWasConnected = false;
   bool _hasShownDisconnectWarning = false;
 
-  // Animation controller for pulsing hardware icons
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnimation;
-
   // Slider reset key
   final GlobalKey<SlideActionState> _slideKey = GlobalKey<SlideActionState>();
 
@@ -165,15 +161,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     super.initState();
     sessionMode = widget.initialMode ?? SessionMode.pomodoro;
     
-    // Setup pulse animation for hardware icons
-    _pulseController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    )..repeat(reverse: true);
-    
-    _pulseAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
+    // Removed pulse animation controller - no longer needed
     
     // Load available sounds
     _loadSounds();
@@ -189,7 +177,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
   @override
   void dispose() {
     _connectionCheckTimer?.cancel();
-    _pulseController.dispose();
+    // Removed pulse controller disposal - no longer used
     _previewTimer?.cancel();
     _audioPlayer.stop();
     _audioPlayer.dispose();
@@ -243,11 +231,14 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     }
     
     try {
+      // Play immediately
       await _audioPlayer.play(UrlSource(sound.filePathUrl!));
+      print('🎵 Playing preview: ${sound.name}');
       
-      // Stop after 5 seconds
-      _previewTimer = Timer(const Duration(seconds: 5), () {
-        _audioPlayer.stop();
+      // Stop after exactly 5 seconds
+      _previewTimer = Timer(const Duration(seconds: 5), () async {
+        await _audioPlayer.stop();
+        print('⏹️ Preview stopped after 5 seconds');
       });
     } catch (e) {
       print('❌ Error playing sound preview: $e');
@@ -443,10 +434,8 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                 ),
               ],
             ),
-          ],
-        ),
-      ),
-    );
+        ]),
+    ));
   }
   
   // Navigate to session page with configuration
@@ -572,7 +561,6 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
       } else if (stillConnected && !_deviceWasConnected) {
         // Device reconnected
         _deviceWasConnected = true;
-        _hasShownDisconnectWarning = false;
         _showDeviceReconnectedNotification();
       }
     });
@@ -673,8 +661,169 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
   // =============================================================================
   // UI COMPONENTS
   // =============================================================================
+  
+  // Helper widget for circular buttons (used in block counter)
+  Widget _buildCircularIconButton({
+    required IconData icon,
+    required VoidCallback? onPressed,
+    required Color color,
+    required double size,
+    Color buttonColor = accentThemeColor, 
+  }) {
+    final adjustedSize = size * 0.75; // Smaller buttons
 
-  // Build hardware status visual with icons (modern design)
+    return Container(
+      width: adjustedSize,
+      height: adjustedSize,
+      decoration: BoxDecoration(
+        color: onPressed != null ? buttonColor : secondaryTextGrey.withOpacity(0.2),
+        shape: BoxShape.circle,
+      ),
+      child: IconButton(
+        icon: Icon(
+          icon, 
+          color: onPressed != null ? Colors.white : secondaryTextGrey.withOpacity(0.5), 
+          size: adjustedSize * 0.45,
+        ),
+        onPressed: onPressed,
+        padding: EdgeInsets.zero,
+      ),
+    );
+  }
+
+  // Pomodoro Block Counter
+  Widget _pomodoroBlocksCounter() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Title
+        Row(
+          children: [
+            Icon(
+              Icons.grid_view_rounded,
+              color: accentThemeColor, 
+              size: _adaptiveFontSize(0.05),
+            ),
+            SizedBox(width: screenWidth * 0.02),
+            Text(
+              'Number of Blocks',
+              style: TextStyle(
+                fontSize: _adaptiveFontSize(0.04),
+                fontWeight: FontWeight.bold,
+                color: primaryTextDark,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: screenHeight * 0.015),
+        
+        // Counter Buttons and Display
+        Container(
+          width: double.infinity,
+          padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.03, vertical: screenHeight * 0.01),
+          decoration: BoxDecoration(
+            color: cardBackground,
+            borderRadius: BorderRadius.circular(cardBorderRadius),
+            border: Border.all(color: secondaryTextGrey.withOpacity(0.25), width: 1.5),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Decrease Button
+              _buildCircularIconButton(
+                icon: Icons.remove_rounded,
+                onPressed: numberOfBlocks > 1 ? () => setState(() => numberOfBlocks--) : null,
+                color: accentThemeColor,
+                size: screenWidth * 0.12, 
+                buttonColor: accentThemeColor, 
+              ),
+              
+              // Number Display - Less bold
+              Text(
+                numberOfBlocks.toInt().toString(),
+                style: TextStyle(
+                  fontSize: _adaptiveFontSize(0.18),
+                  fontWeight: FontWeight.w700, // Reduced from w900
+                  color: primaryTextDark, 
+                  height: 1.1,
+                ),
+              ),
+              
+              // Increase Button
+              _buildCircularIconButton(
+                icon: Icons.add_rounded,
+                onPressed: numberOfBlocks < 8 ? () => setState(() => numberOfBlocks++) : null,
+                color: accentThemeColor,
+                size: screenWidth * 0.12, 
+                buttonColor: accentThemeColor, 
+              ),
+            ],
+          ),
+        ),
+        
+        SizedBox(height: screenHeight * 0.015),
+        
+        // Info text
+        Padding(
+          padding: EdgeInsets.only(left: screenWidth * 0.01),
+          child: Row(
+            children: [
+              Icon(
+                Icons.info_outline_rounded,
+                color: accentThemeColor,
+                size: _adaptiveFontSize(0.038),
+              ),
+              SizedBox(width: screenWidth * 0.015),
+              Expanded(
+                child: Text(
+                  'One block = focus session + break',
+                  style: TextStyle(
+                    fontSize: _adaptiveFontSize(0.031),
+                    color: secondaryTextGrey,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+  
+  // Pomodoro Settings
+  Widget _buildPomodoroSettingsVertical() {
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // --- Duration Options Section ---
+        Text(
+          'Duration Options',
+          style: TextStyle(
+            fontSize: _adaptiveFontSize(0.04),
+            fontWeight: FontWeight.bold,
+            color: primaryTextDark,
+          ),
+        ),
+        SizedBox(height: screenHeight * 0.015),
+        _pomodoroDurationOption('25min', '+ 5 min break'),
+        _pomodoroDurationOption('50min', '+ 10 min break'),
+
+        SizedBox(height: screenHeight * 0.025),
+        
+        // --- Blocks Counter Section ---
+        _pomodoroBlocksCounter(),
+      ],
+    );
+  }
+
+  // Build hardware status visual with icons - SMALLER ICONS
   Widget _buildHardwareStatusVisual() {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -682,7 +831,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: screenWidth * 0.05,
-        vertical: screenHeight * 0.03,
+        vertical: screenHeight * 0.02, // Reduced from 0.03
       ),
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -716,7 +865,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
           ),
           Container(
             width: 1.5,
-            height: screenHeight * 0.08,
+            height: screenHeight * 0.05, // Reduced from 0.08
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
@@ -739,7 +888,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     );
   }
   
-  // Build individual hardware icon with status (modern design)
+  // Build individual hardware icon with status - NO PULSING
   Widget _buildHardwareIcon({
     required IconData icon,
     required String label,
@@ -750,50 +899,43 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     
     return Column(
       children: [
-        AnimatedBuilder(
-          animation: _pulseAnimation,
-          builder: (context, child) {
-            return Transform.scale(
-              scale: isActive ? _pulseAnimation.value : 1.0,
-              child: Container(
-                padding: EdgeInsets.all(screenWidth * 0.045),
-                decoration: BoxDecoration(
-                  gradient: isActive 
-                      ? LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            accentThemeColor,
-                            accentThemeColor.withOpacity(0.7),
-                          ],
-                        )
-                      : null,
-                  color: isActive ? null : secondaryTextGrey.withOpacity(0.15),
-                  shape: BoxShape.circle,
-                  boxShadow: isActive 
-                      ? [
-                          BoxShadow(
-                            color: accentThemeColor.withOpacity(0.5),
-                            blurRadius: 16,
-                            spreadRadius: 2,
-                          ),
-                        ]
-                      : null,
-                ),
-                child: Icon(
-                  icon,
-                  color: isActive ? Colors.white : secondaryTextGrey,
-                  size: screenWidth * 0.09,
-                ),
-              ),
-            );
-          },
+        // Removed AnimatedBuilder and pulsing animation
+        Container(
+          padding: EdgeInsets.all(screenWidth * 0.03),
+          decoration: BoxDecoration(
+            gradient: isActive 
+                ? LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      accentThemeColor,
+                      accentThemeColor.withOpacity(0.7),
+                    ],
+                  )
+                : null,
+            color: isActive ? null : secondaryTextGrey.withOpacity(0.15),
+            shape: BoxShape.circle,
+            boxShadow: isActive 
+                ? [
+                    BoxShadow(
+                      color: accentThemeColor.withOpacity(0.5),
+                      blurRadius: 16,
+                      spreadRadius: 2,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Icon(
+            icon,
+            color: isActive ? Colors.white : secondaryTextGrey,
+            size: screenWidth * 0.06,
+          ),
         ),
-        SizedBox(height: screenHeight * 0.012),
+        SizedBox(height: screenHeight * 0.008),
         Text(
           label,
           style: TextStyle(
-            fontSize: _adaptiveFontSize(0.032),
+            fontSize: _adaptiveFontSize(0.028),
             fontWeight: FontWeight.w600,
             color: isActive ? accentThemeColor : secondaryTextGrey,
             letterSpacing: 0.3,
@@ -803,7 +945,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     );
   }
 
-  // Rikaz BLE connection section with improved visuals
+  // Rikaz BLE connection section
   Widget _buildRikazConnect() {
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
@@ -824,7 +966,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
             children: [
               Icon(
                 isRikazToolConnected ? Icons.check_circle : Icons.bluetooth,
-                color: isRikazToolConnected ? Colors.green.shade600 : primaryThemeColor,
+                color: isRikazToolConnected ? Colors.green.shade600 : accentThemeColor, // CHANGED
                 size: _adaptiveFontSize(0.055),
               ),
               SizedBox(width: screenWidth * 0.02),
@@ -922,13 +1064,20 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                 color: Colors.white,
               ),
               innerColor: cardBackground,
-              outerColor: primaryThemeColor,
-              sliderButtonIcon: Icon(
-                Icons.bluetooth_searching,
-                color: primaryThemeColor,
-                size: screenWidth * 0.06,
+              outerColor: accentThemeColor,
+              sliderButtonIcon: Container(
+                decoration: BoxDecoration(
+                  color: cardBackground,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.bluetooth_searching,
+                  color: accentThemeColor,
+                  size: screenWidth * 0.06,
+                ),
               ),
-              height: screenHeight * 0.06,
+              sliderButtonIconPadding: 12,
+              height: screenHeight * 0.065, 
               borderRadius: cardBorderRadius,
               onSubmit: isLoading ? null : () async {
                 await _handleRikazConnect();
@@ -941,7 +1090,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     );
   }
 
-  // Pomodoro duration option (25min or 50min) - Modern design
+  // Pomodoro duration option (25min or 50min)
   Widget _pomodoroDurationOption(String label, String breakText) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -955,37 +1104,12 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
         margin: EdgeInsets.only(bottom: screenHeight * 0.012),
         padding: EdgeInsets.all(screenWidth * 0.045),
         decoration: BoxDecoration(
-          gradient: isSelected 
-              ? LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    primaryThemeColor.withOpacity(0.15),
-                    accentThemeColor.withOpacity(0.1),
-                  ],
-                )
-              : null,
-          color: isSelected ? null : cardBackground,
+          color: cardBackground,
           borderRadius: BorderRadius.circular(cardBorderRadius / 1.5),
           border: Border.all(
-            color: isSelected ? primaryThemeColor : secondaryTextGrey.withOpacity(0.25),
-            width: isSelected ? 2.5 : 1.5,
+            color: isSelected ? accentThemeColor : secondaryTextGrey.withOpacity(0.25), 
+            width: isSelected ? 2 : 1.5,
           ),
-          boxShadow: isSelected 
-              ? [
-                  BoxShadow(
-                    color: primaryThemeColor.withOpacity(0.2),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.03),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
         ),
         child: Row(
           children: [
@@ -995,14 +1119,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
               width: screenWidth * 0.065,
               height: screenWidth * 0.065,
               decoration: BoxDecoration(
-                gradient: isSelected 
-                    ? LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [primaryThemeColor, accentThemeColor],
-                      )
-                    : null,
-                color: isSelected ? null : Colors.transparent,
+                color: isSelected ? accentThemeColor : Colors.transparent, 
                 shape: BoxShape.circle,
                 border: isSelected 
                     ? null 
@@ -1024,7 +1141,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                     style: TextStyle(
                       fontSize: _adaptiveFontSize(0.042),
                       fontWeight: FontWeight.bold,
-                      color: isSelected ? primaryThemeColor : primaryTextDark,
+                      color: isSelected ? accentThemeColor : primaryTextDark, 
                       letterSpacing: 0.3,
                     ),
                   ),
@@ -1040,185 +1157,13 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                 ],
               ),
             ),
-            
-            // Duration icon
-            Container(
-              padding: EdgeInsets.all(screenWidth * 0.025),
-              decoration: BoxDecoration(
-                color: isSelected 
-                    ? primaryThemeColor.withOpacity(0.15)
-                    : secondaryTextGrey.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                Icons.timer_outlined,
-                color: isSelected ? primaryThemeColor : secondaryTextGrey,
-                size: screenWidth * 0.055,
-              ),
-            ),
           ],
         ),
       ),
     );
   }
 
-  // Pomodoro blocks slider (1-8 blocks) - Clean design matching page theme
-  Widget _pomodoroBlocksSlider() {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(screenWidth * 0.025),
-              decoration: BoxDecoration(
-                color: accentThemeColor.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                Icons.grid_view_rounded,
-                color: accentThemeColor,
-                size: _adaptiveFontSize(0.05),
-              ),
-            ),
-            SizedBox(width: screenWidth * 0.03),
-            Text(
-              'Number of Blocks',
-              style: TextStyle(
-                fontSize: _adaptiveFontSize(0.04),
-                fontWeight: FontWeight.bold,
-                color: primaryTextDark,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: screenHeight * 0.02),
-        
-        // Large number display
-        Center(
-          child: Container(
-            width: screenWidth * 0.28,
-            height: screenWidth * 0.28,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  accentThemeColor,
-                  primaryThemeColor,
-                ],
-              ),
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: accentThemeColor.withOpacity(0.4),
-                  blurRadius: 20,
-                  spreadRadius: 2,
-                ),
-              ],
-            ),
-            child: Center(
-              child: Text(
-                numberOfBlocks.toInt().toString(),
-                style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.15),
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  shadows: [
-                    Shadow(
-                      color: Colors.black.withOpacity(0.2),
-                      offset: const Offset(0, 2),
-                      blurRadius: 4,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-        SizedBox(height: screenHeight * 0.02),
-        
-        // Slider
-        SliderTheme(
-          data: SliderThemeData(
-            activeTrackColor: accentThemeColor,
-            inactiveTrackColor: lightestAccentColor.withOpacity(0.5),
-            thumbColor: Colors.white,
-            thumbShape: const RoundSliderThumbShape(
-              enabledThumbRadius: 12,
-              elevation: 4,
-            ),
-            overlayColor: accentThemeColor.withOpacity(0.2),
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 24),
-            trackHeight: 6,
-          ),
-          child: Slider(
-            value: numberOfBlocks,
-            min: 1,
-            max: 8,
-            divisions: 7,
-            label: '${numberOfBlocks.toInt()} blocks',
-            onChanged: (v) => setState(() => numberOfBlocks = v),
-          ),
-        ),
-        
-        // Min-Max labels
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.02),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '1 Block',
-                style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.028),
-                  color: secondaryTextGrey,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              Text(
-                '8 Blocks',
-                style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.028),
-                  color: secondaryTextGrey,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(height: screenHeight * 0.015),
-        
-        // Info text with icon
-        Row(
-          children: [
-            Icon(
-              Icons.info_outline_rounded,
-              color: accentThemeColor,
-              size: _adaptiveFontSize(0.04),
-            ),
-            SizedBox(width: screenWidth * 0.02),
-            Expanded(
-              child: Text(
-                'One block = focus session + break',
-                style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.031),
-                  color: secondaryTextGrey,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  // Custom duration slider (25-120 minutes) - Clean design matching page theme
+  // Custom duration slider
   Widget _customDurationSlider() {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -1254,60 +1199,30 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
         ),
         SizedBox(height: screenHeight * 0.025),
         
-        // Large time display with gradient background
+        // Large time display - CLEANER
         Center(
-          child: Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: screenWidth * 0.08,
-              vertical: screenHeight * 0.03,
-            ),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  accentThemeColor,
-                  primaryThemeColor,
-                ],
+          child: Column(
+            children: [
+              Text(
+                '${customDuration.toInt()}',
+                style: TextStyle(
+                  fontSize: _adaptiveFontSize(0.22), // Larger
+                  fontWeight: FontWeight.w700, // Less bold
+                  color: primaryTextDark,
+                  height: 1,
+                ),
               ),
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: accentThemeColor.withOpacity(0.4),
-                  blurRadius: 20,
-                  spreadRadius: 2,
+              SizedBox(height: screenHeight * 0.005),
+              Text(
+                'minutes',
+                style: TextStyle(
+                  fontSize: _adaptiveFontSize(0.038),
+                  fontWeight: FontWeight.w500,
+                  color: secondaryTextGrey,
+                  letterSpacing: 1,
                 ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Text(
-                  '${customDuration.toInt()}',
-                  style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.18),
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    height: 1,
-                    shadows: [
-                      Shadow(
-                        color: Colors.black.withOpacity(0.2),
-                        offset: const Offset(0, 2),
-                        blurRadius: 4,
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  'MINUTES',
-                  style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.035),
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white.withOpacity(0.9),
-                    letterSpacing: 2,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
         SizedBox(height: screenHeight * 0.015),
@@ -1337,8 +1252,8 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                   'No Breaks',
                   style: TextStyle(
                     fontSize: _adaptiveFontSize(0.032),
-                    color: secondaryTextGrey,
                     fontWeight: FontWeight.w600,
+                    color: secondaryTextGrey,
                   ),
                 ),
               ],
@@ -1347,18 +1262,18 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
         ),
         SizedBox(height: screenHeight * 0.025),
         
-        // Slider
+        // Slider - CIRCULAR THUMB
         SliderTheme(
           data: SliderThemeData(
-            activeTrackColor: accentThemeColor,
+            activeTrackColor: accentThemeColor, 
             inactiveTrackColor: lightestAccentColor.withOpacity(0.5),
-            thumbColor: Colors.white,
+            thumbColor: accentThemeColor,
             thumbShape: const RoundSliderThumbShape(
-              enabledThumbRadius: 12,
-              elevation: 4,
+              enabledThumbRadius: 14, // Circular thumb
+              elevation: 3,
             ),
-            overlayColor: accentThemeColor.withOpacity(0.2),
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 24),
+            overlayColor: accentThemeColor.withOpacity(0.2), 
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 26),
             trackHeight: 6,
           ),
           child: Slider(
@@ -1423,7 +1338,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     );
   }
 
-  // Session mode toggle (Pomodoro vs Custom)
+  // Session mode toggle
   Widget _buildModeToggle() {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -1444,7 +1359,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     );
   }
 
-  // Mode toggle button
+  // Mode toggle button - CHANGED TO dfDeepTeal
   Widget _toggleButton(SessionMode mode, String text, IconData icon) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -1457,10 +1372,10 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
           duration: const Duration(milliseconds: 200),
           padding: EdgeInsets.symmetric(vertical: screenHeight * 0.015),
           decoration: BoxDecoration(
-            color: isSelected ? primaryThemeColor : Colors.transparent,
+            color: isSelected ? dfDeepTeal : Colors.transparent, // CHANGED
             borderRadius: BorderRadius.circular(8),
             boxShadow: isSelected 
-                ? [BoxShadow(color: primaryThemeColor.withOpacity(0.3), blurRadius: 8)]
+                ? [BoxShadow(color: dfDeepTeal.withOpacity(0.3), blurRadius: 8)] // CHANGED
                 : null,
           ),
           child: Row(
@@ -1487,10 +1402,25 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     );
   }
   
-  // Sound selection section
+  // Sound selection section - DROPDOWN WITH CLEAR COLORS
   Widget _buildSoundSelection() {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
+
+    // Define clear colors for sound options
+    final Map<String, Color> soundColors = {
+      'off': secondaryTextGrey,
+      'default': Color.fromARGB(255, 48, 139, 117), // Clear blue
+      'Rain': Color(0xFF5DADE2),    // Sky blue
+
+  
+      'White Noise': Color.fromARGB(255, 186, 156, 241), // Light grey
+
+    };
+
+    Color getSoundColor(String soundName) {
+      return soundColors[soundName] ?? soundColors['default']!;
+    }
 
     return Container(
       padding: EdgeInsets.all(screenWidth * 0.05),
@@ -1533,7 +1463,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
           ),
           SizedBox(height: screenHeight * 0.02),
           
-          // Sound options
+          // Dropdown
           if (!_soundsLoaded)
             Center(
               child: Padding(
@@ -1542,64 +1472,68 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
               ),
             )
           else
-            ...List.generate(_availableSounds.length, (index) {
-              final sound = _availableSounds[index];
-              final isSelected = sound.id == _selectedSound.id;
-              
-              return GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _selectedSound = sound;
-                  });
-                  _playPreview(sound);
-                },
-                child: Container(
-                  margin: EdgeInsets.only(bottom: screenHeight * 0.012),
-                  padding: EdgeInsets.all(screenWidth * 0.04),
-                  decoration: BoxDecoration(
-                    color: isSelected 
-                        ? sound.color.withOpacity(0.1) 
-                        : cardBackground,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isSelected 
-                          ? sound.color 
-                          : secondaryTextGrey.withOpacity(0.25),
-                      width: isSelected ? 2 : 1.5,
-                    ),
-                    boxShadow: isSelected
-                        ? [
-                            BoxShadow(
-                              color: sound.color.withOpacity(0.2),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ]
-                        : null,
+            Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: screenWidth * 0.04,
+                vertical: screenHeight * 0.005,
+              ),
+              decoration: BoxDecoration(
+                color: cardBackground,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: accentThemeColor.withOpacity(0.3),
+                  width: 1.5,
+                ),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedSound.id,
+                  isExpanded: true,
+                  icon: Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: accentThemeColor,
+                    size: screenWidth * 0.07,
                   ),
-                  child: Row(
-                    children: [
-                      // Icon
-                      Container(
-                        padding: EdgeInsets.all(screenWidth * 0.025),
-                        decoration: BoxDecoration(
-                          color: sound.color.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(
-                          sound.icon,
-                          color: sound.color,
-                          size: screenWidth * 0.055,
-                        ),
-                      ),
-                      SizedBox(width: screenWidth * 0.03),
-                      
-                      // Name
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
+                  style: TextStyle(
+                    fontSize: _adaptiveFontSize(0.04),
+                    fontWeight: FontWeight.w600,
+                    color: primaryTextDark,
+                  ),
+                  dropdownColor: cardBackground,
+                  onChanged: (String? newSoundId) {
+                    if (newSoundId != null) {
+                      final newSound = _availableSounds.firstWhere(
+                        (s) => s.id == newSoundId,
+                        orElse: () => SoundOption.off(),
+                      );
+                      setState(() {
+                        _selectedSound = newSound;
+                      });
+                      _playPreview(newSound);
+                    }
+                  },
+                  items: _availableSounds.map<DropdownMenuItem<String>>((SoundOption sound) {
+                    final soundColor = getSoundColor(sound.name);
+                    
+                    return DropdownMenuItem<String>(
+                      value: sound.id,
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: EdgeInsets.all(screenWidth * 0.02),
+                            decoration: BoxDecoration(
+                              color: soundColor.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              sound.icon,
+                              color: soundColor,
+                              size: screenWidth * 0.05,
+                            ),
+                          ),
+                          SizedBox(width: screenWidth * 0.03),
+                          Expanded(
+                            child: Text(
                               sound.name,
                               style: TextStyle(
                                 fontSize: _adaptiveFontSize(0.04),
@@ -1607,31 +1541,38 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                                 color: primaryTextDark,
                               ),
                             ),
-                            if (isSelected && sound.id != 'off')
-                              Text(
-                                '5-second preview playing...',
-                                style: TextStyle(
-                                  fontSize: _adaptiveFontSize(0.028),
-                                  color: sound.color,
-                                  fontStyle: FontStyle.italic,
-                                ),
-                              ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                      
-                      // Selection indicator
-                      if (isSelected)
-                        Icon(
-                          Icons.check_circle,
-                          color: sound.color,
-                          size: screenWidth * 0.06,
-                        ),
-                    ],
-                  ),
+                    );
+                  }).toList(),
                 ),
-              );
-            }),
+              ),
+            ),
+          
+          // Preview indicator
+          if (_soundsLoaded && _selectedSound.id != 'off')
+            Padding(
+              padding: EdgeInsets.only(top: screenHeight * 0.015),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.volume_up_rounded,
+                    color: accentThemeColor,
+                    size: _adaptiveFontSize(0.04),
+                  ),
+                  SizedBox(width: screenWidth * 0.02),
+                  Text(
+                    '5-second preview will play on selection',
+                    style: TextStyle(
+                      fontSize: _adaptiveFontSize(0.03),
+                      color: secondaryTextGrey,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -1647,7 +1588,6 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     final screenHeight = MediaQuery.of(context).size.height;
     final proportionalHorizontalPadding = screenWidth * 0.05;
 
-    // Button is always enabled now
     final bool isStartButtonEnabled = !isLoading;
 
     return Scaffold(
@@ -1678,7 +1618,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                 left: proportionalHorizontalPadding,
                 right: proportionalHorizontalPadding,
                 top: screenHeight * 0.02,
-                bottom: screenHeight * 0.2, // Increased from 0.15 to 0.2 for better clearance
+                bottom: screenHeight * 0.2,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1712,27 +1652,14 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                   // Rikaz BLE connection section with visuals
                   _buildRikazConnect(),
 
-                  // Session configuration (Pomodoro or Custom)
+                  // Session configuration
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
                     child: (sessionMode == SessionMode.pomodoro)
                         ? Column(
                             key: const ValueKey(SessionMode.pomodoro),
-                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'Duration Options',
-                                style: TextStyle(
-                                  fontSize: _adaptiveFontSize(0.04),
-                                  fontWeight: FontWeight.bold,
-                                  color: primaryTextDark,
-                                ),
-                              ),
-                              SizedBox(height: screenHeight * 0.015),
-                              _pomodoroDurationOption('25min', '+ 5 min break'),
-                              _pomodoroDurationOption('50min', '+ 10 min break'),
-                              SizedBox(height: screenHeight * 0.025),
-                              _pomodoroBlocksSlider(),
+                              _buildPomodoroSettingsVertical(),
                             ],
                           )
                         : Column(
@@ -1743,7 +1670,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
 
                   SizedBox(height: screenHeight * 0.025),
                   
-                  // Sound selection section (moved to last)
+                  // Sound selection section
                   _buildSoundSelection(),
                 ],
               ),
@@ -1811,19 +1738,19 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                         ),
                       ),
 
-                    // Start session button
+                    // Start session button - CHANGED TO dfDeepTeal
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: isStartButtonEnabled ? handleStartSessionPress : null,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryThemeColor,
+                          backgroundColor: dfDeepTeal, // CHANGED
                           padding: EdgeInsets.symmetric(vertical: screenHeight * 0.022),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(cardBorderRadius),
                           ),
                           elevation: 6,
-                          shadowColor: primaryThemeColor.withOpacity(0.4),
+                          shadowColor: dfDeepTeal.withOpacity(0.4), // CHANGED
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
