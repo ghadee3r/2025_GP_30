@@ -157,7 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
       keyboardType: keyboardType,
       obscureText: obscureText,
       autocorrect: autocorrect,
-      cursorColor: primaryThemeColor,
+      cursorColor: dfDeepTeal,
       style: const TextStyle(fontSize: 16, color: primaryTextDark),
       decoration: InputDecoration(
         hintText: hintText,
@@ -172,7 +172,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         focusedBorder: UnderlineInputBorder(
           borderSide: BorderSide(
-            color: hasError ? errorIndicatorRed : primaryThemeColor, 
+            color: hasError ? errorIndicatorRed : dfDeepTeal, 
             width: 2
           ),
         ),
@@ -279,7 +279,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ElevatedButton(
                   onPressed: _isSubmitting ? null : _handleLogin, 
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryThemeColor, 
+                    backgroundColor: dfDeepTeal, 
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8.0),

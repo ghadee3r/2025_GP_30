@@ -40,7 +40,7 @@ void _showAlert(BuildContext context, String title, String message) {
         content: Text(message, style: const TextStyle(color: primaryTextDark)),
         actions: <Widget>[
           TextButton(
-            child: const Text("OK", style: TextStyle(color: primaryThemeColor)),
+            child: const Text("OK", style: TextStyle(color: dfDeepTeal)),
             onPressed: () => Navigator.of(context).pop(),
           ),
         ],
@@ -122,7 +122,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     Navigator.of(context).pop(); 
                     Navigator.of(context).pushReplacementNamed('/login');
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: primaryThemeColor, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                  style: ElevatedButton.styleFrom(backgroundColor: dfDeepTeal, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                   child: const Text("Back to Login", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
@@ -145,7 +145,7 @@ class _SignupScreenState extends State<SignupScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.mark_email_read_outlined, color: primaryThemeColor, size: 70),
+              const Icon(Icons.mark_email_read_outlined, color: dfDeepTeal, size: 70),
               const SizedBox(height: 20),
               const Text("Check Your Email", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: primaryTextDark)),
               const SizedBox(height: 12),
@@ -157,7 +157,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  style: ElevatedButton.styleFrom(backgroundColor: primaryThemeColor, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                  style: ElevatedButton.styleFrom(backgroundColor: dfDeepTeal, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                   child: const Text("OK", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
@@ -303,7 +303,7 @@ class _SignupScreenState extends State<SignupScreen> {
       keyboardType: keyboardType,
       obscureText: obscureText,
       autocorrect: autocorrect,
-      cursorColor: primaryThemeColor,
+      cursorColor: dfDeepTeal,
       style: const TextStyle(fontSize: 16, color: primaryTextDark),
       decoration: InputDecoration(
         hintText: hintText,
@@ -317,7 +317,7 @@ class _SignupScreenState extends State<SignupScreen> {
         ),
         focusedBorder: UnderlineInputBorder(
           borderSide: BorderSide(
-            color: hasError ? errorIndicatorRed : primaryThemeColor, 
+            color: hasError ? errorIndicatorRed : dfDeepTeal, 
             width: 2
           ),
         ),
@@ -411,7 +411,7 @@ class _SignupScreenState extends State<SignupScreen> {
               ElevatedButton(
                 onPressed: _isSubmitting ? null : _handleSignup,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryThemeColor,
+                  backgroundColor: dfDeepTeal,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
                 child: Text(

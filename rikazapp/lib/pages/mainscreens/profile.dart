@@ -1,53 +1,94 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:googleapis/calendar/v3.dart' as calendar;
+import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
 
 // =============================================================================
-// REPLICATED THEME DEFINITIONS (Including adaptiveFontSize)
+// THEME DEFINITIONS - Matching SetSession
 // =============================================================================
 
-// 1. Base Colors
-const Color primaryThemePurple = Color(0xFF7A68FF); // Main action color
-const Color secondaryThemeBlue = Color(0xFF8DC0FF); // Header end color (soft gradient)
-const Color softAccentHighlight = Color(0xFFE9E5FF); // Lightest purple for selections/backgrounds
+// Primary color palette
+const Color dfDeepTeal = Color(0xFF175B73); 
+const Color dfTealCyan = Color(0xFF287C85); 
+const Color dfLightSeafoam = Color(0xFF87ACA3); 
+const Color dfDeepBlue = Color(0xFF162893); 
+const Color dfNavyIndigo = Color(0xFF0C1446); 
 
-// 2. Custom Typography Colors
-const Color hpDeepBlue = Color.fromARGB(255, 24, 114, 150); // Exact shade for key text
-const Color hpThinBlack = Color(0xFF1E1E1E); // Thin black for names
+// Primary theme colors
+const Color primaryThemeColor = dfDeepTeal;
+const Color accentThemeColor = dfTealCyan;
+const Color lightestAccentColor = dfLightSeafoam;
 
-const Color primaryTextDark = Color(0xFF30304D); // Dark text for main headings/titles
-const Color secondaryTextGrey = Color(0xFF8C8C99); // Grey text for subtitles/hints
+// Background colors
+const Color primaryBackground = Color(0xFFF7F7F7);
+const Color cardBackground = Color(0xFFFFFFFF);
 
-// 3. Soft Pastel Accent Colors for diversity
-const Color softLavender = Color(0xFFE9E5FF); // Accent for backgrounds/selections
-const Color softCyan = Color(0xFFE8F8FF); // Accent for card/mode backgrounds
-const Color softPeach = Color(0xFFFFEEEA); // A complimentary third pastel (if needed)
+// Text colors
+const Color primaryTextDark = dfNavyIndigo;
+const Color secondaryTextGrey = Color(0xFF6B6B78);
 
-// 4. Structural Colors & Metrics
-const Color primaryBackground = Color(0xFFFFFFFF); // Pure white background
-const Color cardBackground = Color(0xFFFFFFFF); // Pure white for card surfaces
-const double cardBorderRadius = 24.0; // Highly rounded corners
+// Error/alert color
+const Color errorIndicatorRed = Color(0xFFE57373);
 
-// 5. Subtle Shadow (Purple-tinted for floating effect)
+// Standard border radius for cards
+const double cardBorderRadius = 16.0;
+
+// Standard shadow for elevated cards
 List<BoxShadow> get subtleShadow => [
-  BoxShadow(
-    color: const Color.fromARGB(255, 155, 141, 255).withOpacity(0.4),
-    blurRadius: 20,
-    offset: const Offset(0, 10),
-  ),
-];
+      BoxShadow(
+        color: dfNavyIndigo.withOpacity(0.08),
+        blurRadius: 10,
+        offset: const Offset(0, 5),
+      ),
+    ];
 
-// 6. Theme Utility Helper
+// Adaptive font sizing
 double adaptiveFontSize(BuildContext context, double baseScreenWidthMultiplier) {
   final screenWidth = MediaQuery.of(context).size.width;
   final baseSize = screenWidth * baseScreenWidthMultiplier;
   final textScaleFactor = MediaQuery.of(context).textScaleFactor;
-  const mitigationFactor = 0.8;
+  const mitigationFactor = 0.9;
   return baseSize / (1.0 + (textScaleFactor - 1.0) * mitigationFactor);
 }
 
 // =============================================================================
 
-// Get the Supabase client instance
+const List<String> _scopes = <String>[
+  'https://www.googleapis.com/auth/calendar',
+  'email',
+];
+
+class CalendarClient {
+  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: _scopes);
+  calendar.CalendarApi? calendarApi;
+
+  bool get isConnected => calendarApi != null;
+
+  Future<bool> signIn() async {
+    try {
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return false;
+
+      final authenticatedClient = await _googleSignIn.authenticatedClient();
+
+      if (authenticatedClient != null) {
+        calendarApi = calendar.CalendarApi(authenticatedClient);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('Error during Google Sign-In: $e');
+      return false;
+    }
+  }
+
+  Future<void> signOut() async {
+    await _googleSignIn.signOut();
+    calendarApi = null;
+  }
+}
+
 final supabase = sb.Supabase.instance.client;
 
 class ProfileScreen extends StatefulWidget {
@@ -58,24 +99,53 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  // State (Functionality Untouched)
-  bool isDarkMode = false; // State to control theme colors
   String userName = 'Loading...';
   String userEmail = '';
-
-  List<Map<String, dynamic>> presets = [
-    {'id': '1', 'name': 'Deep Work', 'sensitivity': 'High', 'triggers': 3},
-    {'id': '2', 'name': 'Morning Focus', 'sensitivity': 'Low', 'triggers': 1},
-    {'id': '3', 'name': 'Study Session', 'sensitivity': 'Mid', 'triggers': 4},
-  ];
+  bool isEditingName = false;
+  final TextEditingController _nameController = TextEditingController();
+  
+  // Google Calendar state
+  final CalendarClient _client = CalendarClient();
+  bool _isCalendarConnected = false;
+  bool _isSigningIn = false;
 
   @override
   void initState() {
     super.initState();
     _loadUserProfile();
+    _initializeGoogleCalendar();
   }
 
-  // --- Profile Data Fetching (Logic Untouched) ---
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+  
+  // Initialize Google Calendar connection
+  void _initializeGoogleCalendar() {
+    _client._googleSignIn.onCurrentUserChanged.listen((GoogleSignInAccount? account) {
+      if (account != null) {
+        _client.signIn().then((success) {
+          if (mounted) {
+            setState(() {
+              _isCalendarConnected = success;
+            });
+          }
+        });
+      } else {
+        if (mounted) {
+          setState(() {
+            _isCalendarConnected = false;
+          });
+        }
+      }
+    });
+    
+    _client._googleSignIn.signInSilently();
+  }
+
+  // Load user profile data
   Future<void> _loadUserProfile() async {
     final user = supabase.auth.currentUser;
     if (user != null) {
@@ -98,52 +168,315 @@ class _ProfileScreenState extends State<ProfileScreen> {
         setState(() {
           userEmail = user.email ?? 'No Email';
           userName = formattedName;
+          _nameController.text = formattedName;
         });
       }
     }
   }
 
-  void handleDeletePreset(String id) {
-    // Logic for deleting preset is untouched
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text('Delete Preset', style: TextStyle(color: primaryTextDark)),
-        content: Text('Are you sure you want to delete this preset?', style: TextStyle(color: secondaryTextGrey)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel', style: TextStyle(color: secondaryTextGrey)),
-          ),
-          TextButton(
-            onPressed: () {
-              setState(() => presets.removeWhere((p) => p['id'] == id));
-              Navigator.pop(context);
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
+  // Save updated name
+  Future<void> _saveUserName() async {
+    final newName = _nameController.text.trim();
+    if (newName.isEmpty) {
+      _showErrorSnackBar('Name cannot be empty');
+      return;
+    }
+
+    try {
+      await supabase.auth.updateUser(
+        sb.UserAttributes(
+          data: {'full_name': newName},
+        ),
+      );
+
+      if (mounted) {
+        setState(() {
+          userName = newName;
+          isEditingName = false;
+        });
+        _showSuccessSnackBar('Name updated successfully');
+      }
+    } catch (e) {
+      _showErrorSnackBar('Failed to update name: $e');
+    }
+  }
+
+  // Show error snackbar
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.error_outline, color: Colors.white),
+            SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: errorIndicatorRed,
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
-  // --- Secure Logout Logic (Logic Untouched) ---
+  // Show success snackbar
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.white),
+            SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: Colors.green.shade600,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  // Handle sign out
   void handleSignOut() async {
-    await supabase.auth.signOut();
-    if (mounted) {
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/login',
-        (route) => false,
-      );
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => _buildThemedDialog(
+        title: 'Sign Out?',
+        content: 'Are you sure you want to sign out of your account?',
+        icon: Icons.logout_rounded,
+        iconColor: errorIndicatorRed,
+        cancelText: 'Cancel',
+        confirmText: 'Sign Out',
+        onConfirm: () => Navigator.pop(context, true),
+      ),
+    );
+
+    if (confirmed == true) {
+      await supabase.auth.signOut();
+      if (mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          '/login',
+          (route) => false,
+        );
+      }
+    }
+  }
+  
+  // Handle Google Calendar sign in
+  Future<void> _handleCalendarSignIn() async {
+    if (_isCalendarConnected) return;
+    setState(() { _isSigningIn = true; });
+    
+    final success = await _client.signIn();
+    
+    if (!mounted) return;
+
+    setState(() {
+      _isCalendarConnected = success;
+      _isSigningIn = false;
+    });
+
+    if (success) {
+      _showSuccessSnackBar('Google Calendar connected successfully!');
+    } else {
+      _showErrorSnackBar('Failed to connect Google Calendar');
     }
   }
 
-  void addPreset() {
-    // Placeholder for navigation to add preset screen
-    // Navigator.pushNamed(context, '/add-preset');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Add Preset function triggered!')),
+  // Handle Google Calendar sign out
+  Future<void> _handleCalendarSignOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => _buildThemedDialog(
+        title: 'Disconnect Google Calendar?',
+        content: 'Your calendar events will no longer sync with the app.',
+        icon: Icons.cloud_off_rounded,
+        iconColor: errorIndicatorRed,
+        cancelText: 'Cancel',
+        confirmText: 'Disconnect',
+        onConfirm: () => Navigator.pop(context, true),
+      ),
+    );
+
+    if (confirmed == true) {
+      await _client.signOut();
+      setState(() {
+        _isCalendarConnected = false;
+      });
+      _showSuccessSnackBar('Google Calendar disconnected');
+    }
+  }
+
+  // Build themed dialog
+  Widget _buildThemedDialog({
+    required String title,
+    required String content,
+    required IconData icon,
+    required Color iconColor,
+    required String cancelText,
+    required String confirmText,
+    VoidCallback? onCancel,
+    VoidCallback? onConfirm,
+  }) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(cardBorderRadius)),
+      backgroundColor: cardBackground,
+      child: Padding(
+        padding: EdgeInsets.all(MediaQuery.of(context).size.width * 0.05),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Icon
+            Container(
+              padding: EdgeInsets.all(MediaQuery.of(context).size.width * 0.04),
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icon,
+                color: iconColor,
+                size: MediaQuery.of(context).size.width * 0.12,
+              ),
+            ),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.02),
+            
+            // Title
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: adaptiveFontSize(context, 0.045),
+                fontWeight: FontWeight.bold,
+                color: primaryTextDark,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.015),
+            
+            // Content
+            Text(
+              content,
+              style: TextStyle(
+                fontSize: adaptiveFontSize(context, 0.035),
+                color: secondaryTextGrey,
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.025),
+            
+            // Action buttons
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: onCancel ?? () => Navigator.pop(context),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.symmetric(
+                        vertical: MediaQuery.of(context).size.height * 0.015,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: secondaryTextGrey.withOpacity(0.3)),
+                      ),
+                    ),
+                    child: Text(
+                      cancelText,
+                      style: TextStyle(
+                        color: secondaryTextGrey,
+                        fontSize: adaptiveFontSize(context, 0.035),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(width: MediaQuery.of(context).size.width * 0.03),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      if (onConfirm != null) onConfirm();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryThemeColor,
+                      padding: EdgeInsets.symmetric(
+                        vertical: MediaQuery.of(context).size.height * 0.015,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 2,
+                    ),
+                    child: Text(
+                      confirmText,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: adaptiveFontSize(context, 0.035),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Build settings item
+  Widget _buildSettingsItem({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    Color? textColor,
+  }) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: EdgeInsets.only(bottom: screenHeight * 0.012),
+        padding: EdgeInsets.all(screenWidth * 0.04),
+        decoration: BoxDecoration(
+          color: cardBackground,
+          borderRadius: BorderRadius.circular(cardBorderRadius),
+          boxShadow: subtleShadow,
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(screenWidth * 0.025),
+              decoration: BoxDecoration(
+                color: (textColor ?? accentThemeColor).withOpacity(0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                icon,
+                color: textColor ?? accentThemeColor,
+                size: adaptiveFontSize(context, 0.05),
+              ),
+            ),
+            SizedBox(width: screenWidth * 0.03),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: adaptiveFontSize(context, 0.04),
+                  fontWeight: FontWeight.w600,
+                  color: textColor ?? primaryTextDark,
+                ),
+              ),
+            ),
+            Icon(
+              Icons.chevron_right,
+              color: secondaryTextGrey,
+              size: adaptiveFontSize(context, 0.05),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -151,507 +484,325 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-
-    // Theme Variables (Adapted for Dark Mode toggle)
-    final bgColor = isDarkMode ? hpThinBlack : primaryBackground;
-    final cardColor = isDarkMode ? const Color(0xFF1F1F1F) : cardBackground;
-    final primaryTextColor = isDarkMode ? Colors.white : primaryTextDark;
-    final secondaryTextColor = isDarkMode ? Colors.grey[400] : secondaryTextGrey;
-    final highlightColor = primaryThemePurple;
-    final tagBackgroundColor = isDarkMode ? const Color(0xFF333333) : softAccentHighlight;
-    final tagTextColor = isDarkMode ? Colors.white : hpThinBlack;
-    
-    // Proportional Padding/Size Constants (using theme's pattern)
-    // Used 10% horizontal padding from HomePage for consistent feel
-    final proportionalHorizontalPadding = screenWidth * 0.1; 
-    final profileAvatarRadius = screenWidth * 0.12; 
-    final editIconSize = screenWidth * 0.045;
-    final itemVerticalPadding = screenHeight * 0.02;
+    final proportionalHorizontalPadding = screenWidth * 0.05;
 
     return Scaffold(
-      // FIX: Apply resizeToAvoidBottomInset: false
-      resizeToAvoidBottomInset: false, 
-      backgroundColor: bgColor,
-      body: Container(
-        // Apply the subtle purple gradient glow from the home page
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              bgColor,
-              softAccentHighlight.withOpacity(isDarkMode ? 0.1 : 0.3),
-              bgColor,
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+      resizeToAvoidBottomInset: false,
+      backgroundColor: primaryBackground,
+      appBar: AppBar(
+        backgroundColor: primaryBackground,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: primaryTextDark),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Text(
+          'Profile',
+          style: TextStyle(
+            fontSize: adaptiveFontSize(context, 0.045),
+            fontWeight: FontWeight.bold,
+            color: primaryTextDark,
           ),
         ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            // FLEXIBLE PADDING
-            padding: EdgeInsets.only(bottom: screenHeight * 0.03),
-            child: Column(
-              children: [
-                // 1. Profile Header
-                Container(
-                  // FLEXIBLE PADDING
-                  padding: EdgeInsets.symmetric(vertical: screenHeight * 0.04),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(color: secondaryTextGrey.withOpacity(0.3), width: 0.5),
+        centerTitle: true,
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.only(
+            left: proportionalHorizontalPadding,
+            right: proportionalHorizontalPadding,
+            top: screenHeight * 0.02,
+            bottom: screenHeight * 0.03,
+          ),
+          child: Column(
+            children: [
+              // Profile Header - No Card Wrapper
+              Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: proportionalHorizontalPadding,
+                  vertical: screenHeight * 0.03,
+                ),
+                child: Column(
+                  children: [
+                    // Avatar (no icon beside it)
+                    CircleAvatar(
+                      radius: screenWidth * 0.12,
+                      backgroundColor: accentThemeColor.withOpacity(0.2),
+                      child: Text(
+                        userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
+                        style: TextStyle(
+                          fontSize: adaptiveFontSize(context, 0.08),
+                          fontWeight: FontWeight.bold,
+                          color: accentThemeColor,
+                        ),
+                      ),
                     ),
-                  ),
-                  child: Column(
-                    children: [
-                      Stack(
+                    SizedBox(height: screenHeight * 0.02),
+                    
+                    // Name (Editable)
+                    if (isEditingName)
+                      Column(
                         children: [
-                          CircleAvatar(
-                            // FLEXIBLE RADIUS
-                            radius: profileAvatarRadius,
-                            // Use a purple background placeholder
-                            backgroundColor: softLavender, 
-                            child: Text(
-                              userName.isNotEmpty ? userName[0] : 'U',
-                              style: TextStyle(
-                                fontSize: adaptiveFontSize(context, 0.07),
-                                fontWeight: FontWeight.bold,
-                                color: highlightColor,
+                          TextField(
+                            controller: _nameController,
+                            style: TextStyle(
+                              fontSize: adaptiveFontSize(context, 0.045),
+                              fontWeight: FontWeight.bold,
+                              color: primaryTextDark,
+                            ),
+                            textAlign: TextAlign.center,
+                            decoration: InputDecoration(
+                              hintText: 'Enter your name',
+                              hintStyle: TextStyle(color: secondaryTextGrey),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: accentThemeColor),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: accentThemeColor, width: 2),
+                              ),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: screenWidth * 0.04,
+                                vertical: screenHeight * 0.015,
                               ),
                             ),
                           ),
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: cardBackground, // White edit background
-                                shape: BoxShape.circle,
-                                // Use subtle shadow
-                                boxShadow: subtleShadow.map((s) => s.copyWith(blurRadius: 10, offset: const Offset(0, 5))).toList(),
+                          SizedBox(height: screenHeight * 0.015),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              TextButton(
+                                onPressed: () {
+                                  setState(() {
+                                    isEditingName = false;
+                                    _nameController.text = userName;
+                                  });
+                                },
+                                child: Text(
+                                  'Cancel',
+                                  style: TextStyle(
+                                    color: secondaryTextGrey,
+                                    fontSize: adaptiveFontSize(context, 0.035),
+                                  ),
+                                ),
                               ),
-                              // FLEXIBLE PADDING
-                              padding: EdgeInsets.all(screenWidth * 0.012),
-                              child: Icon(
-                                Icons.edit,
-                                // FLEXIBLE SIZE
-                                size: editIconSize,
-                                color: hpDeepBlue,
+                              SizedBox(width: screenWidth * 0.02),
+                              ElevatedButton(
+                                onPressed: _saveUserName,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: primaryThemeColor,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: screenWidth * 0.05,
+                                    vertical: screenHeight * 0.012,
+                                  ),
+                                ),
+                                child: Text(
+                                  'Save',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: adaptiveFontSize(context, 0.035),
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
+                            ],
+                          ),
+                        ],
+                      )
+                    else
+                      Column(
+                        children: [
+                          Text(
+                            userName,
+                            style: TextStyle(
+                              fontSize: adaptiveFontSize(context, 0.05),
+                              fontWeight: FontWeight.bold,
+                              color: primaryTextDark,
+                            ),
+                          ),
+                          SizedBox(height: screenHeight * 0.005),
+                          Text(
+                            userEmail,
+                            style: TextStyle(
+                              fontSize: adaptiveFontSize(context, 0.035),
+                              color: secondaryTextGrey,
+                            ),
+                          ),
+                          SizedBox(height: screenHeight * 0.02),
+                          ElevatedButton(
+                            onPressed: () {
+                              setState(() {
+                                isEditingName = true;
+                              });
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: accentThemeColor,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: EdgeInsets.symmetric(
+                                horizontal: screenWidth * 0.05,
+                                vertical: screenHeight * 0.012,
+                              ),
+                              elevation: 2,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.edit, color: Colors.white, size: adaptiveFontSize(context, 0.04)),
+                                SizedBox(width: screenWidth * 0.02),
+                                Text(
+                                  'Edit Name',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: adaptiveFontSize(context, 0.035),
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                      // FLEXIBLE SPACING
-                      SizedBox(height: screenHeight * 0.012),
-                      Text(
-                        userName, // Dynamically fetched name
-                        style: TextStyle(
-                          // FLEXIBLE FONT SIZE
-                          fontSize: adaptiveFontSize(context, 0.06),
-                          fontWeight: FontWeight.bold,
-                          color: primaryTextColor,
-                        ),
-                      ),
-                      Text(
-                        userEmail, // Dynamically fetched email
-                        style: TextStyle(
-                          // FLEXIBLE FONT SIZE
-                          fontSize: adaptiveFontSize(context, 0.035),
-                          color: secondaryTextColor,
-                        ),
-                      ),
-                      // FLEXIBLE SPACING
-                      SizedBox(height: screenHeight * 0.025),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: highlightColor,
-                          shape: RoundedRectangleBorder(
-                            // Enforce theme's half border radius
-                            borderRadius: BorderRadius.circular(cardBorderRadius / 2), 
-                          ),
-                          // FLEXIBLE PADDING
-                          padding: EdgeInsets.symmetric(
-                            horizontal: screenWidth * 0.05,
-                            vertical: screenHeight * 0.012,
-                          ),
-                          elevation: 4,
-                          shadowColor: highlightColor.withOpacity(0.5),
-                        ),
-                        onPressed: () {},
-                        child: Text(
-                          'Edit Profile',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            // FLEXIBLE FONT SIZE
-                            fontSize: adaptiveFontSize(context, 0.04),
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
+              ),
 
-                // 2. Rikaz Tools Presets Section
-                _Section(
-                  title: 'Rikaz Tools Presets',
-                  count: '${presets.length}/5',
-                  textColor: primaryTextColor,
-                  horizontalMargin: proportionalHorizontalPadding, // Pass proportional margin
-                  // FIX: Removed the large "Add New Preset" card/button from the column, 
-                  // it will be replaced by the IconButton in the _Section header.
-                  child: Column(
-                    children: [
-                      // List of Presets
-                      ...presets.map(
-                        (preset) => Container(
-                          // FLEXIBLE MARGIN
-                          margin: EdgeInsets.only(bottom: screenHeight * 0.012),
-                          // FLEXIBLE PADDING
-                          padding: EdgeInsets.all(screenWidth * 0.04),
-                          decoration: BoxDecoration(
-                            color: cardColor,
-                            // Use theme's half border radius for consistency
-                            borderRadius: BorderRadius.circular(cardBorderRadius / 2),
-                            // Use subtle shadow for floating effect
-                            boxShadow: [BoxShadow(color: Colors.black12.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))],
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      preset['name'],
-                                      style: TextStyle(
-                                        // FLEXIBLE FONT SIZE
-                                        fontSize: adaptiveFontSize(context, 0.045),
-                                        fontWeight: FontWeight.bold,
-                                        color: primaryTextColor,
-                                      ),
-                                    ),
-                                    // FLEXIBLE SPACING
-                                    SizedBox(height: screenHeight * 0.006),
-                                    Row(
-                                      // Ensure tags wrap if necessary, but keep them compact
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        _Tag(
-                                          text: '${preset['sensitivity']} Sensitivity',
-                                          fontSize: adaptiveFontSize(context, 0.03),
-                                          backgroundColor: tagBackgroundColor,
-                                          textColor: tagTextColor,
-                                        ),
-                                        _Tag(
-                                          text: '${preset['triggers']} Triggers',
-                                          fontSize: adaptiveFontSize(context, 0.03),
-                                          backgroundColor: tagBackgroundColor,
-                                          textColor: tagTextColor,
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Row(
-                                children: [
-                                  IconButton(
-                                    icon: Icon(Icons.edit_note,
-                                        // FLEXIBLE SIZE
-                                        size: screenWidth * 0.06, color: highlightColor),
-                                    onPressed: () {},
-                                  ),
-                                  IconButton(
-                                    icon: Icon(Icons.delete_forever,
-                                        // FLEXIBLE SIZE
-                                        size: screenWidth * 0.06, color: Colors.red.shade400),
-                                    onPressed: () =>
-                                        handleDeletePreset(preset['id']),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+              SizedBox(height: screenHeight * 0.02),
+
+              // Google Calendar Connection Card
+              Container(
+                margin: EdgeInsets.symmetric(horizontal: proportionalHorizontalPadding),
+                padding: EdgeInsets.all(screenWidth * 0.04),
+                decoration: BoxDecoration(
+                  color: cardBackground,
+                  borderRadius: BorderRadius.circular(cardBorderRadius),
+                  boxShadow: subtleShadow,
                 ),
-
-                // 3. Settings Section
-                _Section(
-                  title: 'Settings',
-                  textColor: primaryTextColor,
-                  horizontalMargin: proportionalHorizontalPadding, // Pass proportional margin
-                  child: Column(
-                    children: [
-                      _SettingsItem(
-                        icon: Icons.security,
-                        label: 'Privacy',
-                        textColor: primaryTextColor,
-                        cardColor: cardColor,
-                        itemVerticalPadding: itemVerticalPadding, // Pass proportional padding
-                        fontSize: adaptiveFontSize(context, 0.04),
-                        iconColor: highlightColor,
-                        onTap: () {},
-                      ),
-                      _SettingsItem(
-                        icon: Icons.help_outline,
-                        label: 'Help & Support',
-                        textColor: primaryTextColor,
-                        cardColor: cardColor,
-                        itemVerticalPadding: itemVerticalPadding,
-                        fontSize: adaptiveFontSize(context, 0.04),
-                        iconColor: highlightColor,
-                        onTap: () {},
-                      ),
-                      // Dark Mode Toggle (Themed)
-                      Container(
-                        // FLEXIBLE MARGIN
-                        margin: EdgeInsets.only(bottom: screenHeight * 0.012),
-                        // FLEXIBLE PADDING
-                        padding: EdgeInsets.symmetric(vertical: itemVerticalPadding, horizontal: screenWidth * 0.05),
-                        decoration: BoxDecoration(
-                          color: cardColor,
-                          // Enforce theme's half border radius
-                          borderRadius: BorderRadius.circular(cardBorderRadius / 2),
-                          boxShadow: [BoxShadow(color: Colors.black12.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          _isCalendarConnected ? Icons.cloud_done_rounded : Icons.cloud_off_rounded,
+                          color: _isCalendarConnected ? Colors.green.shade600 : secondaryTextGrey,
+                          size: adaptiveFontSize(context, 0.055),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(Icons.dark_mode, color: highlightColor, size: screenWidth * 0.05),
-                                SizedBox(width: screenWidth * 0.025),
-                                Text('Dark Mode',
-                                    style: TextStyle(
-                                        color: primaryTextColor, 
-                                        fontSize: adaptiveFontSize(context, 0.04))),
-                              ],
-                            ),
-                            Switch(
-                              value: isDarkMode,
-                              onChanged: (val) => setState(() => isDarkMode = val),
-                              activeColor: highlightColor, // Use the theme's purple
-                              inactiveThumbColor: secondaryTextGrey,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // 4. Sign Out Section
-                _Section(
-                  textColor: primaryTextColor,
-                  horizontalMargin: proportionalHorizontalPadding, // Pass proportional margin
-                  child: _SettingsItem(
-                    icon: Icons.logout,
-                    label: 'Sign Out',
-                    textColor: Colors.red.shade400, // Use a contrasting color for logout
-                    cardColor: cardColor,
-                    trailing: Icons.chevron_right,
-                    itemVerticalPadding: itemVerticalPadding,
-                    fontSize: adaptiveFontSize(context, 0.04),
-                    iconColor: Colors.red.shade400,
-                    onTap: handleSignOut,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/* ---------- Helper Components (Themed and Flexible) ---------- */
-
-class _Section extends StatelessWidget {
-  final String? title;
-  final String? count;
-  final Color textColor;
-  final Widget child;
-  final double horizontalMargin; // Added for flexible margins
-
-  const _Section({
-    this.title,
-    this.count,
-    required this.textColor,
-    required this.child,
-    required this.horizontalMargin,
-  });
-
-  // FIX: Overridden build method to integrate the Add Preset button 
-  // directly into the title row for the "Rikaz Tools Presets" section.
-  @override
-  Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-
-    return Container(
-      // Use proportional margin passed from parent
-      margin: EdgeInsets.only(top: screenWidth * 0.05, bottom: screenWidth * 0.03, left: horizontalMargin, right: horizontalMargin),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (title != null)
-            Padding(
-              // Add a small bottom padding to separate title from content
-              padding: EdgeInsets.only(bottom: screenWidth * 0.02),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // Title and Count
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      Text(title!,
-                          style: TextStyle(
-                              // FLEXIBLE FONT SIZE using helper
+                        SizedBox(width: screenWidth * 0.02),
+                        Expanded(
+                          child: Text(
+                            'Google Calendar',
+                            style: TextStyle(
                               fontSize: adaptiveFontSize(context, 0.045),
                               fontWeight: FontWeight.bold,
-                              color: textColor)),
-                      if (count != null)
-                        Padding(
-                          padding: EdgeInsets.only(left: screenWidth * 0.02),
-                          child: Text(count!,
-                              style: TextStyle(
-                                  // FLEXIBLE FONT SIZE using helper
-                                  fontSize: adaptiveFontSize(context, 0.035),
-                                  color: secondaryTextGrey)),
+                              color: primaryTextDark,
+                            ),
+                          ),
                         ),
-                    ],
-                  ),
-                  
-                  // FIX: Small elegant Add Preset Button (Only for the Preset section)
-                  if (title == 'Rikaz Tools Presets')
-                    Builder(
-                      builder: (context) {
-                        final _ProfileScreenState state = context.findAncestorStateOfType<_ProfileScreenState>()!;
-                        return IconButton(
-                          icon: Icon(Icons.add_circle, color: primaryThemePurple, size: screenWidth * 0.06),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          onPressed: state.addPreset,
-                          tooltip: 'Add New Preset',
-                        );
-                      }
+                      ],
                     ),
-                ],
+                    SizedBox(height: screenHeight * 0.01),
+                    Text(
+                      _isCalendarConnected 
+                        ? 'Your calendar is synced with the app'
+                        : 'Connect to sync your focus sessions',
+                      style: TextStyle(
+                        fontSize: adaptiveFontSize(context, 0.033),
+                        color: secondaryTextGrey,
+                      ),
+                    ),
+                    SizedBox(height: screenHeight * 0.015),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _isSigningIn 
+                          ? null 
+                          : (_isCalendarConnected ? _handleCalendarSignOut : _handleCalendarSignIn),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _isCalendarConnected 
+                            ? errorIndicatorRed.withOpacity(0.9)
+                            : primaryThemeColor,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          padding: EdgeInsets.symmetric(
+                            vertical: screenHeight * 0.015,
+                          ),
+                          elevation: 2,
+                        ),
+                        icon: _isSigningIn
+                          ? SizedBox(
+                              width: adaptiveFontSize(context, 0.04),
+                              height: adaptiveFontSize(context, 0.04),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : Icon(
+                              _isCalendarConnected ? Icons.logout : Icons.login,
+                              color: Colors.white,
+                              size: adaptiveFontSize(context, 0.045),
+                            ),
+                        label: Text(
+                          _isCalendarConnected ? 'Disconnect Calendar' : 'Connect Calendar',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: adaptiveFontSize(context, 0.035),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          child,
-        ],
-      ),
-    );
-  }
-}
 
-class _SettingsItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final IconData? trailing;
-  final Color textColor;
-  final Color cardColor;
-  final Color iconColor;
-  final VoidCallback onTap;
-  final double itemVerticalPadding; // Added for flexible padding
-  final double fontSize; // Added for flexible font size
+              SizedBox(height: screenHeight * 0.03),
 
-  const _SettingsItem({
-    required this.icon,
-    required this.label,
-    required this.textColor,
-    required this.cardColor,
-    required this.onTap,
-    required this.itemVerticalPadding,
-    required this.fontSize,
-    required this.iconColor,
-    this.trailing,
-  });
+              // Settings Section
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Settings',
+                  style: TextStyle(
+                    fontSize: adaptiveFontSize(context, 0.045),
+                    fontWeight: FontWeight.bold,
+                    color: primaryTextDark,
+                  ),
+                ),
+              ),
+              SizedBox(height: screenHeight * 0.015),
 
-  @override
-  Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
+              _buildSettingsItem(
+                icon: Icons.security_rounded,
+                label: 'Privacy',
+                onTap: () {
+                  // Navigate to privacy settings
+                },
+              ),
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        // FLEXIBLE MARGIN
-        margin: EdgeInsets.only(bottom: screenWidth * 0.03),
-        // FLEXIBLE PADDING
-        padding: EdgeInsets.symmetric(vertical: itemVerticalPadding, horizontal: screenWidth * 0.05),
-        decoration: BoxDecoration(
-          color: cardColor,
-          // Enforce theme's half border radius
-          borderRadius: BorderRadius.circular(cardBorderRadius / 2),
-          // Add subtle shadow for consistency
-          boxShadow: [BoxShadow(color: Colors.black12.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: [
-                // FLEXIBLE ICON SIZE
-                Icon(icon, color: iconColor, size: screenWidth * 0.05),
-                // FLEXIBLE SPACING
-                SizedBox(width: screenWidth * 0.025),
-                Text(label,
-                    style: TextStyle(fontSize: fontSize, color: textColor)),
-              ],
-            ),
-            if (trailing != null)
-              // FLEXIBLE ICON SIZE
-              Icon(trailing, color: secondaryTextGrey, size: screenWidth * 0.05),
-          ],
-        ),
-      ),
-    );
-  }
-}
+              _buildSettingsItem(
+                icon: Icons.help_outline_rounded,
+                label: 'Help & Support',
+                onTap: () {
+                  // Navigate to help & support
+                },
+              ),
 
-class _Tag extends StatelessWidget {
-  final String text;
-  final double fontSize; // Added for flexible font size
-  final Color backgroundColor;
-  final Color textColor;
-
-  const _Tag({
-    required this.text, 
-    required this.fontSize, 
-    required this.backgroundColor, 
-    required this.textColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-
-    return Flexible( // Make the tag flexible so it can shrink
-      child: Container(
-        // FLEXIBLE MARGIN
-        margin: EdgeInsets.only(right: screenWidth * 0.012),
-        // FLEXIBLE PADDING
-        padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.02, vertical: screenWidth * 0.01),
-        decoration: BoxDecoration(
-          color: backgroundColor, // Themed background
-          // Slightly smaller radius for tags
-          borderRadius: BorderRadius.circular(screenWidth * 0.012),
-        ),
-        child: Text(
-          text,
-          // ENSURE TEXT DOES NOT OVERFLOW
-          overflow: TextOverflow.ellipsis,
-          maxLines: 1,
-          // FLEXIBLE FONT SIZE
-          style: TextStyle(fontSize: fontSize, color: textColor.withOpacity(0.8)), // Themed text color
+              _buildSettingsItem(
+                icon: Icons.logout_rounded,
+                label: 'Sign Out',
+                textColor: errorIndicatorRed,
+                onTap: handleSignOut,
+              ),
+            ],
+          ),
         ),
       ),
     );

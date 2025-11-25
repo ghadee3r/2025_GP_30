@@ -76,7 +76,7 @@ class _NewPasswordState extends State<NewPassword> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text("OK", style: TextStyle(color: primaryThemeColor)),
+              child: const Text("OK", style: TextStyle(color: dfDeepTeal)),
             ),
           ],
         ),
@@ -98,7 +98,7 @@ class _NewPasswordState extends State<NewPassword> {
               Navigator.of(context).pop();
               Navigator.of(context).pushNamedAndRemoveUntil('/tabs', (route) => false);
             },
-            child: const Text("OK", style: TextStyle(color: primaryThemeColor)),
+            child: const Text("OK", style: TextStyle(color: dfDeepTeal)),
           ),
         ],
       ),
@@ -123,7 +123,7 @@ class _NewPasswordState extends State<NewPassword> {
                 Navigator.of(context).pop();
                 _navigateToLogin();
               },
-              child: const Text('Cancel', style: TextStyle(color: primaryThemeColor)),
+              child: const Text('Cancel', style: TextStyle(color: dfDeepTeal)),
             ),
           ],
         ),
@@ -228,7 +228,7 @@ class _NewPasswordState extends State<NewPassword> {
     return TextField(
       controller: controller,
       obscureText: obscureText,
-      cursorColor: primaryThemeColor,
+      cursorColor: dfDeepTeal,
       style: const TextStyle(fontSize: 16, color: primaryTextDark),
       decoration: InputDecoration(
         hintText: hintText,
@@ -242,7 +242,7 @@ class _NewPasswordState extends State<NewPassword> {
         ),
         focusedBorder: UnderlineInputBorder(
           borderSide: BorderSide(
-            color: hasError ? errorIndicatorRed : primaryThemeColor,
+            color: hasError ? errorIndicatorRed : dfDeepTeal,
             width: 2,
           ),
         ),
@@ -273,7 +273,7 @@ class _NewPasswordState extends State<NewPassword> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(color: primaryThemeColor),
+              CircularProgressIndicator(color: dfDeepTeal),
               SizedBox(height: 20),
               Text(
                 'Setting up password reset...',
@@ -296,7 +296,7 @@ class _NewPasswordState extends State<NewPassword> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: IconButton(
-                  icon: const Icon(Icons.arrow_back, color: primaryThemeColor),
+                  icon: const Icon(Icons.arrow_back, color: dfDeepTeal),
                   onPressed: _goBackToLogin,
                 ),
               ),
@@ -375,7 +375,7 @@ class _NewPasswordState extends State<NewPassword> {
               ElevatedButton(
                 onPressed: _isLoading ? null : _updatePassword,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryThemeColor,
+                  backgroundColor: dfDeepTeal,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8.0),
