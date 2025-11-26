@@ -326,35 +326,51 @@ class CalendarClient {
     }
   }
 
+  // =========================================================================
+  // DELETE RECURRING EVENT FROM DATE
+  // =========================================================================
+  // Ends a recurring series at a specific date by setting UNTIL
+  // Used for "This & Future" edits - keeps past sessions, removes future ones
+  
   Future<bool> deleteRecurringEventFromDate(String recurringEventId, DateTime fromDate) async {
     if (calendarApi == null) return false;
     
     try {
-      // Fetch the master event
+      // Step 1: Fetch the master recurring event
       final masterEvent = await calendarApi!.events.get('primary', recurringEventId);
       
       if (masterEvent.recurrence == null || masterEvent.recurrence!.isEmpty) {
+        debugPrint('❌ Event has no recurrence rule');
         return false;
       }
       
-      // Update the UNTIL date to end recurrence at the day before this date
+      // Step 2: Get the recurrence rule
       String rrule = masterEvent.recurrence!.first;
+      debugPrint('📅 Original RRULE: $rrule');
       
-      // Remove existing UNTIL if present
+      // Step 3: Remove existing UNTIL if present
       if (rrule.contains('UNTIL=')) {
         rrule = rrule.split(';UNTIL=')[0];
       }
       
-      // Set UNTIL to the day before fromDate to exclude fromDate and all future
+      // Step 4: Set UNTIL to the day BEFORE fromDate
+      // This preserves all sessions BEFORE fromDate, removes fromDate and future
+      // Example: If fromDate is Dec 5, UNTIL = Dec 4, so Dec 1-4 kept, Dec 5+ removed
       final untilDate = fromDate.subtract(const Duration(days: 1)).toUtc();
-      rrule += ';UNTIL=${DateFormat('yyyyMMdd').format(untilDate)}T235959Z';
+      final untilString = DateFormat('yyyyMMdd').format(untilDate);
+      rrule += ';UNTIL=${untilString}T235959Z';
       
+      debugPrint('📅 New RRULE: $rrule');
+      debugPrint('📅 UNTIL date: ${DateFormat('yyyy-MM-dd').format(untilDate)} (keeps sessions before ${DateFormat('yyyy-MM-dd').format(fromDate)})');
+      
+      // Step 5: Update the master event with new UNTIL
       masterEvent.recurrence = [rrule];
-      
       await calendarApi!.events.update(masterEvent, 'primary', recurringEventId);
+      
+      debugPrint('✅ Successfully ended recurring series before ${DateFormat('yyyy-MM-dd').format(fromDate)}');
       return true;
     } catch (e) {
-      debugPrint('Error deleting from date: $e');
+      debugPrint('❌ Error ending recurring series: $e');
       return false;
     }
   }
@@ -881,7 +897,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Icon
+            // Icon - SAME as edit dialog but with delete icon
             Container(
               padding: EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -896,7 +912,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ),
             SizedBox(height: 16),
             
-            // Title
+            // Title - SAME formatting as edit dialog
             Text(
               'Delete Recurring Session',
               style: TextStyle(
@@ -908,7 +924,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ),
             SizedBox(height: 8),
             
-            // Description
+            // Description - SAME formatting as edit dialog
             Text(
               'Choose which occurrences to remove',
               style: TextStyle(
@@ -920,12 +936,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             ),
             SizedBox(height: 24),
             
-            // Options
+            // Options - USING SAME COLORS AS EDIT DIALOG (all teal shades)
             _buildDeleteDialogOption(
               title: 'Only This Session',
               subtitle: 'Remove just this one',
               icon: Icons.event,
-              color: primaryThemeColor,
+              color: primaryThemeColor,  // Same as edit
               onTap: () => Navigator.of(context).pop('this'),
             ),
             SizedBox(height: 10),
@@ -933,7 +949,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               title: 'This & Future Sessions',
               subtitle: 'Remove this and upcoming',
               icon: Icons.event_repeat,
-              color: Colors.orange[700]!,
+              color: accentThemeColor,  // Same as edit (was orange)
               onTap: () => Navigator.of(context).pop('future'),
             ),
             SizedBox(height: 10),
@@ -941,12 +957,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               title: 'All Sessions',
               subtitle: 'Remove entire series',
               icon: Icons.calendar_month,
-              color: errorIndicatorRed,
+              color: dfDeepTeal,  // Same as edit (was red)
               onTap: () => Navigator.of(context).pop('all'),
             ),
             SizedBox(height: 16),
             
-            // Cancel
+            // Cancel - SAME as edit dialog
             TextButton(
               onPressed: () => Navigator.of(context).pop(null),
               style: TextButton.styleFrom(
@@ -2137,56 +2153,87 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
 
     setState(() => _isLoading = true);
 
+    // =========================================================================
+    // TIME CALCULATION - Handle sessions that cross midnight
+    // =========================================================================
+    // If end time is earlier than start time (e.g., 11 PM → 12 AM),
+    // assume end time is on the next day
+    
     final startDateTime = _combineDateTime(_startDate, _startTime);
-    final endDateTime = _combineDateTime(_startDate, _endTime);
+    DateTime endDateTime = _combineDateTime(_startDate, _endTime);
+    
+    // Check if end time appears to be "before" start time (crossing midnight)
+    if (_endTime.hour < _startTime.hour || 
+        (_endTime.hour == _startTime.hour && _endTime.minute < _startTime.minute)) {
+      // End time is on the next day
+      endDateTime = _combineDateTime(_startDate.add(const Duration(days: 1)), _endTime);
+      debugPrint('⏰ Session crosses midnight: ${DateFormat('HH:mm').format(startDateTime)} → ${DateFormat('HH:mm').format(endDateTime)} (next day)');
+    }
+    
     final duration = endDateTime.difference(startDateTime);
 
-    if (duration.isNegative) {
-      _showErrorDialog('Time Error', 'End time cannot be before start time.');
+    // Validate: Duration should be positive (end after start)
+    if (duration.isNegative || duration.inMinutes == 0) {
+      _showErrorDialog('Time Error', 'End time must be after start time.');
       setState(() => _isLoading = false);
       return;
     }
     
+    // Validate: Start time is not in the past
     if (startDateTime.isBefore(DateTime.now())) {
       _showErrorDialog('Invalid Date', 'You cannot set a session in the past.');
       setState(() => _isLoading = false);
       return;
     }
     
-    // Only check conflicts if editing and time/date/frequency changed
+    // =========================================================================
+    // CONFLICT DETECTION - Check if new event time overlaps with existing events
+    // =========================================================================
+    // This prevents double-booking and alerts user of schedule conflicts
+    // Only runs when necessary to optimize performance
+    
     bool shouldCheckConflicts = false;
+    
     if (isEditing) {
+      // EDITING MODE: Only check conflicts if time/date/recurrence changed
+      // This optimization skips conflict check for title-only edits
+      
       final originalStart = widget.eventToEdit!.start!.dateTime?.toLocal();
       final originalEnd = widget.eventToEdit!.end!.dateTime?.toLocal();
       
-      // Check if time or date changed
+      // Check if start/end TIME changed (hour/minute)
       final timeChanged = originalStart != null && 
         (originalStart.hour != startDateTime.hour || 
          originalStart.minute != startDateTime.minute ||
          originalEnd?.hour != endDateTime.hour ||
          originalEnd?.minute != endDateTime.minute);
       
+      // Check if DATE changed (year/month/day)
       final dateChanged = originalStart != null &&
         (originalStart.year != startDateTime.year ||
          originalStart.month != startDateTime.month ||
          originalStart.day != startDateTime.day);
       
-      // Check if frequency changed
+      // Check if RECURRENCE PATTERN changed (One-time <-> Daily/Weekly/Monthly)
       final frequencyChanged = _selectedRecurrence != _initialRecurrence;
       
+      // Only check if ANY of these changed
       shouldCheckConflicts = timeChanged || dateChanged || frequencyChanged;
     } else {
-      // Always check conflicts when adding new
+      // ADDING MODE: Always check conflicts for new events
       shouldCheckConflicts = true;
     }
     
+    // Perform conflict check if needed
     if (shouldCheckConflicts) {
       final conflicts = await widget.client.checkForConflicts(
         startTime: startDateTime,
         endTime: endDateTime,
+        // Exclude the event being edited from conflict check (can't conflict with itself)
         excludeEventId: isEditing ? (_masterEventId ?? widget.eventToEdit?.id) : null,
       );
 
+      // If conflicts found, show warning dialog
       if (conflicts.isNotEmpty && mounted) {
         final confirm = await showDialog<bool>(
           context: context,
@@ -2197,10 +2244,13 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
             confirmText: '${isEditing ? 'Update' : 'Add'} Anyway',
           ),
         );
+        
+        // User cancelled - abort the save operation
         if (confirm != true) {
             setState(() => _isLoading = false);
             return;
         }
+        // User confirmed - continue with save despite conflict
       }
     }
 
@@ -2224,25 +2274,21 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
             return;
           }
           
-          // Delete all future occurrences by updating master event's UNTIL date
-          final sessionDate = widget.eventToEdit!.start!.dateTime!.toLocal();
-          await widget.client.deleteRecurringEventFromDate(
-            widget.eventToEdit!.recurringEventId!,
-            sessionDate.add(const Duration(days: 1)), // Delete from tomorrow onwards
-          );
+          // Delete the ENTIRE master recurring series
+          await widget.client.deleteEvent(widget.eventToEdit!.recurringEventId!);
           
-          // Now update this instance to be standalone
-          final updatedEvent = await widget.client.updateEvent(
-            eventId: widget.eventToEdit!.id!,
+          // Now create this instance as a new standalone one-time event
+          final results = await widget.client.createEvents(
             title: _title,
-            startTime: startDateTime,
-            endTime: endDateTime,
-            importanceKey: _selectedImportance,
+            startTimes: [startDateTime],
+            duration: duration,
             recurrenceRule: null,
-            updateAllOccurrences: false,
+            recurrenceUntil: null,
+            importanceKey: _selectedImportance,
+            isRikazSession: true,
           );
 
-          if (updatedEvent != null) {
+          if (results.isNotEmpty && results.first != null) {
             widget.onEventUpdated();
             if (mounted) Navigator.pop(context);
             _showSnackbar('Converted to one-time session!', Colors.green);
@@ -2419,34 +2465,7 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
         return;
     }
 
-    // Check for conflicts on all dates when adding
-    for (var startTime in finalStartTimes) {
-      final endTime = startTime.add(duration);
-      final conflicts = await widget.client.checkForConflicts(
-        startTime: startTime,
-        endTime: endTime,
-        excludeEventId: null,
-      );
-
-      if (conflicts.isNotEmpty && mounted) {
-        final confirm = await showDialog<bool>(
-          context: context,
-          builder: (context) => _buildThemedDialog(
-            title: 'Conflict Detected',
-            content: 'One or more sessions overlap with existing events on ${DateFormat('MMM dd').format(startTime)}. Add anyway?',
-            cancelText: 'Cancel',
-            confirmText: 'Add Anyway',
-          ),
-        );
-        if (confirm != true) {
-            setState(() => _isLoading = false);
-            return;
-        }
-        // User confirmed, break out and continue adding
-        break;
-      }
-    }
-
+    // Conflict checking already done above, proceed with creation
     final results = await widget.client.createEvents(
       title: _title,
       startTimes: finalStartTimes,
@@ -2683,7 +2702,7 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Icon
+            // Icon - SAME as edit dialog but with delete icon
             Container(
               padding: EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -2698,7 +2717,7 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
             ),
             SizedBox(height: 16),
             
-            // Title
+            // Title - SAME formatting as edit dialog
             Text(
               'Delete Recurring Session',
               style: TextStyle(
@@ -2710,7 +2729,7 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
             ),
             SizedBox(height: 8),
             
-            // Description
+            // Description - SAME formatting as edit dialog
             Text(
               'Choose which occurrences to remove',
               style: TextStyle(
@@ -2722,12 +2741,12 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
             ),
             SizedBox(height: 24),
             
-            // Options
+            // Options - USING SAME COLORS AS EDIT DIALOG (all teal shades)
             _buildDialogOption(
               title: 'Only This Session',
               subtitle: 'Remove just this one',
               icon: Icons.event,
-              color: primaryThemeColor,
+              color: primaryThemeColor,  // Same as edit
               onTap: () => Navigator.of(context).pop('this'),
             ),
             SizedBox(height: 10),
@@ -2735,7 +2754,7 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
               title: 'This & Future Sessions',
               subtitle: 'Remove this and upcoming',
               icon: Icons.event_repeat,
-              color: Colors.orange[700]!,
+              color: accentThemeColor,  // Same as edit (was orange)
               onTap: () => Navigator.of(context).pop('future'),
             ),
             SizedBox(height: 10),
@@ -2743,12 +2762,12 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
               title: 'All Sessions',
               subtitle: 'Remove entire series',
               icon: Icons.calendar_month,
-              color: errorIndicatorRed,
+              color: dfDeepTeal,  // Same as edit (was red)
               onTap: () => Navigator.of(context).pop('all'),
             ),
             SizedBox(height: 16),
             
-            // Cancel
+            // Cancel - SAME as edit dialog
             TextButton(
               onPressed: () => Navigator.of(context).pop(null),
               style: TextButton.styleFrom(
