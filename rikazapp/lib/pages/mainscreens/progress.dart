@@ -356,10 +356,7 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
       appBar: AppBar(
         backgroundColor: primaryBackground,
         elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: primaryTextDark),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+
         title: Text(
           'Progress',
           style: TextStyle(

@@ -235,22 +235,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // Handle sign out
-  void handleSignOut() async {
+  // Handle sign out - With confirmation dialog
+  Future<void> handleSignOut() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => _buildThemedDialog(
-        title: 'Sign Out?',
-        content: 'Are you sure you want to sign out of your account?',
-        icon: Icons.logout_rounded,
-        iconColor: errorIndicatorRed,
-        cancelText: 'Cancel',
-        confirmText: 'Sign Out',
-        onConfirm: () => Navigator.pop(context, true),
+      builder: (context) => AlertDialog(
+        title: Text('Sign Out', style: TextStyle(color: primaryTextDark)),
+        content: Text('Are you sure you want to sign out?', style: TextStyle(color: secondaryTextGrey)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel', style: TextStyle(color: secondaryTextGrey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: errorIndicatorRed),
+            child: const Text('Sign Out'),
+          ),
+        ],
       ),
     );
 
-    if (confirmed == true) {
+    if (confirmed == true && mounted) {
       await supabase.auth.signOut();
       if (mounted) {
         Navigator.of(context).pushNamedAndRemoveUntil(
@@ -492,10 +498,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         backgroundColor: primaryBackground,
         elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: primaryTextDark),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+
         title: Text(
           'Profile',
           style: TextStyle(
@@ -674,132 +677,116 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
               SizedBox(height: screenHeight * 0.02),
 
-              // Google Calendar Connection Card
-              Container(
-                margin: EdgeInsets.symmetric(horizontal: proportionalHorizontalPadding),
-                padding: EdgeInsets.all(screenWidth * 0.04),
-                decoration: BoxDecoration(
-                  color: cardBackground,
-                  borderRadius: BorderRadius.circular(cardBorderRadius),
-                  boxShadow: subtleShadow,
-                ),
+              // Settings Section
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: proportionalHorizontalPadding),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Icon(
-                          _isCalendarConnected ? Icons.cloud_done_rounded : Icons.cloud_off_rounded,
-                          color: _isCalendarConnected ? Colors.green.shade600 : secondaryTextGrey,
-                          size: adaptiveFontSize(context, 0.055),
-                        ),
-                        SizedBox(width: screenWidth * 0.02),
-                        Expanded(
-                          child: Text(
-                            'Google Calendar',
-                            style: TextStyle(
-                              fontSize: adaptiveFontSize(context, 0.045),
-                              fontWeight: FontWeight.bold,
-                              color: primaryTextDark,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: screenHeight * 0.01),
                     Text(
-                      _isCalendarConnected 
-                        ? 'Your calendar is synced with the app'
-                        : 'Connect to sync your focus sessions',
+                      'Settings',
                       style: TextStyle(
-                        fontSize: adaptiveFontSize(context, 0.033),
-                        color: secondaryTextGrey,
+                        fontSize: adaptiveFontSize(context, 0.045),
+                        fontWeight: FontWeight.bold,
+                        color: primaryTextDark,
                       ),
                     ),
                     SizedBox(height: screenHeight * 0.015),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _isSigningIn 
-                          ? null 
-                          : (_isCalendarConnected ? _handleCalendarSignOut : _handleCalendarSignIn),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _isCalendarConnected 
-                            ? errorIndicatorRed.withOpacity(0.9)
-                            : primaryThemeColor,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          padding: EdgeInsets.symmetric(
-                            vertical: screenHeight * 0.015,
-                          ),
-                          elevation: 2,
+
+                    // Google Calendar Connection (matching settings items)
+                    GestureDetector(
+                      onTap: _isSigningIn 
+                        ? null 
+                        : (_isCalendarConnected ? _handleCalendarSignOut : _handleCalendarSignIn),
+                      child: Container(
+                        margin: EdgeInsets.only(bottom: screenHeight * 0.012),
+                        padding: EdgeInsets.all(screenWidth * 0.04),
+                        decoration: BoxDecoration(
+                          color: cardBackground,
+                          borderRadius: BorderRadius.circular(cardBorderRadius),
+                          boxShadow: subtleShadow,
                         ),
-                        icon: _isSigningIn
-                          ? SizedBox(
-                              width: adaptiveFontSize(context, 0.04),
-                              height: adaptiveFontSize(context, 0.04),
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: EdgeInsets.all(screenWidth * 0.025),
+                              decoration: BoxDecoration(
+                                color: (_isCalendarConnected ? Colors.green.shade600 : secondaryTextGrey).withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(10),
                               ),
-                            )
-                          : Icon(
-                              _isCalendarConnected ? Icons.logout : Icons.login,
-                              color: Colors.white,
-                              size: adaptiveFontSize(context, 0.045),
+                              child: _isSigningIn
+                                ? SizedBox(
+                                    width: adaptiveFontSize(context, 0.05),
+                                    height: adaptiveFontSize(context, 0.05),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(accentThemeColor),
+                                    ),
+                                  )
+                                : Icon(
+                                    _isCalendarConnected ? Icons.cloud_done_rounded : Icons.cloud_off_rounded,
+                                    color: _isCalendarConnected ? Colors.green.shade600 : secondaryTextGrey,
+                                    size: adaptiveFontSize(context, 0.05),
+                                  ),
                             ),
-                        label: Text(
-                          _isCalendarConnected ? 'Disconnect Calendar' : 'Connect Calendar',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: adaptiveFontSize(context, 0.035),
-                            fontWeight: FontWeight.bold,
-                          ),
+                            SizedBox(width: screenWidth * 0.03),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Google Calendar',
+                                    style: TextStyle(
+                                      fontSize: adaptiveFontSize(context, 0.04),
+                                      fontWeight: FontWeight.w600,
+                                      color: primaryTextDark,
+                                    ),
+                                  ),
+                                  SizedBox(height: screenHeight * 0.003),
+                                  Text(
+                                    _isCalendarConnected ? 'Connected' : 'Not connected',
+                                    style: TextStyle(
+                                      fontSize: adaptiveFontSize(context, 0.03),
+                                      color: secondaryTextGrey,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.chevron_right,
+                              color: secondaryTextGrey,
+                              size: adaptiveFontSize(context, 0.05),
+                            ),
+                          ],
                         ),
                       ),
                     ),
+
+                    _buildSettingsItem(
+                      icon: Icons.security_rounded,
+                      label: 'Privacy',
+                      onTap: () {
+                        // Navigate to privacy settings
+                      },
+                    ),
+
+                    _buildSettingsItem(
+                      icon: Icons.help_outline_rounded,
+                      label: 'Help & Support',
+                      onTap: () {
+                        // Navigate to help & support
+                      },
+                    ),
+
+                    _buildSettingsItem(
+                      icon: Icons.logout_rounded,
+                      label: 'Sign Out',
+                      textColor: errorIndicatorRed,
+                      onTap: handleSignOut,
+                    ),
                   ],
                 ),
-              ),
-
-              SizedBox(height: screenHeight * 0.03),
-
-              // Settings Section
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Settings',
-                  style: TextStyle(
-                    fontSize: adaptiveFontSize(context, 0.045),
-                    fontWeight: FontWeight.bold,
-                    color: primaryTextDark,
-                  ),
-                ),
-              ),
-              SizedBox(height: screenHeight * 0.015),
-
-              _buildSettingsItem(
-                icon: Icons.security_rounded,
-                label: 'Privacy',
-                onTap: () {
-                  // Navigate to privacy settings
-                },
-              ),
-
-              _buildSettingsItem(
-                icon: Icons.help_outline_rounded,
-                label: 'Help & Support',
-                onTap: () {
-                  // Navigate to help & support
-                },
-              ),
-
-              _buildSettingsItem(
-                icon: Icons.logout_rounded,
-                label: 'Sign Out',
-                textColor: errorIndicatorRed,
-                onTap: handleSignOut,
               ),
             ],
           ),

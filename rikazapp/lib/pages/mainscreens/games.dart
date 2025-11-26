@@ -273,10 +273,7 @@ class GamesScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: primaryBackground,
         elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: primaryTextDark),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+
         title: Text(
           'Games',
           style: TextStyle(

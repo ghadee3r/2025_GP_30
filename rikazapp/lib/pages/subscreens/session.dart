@@ -28,7 +28,7 @@ const Color secondaryTextGrey = Color(0xFF6B6B78);
 const Color errorIndicatorRed = Color(0xFFE57373);
 
 // Session-specific colors - SWAPPED FOR BETTER CONTRAST
-const Color focusBgColor = dfDeepTeal; // Background uses darker dfDeepTeal
+const Color focusBgColor = lightestAccentColor; // Background uses darker dfDeepTeal
 const Color breakBgColor = Color(0xFFE6B400); // Yellow for break
 const Color pausedBgColor = Color(0xFF9E9E9E); // Gray for paused
 
@@ -97,6 +97,7 @@ class _SessionPageState extends State<SessionPage>
   Timer? _connectionCheckTimer;
 
   // ========== MINIMUM SESSION TIME ==========
+  // UPDATED: Changed minimum to 10 minutes
   static const int minimumSessionMinutes = 10;
 
   // ========================================================================
@@ -295,7 +296,7 @@ class _SessionPageState extends State<SessionPage>
   }
 
   // ========================================================================
-  // START SESSION IN DATABASE
+  // START SESSION IN DATABASE - UPDATED COLUMN NAME
   // ========================================================================
   Future<void> _startSessionInDB() async {
     final supabase = Supabase.instance.client;
@@ -318,7 +319,8 @@ class _SessionPageState extends State<SessionPage>
         'user_id': currentUserId,
         'session_type': widget.sessionType,
         'start_time': _sessionStartTime!.toIso8601String(),
-        'set_duration_minutes': finalPlannedDuration,
+        // Renamed column
+        'planned_duration': finalPlannedDuration,
         'pomodoro_type': pomodoroType,
         'camera_monitored': widget.isCameraDetectionEnabled ?? false,
       }).select('session_id');
@@ -491,7 +493,7 @@ class _SessionPageState extends State<SessionPage>
   }
 
   // ========================================================================
-  // END SESSION IN DATABASE - Updated with 10 minute minimum
+  // END SESSION IN DATABASE - UPDATED COLUMNS AND MINIMUM DURATION CHECK
   // ========================================================================
   Future<void> _endSessionInDB({bool completed = false}) async {
     final supabase = Supabase.instance.client;
@@ -503,7 +505,7 @@ class _SessionPageState extends State<SessionPage>
 
     final int actualFocusDurationMinutes = (_totalFocusSeconds ~/ 60);
 
-    // Delete sessions shorter than 10 minutes
+    // UPDATED: Check against the new 10-minute minimum
     if (actualFocusDurationMinutes < minimumSessionMinutes) {
       print('❌ Session too short (<$minimumSessionMinutes min). Not saved.');
       try {
@@ -526,7 +528,8 @@ class _SessionPageState extends State<SessionPage>
     try {
       await supabase.from('Focus_Session').update({
         'end_time': endDateTime,
-        'duration_minutes': actualFocusDurationMinutes,
+        // Renamed column
+        'actual_duration': actualFocusDurationMinutes,
         'progress_level': progressLevel,
       }).eq('session_id', _currentSessionId!);
 
@@ -824,7 +827,7 @@ class _SessionPageState extends State<SessionPage>
   }
 
   // ========================================================================
-  // QUIT SESSION HANDLER - Updated with 10 minute warning
+  // QUIT SESSION HANDLER - UPDATED WITH 10 MINUTE WARNING
   // ========================================================================
   void onQuit() {
     final String previousStatus = status;
@@ -861,6 +864,7 @@ class _SessionPageState extends State<SessionPage>
           ],
         ),
         content: Text(
+          // Updated message for 10-minute check
           belowMinimum 
               ? 'You\'ve only focused for $actualFocusDurationMinutes minutes. Sessions under $minimumSessionMinutes minutes won\'t be saved for future analysis.\n\nAre you sure you want to quit?'
               : 'Are you sure you want to end this session? Your progress will be saved.',

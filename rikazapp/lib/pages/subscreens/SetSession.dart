@@ -1,7 +1,7 @@
 // ============================================================================
 // FILE: SetSession.dart
 // PURPOSE: Session configuration page with BLE device connection
-// REDESIGNED: Matching Home theme with improved hardware connection clarity
+// REDESIGNED: Elegant, comfortable spacing with downsized elements
 // ============================================================================
 
 import 'dart:async';
@@ -25,8 +25,8 @@ const Color dfDeepBlue = Color(0xFF162893);
 const Color dfNavyIndigo = Color(0xFF0C1446); 
 
 // Primary theme colors
-const Color primaryThemeColor = dfDeepTeal;      // CHANGED: Now using dfDeepTeal
-const Color accentThemeColor = dfTealCyan;      
+const Color primaryThemeColor = dfDeepTeal;
+const Color accentThemeColor = dfTealCyan;
 const Color lightestAccentColor = dfLightSeafoam; 
 
 // Background colors
@@ -41,14 +41,14 @@ const Color secondaryTextGrey = Color(0xFF6B6B78);
 const Color errorIndicatorRed = Color(0xFFE57373); 
 
 // Standard border radius for cards
-const double cardBorderRadius = 16.0; 
+const double cardBorderRadius = 14.0; // Slightly reduced
 
 // Standard shadow for elevated cards
 List<BoxShadow> get subtleShadow => [
       BoxShadow(
-        color: dfNavyIndigo.withOpacity(0.08), 
-        blurRadius: 10,
-        offset: const Offset(0, 5),
+        color: dfNavyIndigo.withOpacity(0.06), // Softer shadow
+        blurRadius: 8,
+        offset: const Offset(0, 4),
       ),
     ];
 
@@ -127,12 +127,10 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
   double customDuration = 70;
 
   // --- CONFIGURATION STATE ---
-  // These are saved to database and sent to session page
   bool isCameraDetectionEnabled = true;
   double sensitivity = 0.5;
   String notificationStyle = 'Both';
   
-  // UI state for configuration menu (kept for future use)
   bool isConfigurationOpen = false;
   
   // --- SOUND SELECTION STATE ---
@@ -144,8 +142,8 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
 
   // --- RIKAZ BLE CONNECTION STATE ---
   bool get isRikazToolConnected => RikazConnectionState.isConnected;
-  bool isLoading = false; // Scanning/connecting in progress
-  bool _showRikazConfirmation = false; // Show success message after connection
+  bool isLoading = false;
+  bool _showRikazConfirmation = false;
 
   // --- BLE CONNECTION MONITORING ---
   String? _connectedDeviceName;
@@ -153,20 +151,14 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
   bool _deviceWasConnected = false;
   bool _hasShownDisconnectWarning = false;
 
-  // Slider reset key
   final GlobalKey<SlideActionState> _slideKey = GlobalKey<SlideActionState>();
 
   @override
   void initState() {
     super.initState();
     sessionMode = widget.initialMode ?? SessionMode.pomodoro;
-    
-    // Removed pulse animation controller - no longer needed
-    
-    // Load available sounds
     _loadSounds();
     
-    // Restore connection state if already connected
     if (RikazConnectionState.isConnected) {
       debugPrint('🔌 Restored connection state from previous session');
       isConfigurationOpen = true;
@@ -177,7 +169,6 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
   @override
   void dispose() {
     _connectionCheckTimer?.cancel();
-    // Removed pulse controller disposal - no longer used
     _previewTimer?.cancel();
     _audioPlayer.stop();
     _audioPlayer.dispose();
@@ -231,11 +222,9 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     }
     
     try {
-      // Play immediately
       await _audioPlayer.play(UrlSource(sound.filePathUrl!));
       print('🎵 Playing preview: ${sound.name}');
       
-      // Stop after exactly 5 seconds
       _previewTimer = Timer(const Duration(seconds: 5), () async {
         await _audioPlayer.stop();
         print('⏹️ Preview stopped after 5 seconds');
@@ -256,19 +245,17 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
 
   // Handle session start button press
   void handleStartSessionPress() {
-    // Show friendly reminder if hardware is not connected, but allow proceeding
     if (!isRikazToolConnected) {
       _showHardwareReminderDialog();
       return;
     }
     
-    // Warn if device was connected but is now unplugged
     if (_deviceWasConnected && !isRikazToolConnected && _hasShownDisconnectWarning) {
       showDialog(
         context: context,
         builder: (context) => _buildThemedDialog(
           title: 'Device Unplugged',
-          content: 'Rikaz Tools device appears to be unplugged.\n\nThe session will start without hardware control. Plug in the device to enable lights.',
+          content: 'Rikaz Tools device appears to be unplugged.\n\nThe session will start without hardware control.',
           icon: Icons.warning_amber_rounded,
           iconColor: Colors.orange.shade600,
           cancelText: 'Cancel',
@@ -282,7 +269,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     _navigateToSession();
   }
   
-  // Show friendly reminder about hardware connection (but allow user to proceed)
+  // Show friendly reminder about hardware connection
   void _showHardwareReminderDialog() {
     showDialog(
       context: context,
@@ -295,34 +282,13 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
         confirmText: 'Start Anyway',
         onCancel: () {
           Navigator.pop(context);
-          // User can scroll up to connect
         },
         onConfirm: _navigateToSession,
       ),
     );
   }
   
-  // Helper widget for feature list in dialog
-  Widget _buildFeatureRow(IconData icon, String text) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).size.height * 0.008),
-      child: Row(
-        children: [
-          Icon(icon, color: accentThemeColor, size: _adaptiveFontSize(0.045)),
-          SizedBox(width: MediaQuery.of(context).size.width * 0.02),
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: _adaptiveFontSize(0.032),
-              color: primaryTextDark,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-  
-  // Build themed dialog widget for consistent styling
+  // Build themed dialog widget
   Widget _buildThemedDialog({
     required String title,
     required String content,
@@ -337,13 +303,12 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(cardBorderRadius)),
       backgroundColor: cardBackground,
       child: Padding(
-        padding: EdgeInsets.all(MediaQuery.of(context).size.width * 0.05),
+        padding: EdgeInsets.all(MediaQuery.of(context).size.width * 0.045),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Icon
             Container(
-              padding: EdgeInsets.all(MediaQuery.of(context).size.width * 0.04),
+              padding: EdgeInsets.all(MediaQuery.of(context).size.width * 0.035),
               decoration: BoxDecoration(
                 color: iconColor.withOpacity(0.1),
                 shape: BoxShape.circle,
@@ -351,36 +316,33 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
               child: Icon(
                 icon,
                 color: iconColor,
-                size: MediaQuery.of(context).size.width * 0.12,
+                size: MediaQuery.of(context).size.width * 0.10,
               ),
             ),
-            SizedBox(height: MediaQuery.of(context).size.height * 0.02),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.018),
             
-            // Title
             Text(
               title,
               style: TextStyle(
-                fontSize: _adaptiveFontSize(0.045),
+                fontSize: _adaptiveFontSize(0.042),
                 fontWeight: FontWeight.bold,
                 color: primaryTextDark,
               ),
               textAlign: TextAlign.center,
             ),
-            SizedBox(height: MediaQuery.of(context).size.height * 0.015),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.012),
             
-            // Content
             Text(
               content,
               style: TextStyle(
-                fontSize: _adaptiveFontSize(0.035),
+                fontSize: _adaptiveFontSize(0.032),
                 color: secondaryTextGrey,
-                height: 1.5,
+                height: 1.4,
               ),
               textAlign: TextAlign.center,
             ),
-            SizedBox(height: MediaQuery.of(context).size.height * 0.025),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.022),
             
-            // Action buttons
             Row(
               children: [
                 Expanded(
@@ -388,10 +350,10 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                     onPressed: onCancel ?? () => Navigator.pop(context),
                     style: TextButton.styleFrom(
                       padding: EdgeInsets.symmetric(
-                        vertical: MediaQuery.of(context).size.height * 0.015,
+                        vertical: MediaQuery.of(context).size.height * 0.013,
                       ),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(10),
                         side: BorderSide(color: secondaryTextGrey.withOpacity(0.3)),
                       ),
                     ),
@@ -399,13 +361,13 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                       cancelText,
                       style: TextStyle(
                         color: secondaryTextGrey,
-                        fontSize: _adaptiveFontSize(0.035),
+                        fontSize: _adaptiveFontSize(0.033),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
                 ),
-                SizedBox(width: MediaQuery.of(context).size.width * 0.03),
+                SizedBox(width: MediaQuery.of(context).size.width * 0.025),
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () {
@@ -415,10 +377,10 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                     style: ElevatedButton.styleFrom(
                       backgroundColor: primaryThemeColor,
                       padding: EdgeInsets.symmetric(
-                        vertical: MediaQuery.of(context).size.height * 0.015,
+                        vertical: MediaQuery.of(context).size.height * 0.013,
                       ),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                       elevation: 2,
                     ),
@@ -426,7 +388,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                       confirmText,
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: _adaptiveFontSize(0.035),
+                        fontSize: _adaptiveFontSize(0.033),
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -444,7 +406,6 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     final String durationValue = sessionMode == SessionMode.pomodoro ? pomodoroDuration : customDuration.toInt().toString();
     final String? blocks = sessionMode == SessionMode.pomodoro ? numberOfBlocks.toInt().toString() : null;
 
-    // Stop any preview playing
     _previewTimer?.cancel();
     _audioPlayer.stop();
 
@@ -470,13 +431,11 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
   // BLE CONNECTION HANDLING
   // =============================================================================
 
-  // Show device picker and establish BLE connection
   Future<void> _handleRikazConnect() async {
     if (RikazConnectionState.isConnected) return;
 
     setState(() => isLoading = true);
 
-    // Show device picker dialog
     final RikazDevice? selectedDevice = await showDialog<RikazDevice>( 
       context: context,
       barrierDismissible: false,
@@ -486,7 +445,6 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     if (!mounted) return;
 
     if (selectedDevice != null) {
-      // Connection successful
       RikazConnectionState.setConnected(true);
       _connectedDeviceName = selectedDevice.name;
       
@@ -497,10 +455,8 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
       
       print('✅ Rikaz Tools: Connected to ${selectedDevice.name}');
       
-      // Start monitoring BLE connection
       _startConnectionMonitoring();
       
-      // Show success message briefly, then expand configuration
       await Future.delayed(const Duration(seconds: 2));
       
       if (mounted) {
@@ -510,12 +466,10 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
         });
       }
     } else {
-      // User cancelled or connection failed
       setState(() {
         isLoading = false;
       });
       
-      // Reset slider animation
       try {
         if (_slideKey.currentState != null && mounted) {
           _slideKey.currentState!.reset();
@@ -526,13 +480,11 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     }
   }
 
-  // Monitor BLE connection health
   void _startConnectionMonitoring() {
     _connectionCheckTimer?.cancel();
     _deviceWasConnected = true;
     _hasShownDisconnectWarning = false;
     
-    // Check connection every 5 seconds
     _connectionCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
       if (!mounted || !RikazConnectionState.isConnected) {
         timer.cancel();
@@ -542,7 +494,6 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
       final bool stillConnected = await RikazLightService.isConnected();
       
       if (!stillConnected) {
-        // Connection lost
         timer.cancel();
         
         await RikazLightService.disconnect();
@@ -559,14 +510,12 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
         _showDeviceLostWarning();
         
       } else if (stillConnected && !_deviceWasConnected) {
-        // Device reconnected
         _deviceWasConnected = true;
         _showDeviceReconnectedNotification();
       }
     });
   }
 
-  // Show warning when BLE connection is lost
   void _showDeviceLostWarning() {
     if (!mounted) return;
     
@@ -575,7 +524,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
       barrierDismissible: false,
       builder: (context) => _buildThemedDialog(
         title: 'Hardware Disconnected',
-        content: 'The Bluetooth connection to your Rikaz device was lost.\n\nThis could be due to:\n• Device unplugged\n• Out of range\n• Low battery\n\nPlease check your device and try reconnecting.',
+        content: 'The Bluetooth connection to your Rikaz device was lost. Please check your device and try reconnecting.',
         icon: Icons.bluetooth_disabled_rounded,
         iconColor: errorIndicatorRed,
         cancelText: 'Close',
@@ -587,7 +536,6 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     debugPrint('⚠️ RIKAZ: Connection lost. Resetting global state.');
   }
 
-  // Show notification when device reconnects
   void _showDeviceReconnectedNotification() {
     if (!mounted) return;
     
@@ -595,10 +543,10 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
       SnackBar(
         content: Row(
           children: [
-            Icon(Icons.check_circle, color: Colors.white),
-            SizedBox(width: 12),
+            Icon(Icons.check_circle, color: Colors.white, size: 20),
+            SizedBox(width: 10),
             Expanded(
-              child: Text('Rikaz device reconnected! Hardware features active.'),
+              child: Text('Rikaz device reconnected!'),
             ),
           ],
         ),
@@ -611,13 +559,12 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     debugPrint('✅ RIKAZ: Device reconnected');
   }
 
-  // Handle manual disconnect
   Future<void> _handleRikazDisconnect() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => _buildThemedDialog(
         title: 'Disconnect Hardware?',
-        content: 'This will disable hardware features (lights and monitoring) for your sessions.\n\nYou can reconnect anytime.',
+        content: 'This will disable hardware features for your sessions. You can reconnect anytime.',
         icon: Icons.power_settings_new_rounded,
         iconColor: errorIndicatorRed,
         cancelText: 'Cancel',
@@ -632,7 +579,6 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     if (confirmed == true) {
       _connectionCheckTimer?.cancel();
       
-      // Turn off light and disconnect BLE
       await RikazLightService.turnOff(); 
       await RikazLightService.disconnect(); 
       
@@ -659,10 +605,9 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
   }
 
   // =============================================================================
-  // UI COMPONENTS
+  // UI COMPONENTS - ALL DOWNSIZED
   // =============================================================================
   
-  // Helper widget for circular buttons (used in block counter)
   Widget _buildCircularIconButton({
     required IconData icon,
     required VoidCallback? onPressed,
@@ -670,7 +615,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     required double size,
     Color buttonColor = accentThemeColor, 
   }) {
-    final adjustedSize = size * 0.75; // Smaller buttons
+    final adjustedSize = size * 0.7; // Even smaller
 
     return Container(
       width: adjustedSize,
@@ -683,7 +628,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
         icon: Icon(
           icon, 
           color: onPressed != null ? Colors.white : secondaryTextGrey.withOpacity(0.5), 
-          size: adjustedSize * 0.45,
+          size: adjustedSize * 0.42,
         ),
         onPressed: onPressed,
         padding: EdgeInsets.zero,
@@ -691,7 +636,6 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     );
   }
 
-  // Pomodoro Block Counter
   Widget _pomodoroBlocksCounter() {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -699,75 +643,68 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Title
         Row(
           children: [
             Icon(
               Icons.grid_view_rounded,
               color: accentThemeColor, 
-              size: _adaptiveFontSize(0.05),
+              size: _adaptiveFontSize(0.045),
             ),
-            SizedBox(width: screenWidth * 0.02),
+            SizedBox(width: screenWidth * 0.015),
             Text(
               'Number of Blocks',
               style: TextStyle(
-                fontSize: _adaptiveFontSize(0.04),
+                fontSize: _adaptiveFontSize(0.037),
                 fontWeight: FontWeight.bold,
                 color: primaryTextDark,
-                letterSpacing: 0.3,
               ),
             ),
           ],
         ),
-        SizedBox(height: screenHeight * 0.015),
+        SizedBox(height: screenHeight * 0.012),
         
-        // Counter Buttons and Display
         Container(
           width: double.infinity,
-          padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.03, vertical: screenHeight * 0.01),
+          padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.025, vertical: screenHeight * 0.008),
           decoration: BoxDecoration(
             color: cardBackground,
             borderRadius: BorderRadius.circular(cardBorderRadius),
-            border: Border.all(color: secondaryTextGrey.withOpacity(0.25), width: 1.5),
+            border: Border.all(color: secondaryTextGrey.withOpacity(0.2), width: 1.5),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Decrease Button
               _buildCircularIconButton(
                 icon: Icons.remove_rounded,
                 onPressed: numberOfBlocks > 1 ? () => setState(() => numberOfBlocks--) : null,
                 color: accentThemeColor,
-                size: screenWidth * 0.12, 
+                size: screenWidth * 0.11, 
                 buttonColor: accentThemeColor, 
               ),
               
-              // Number Display - Less bold
               Text(
                 numberOfBlocks.toInt().toString(),
                 style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.18),
-                  fontWeight: FontWeight.w700, // Reduced from w900
+                  fontSize: _adaptiveFontSize(0.14),
+                  fontWeight: FontWeight.w500,
                   color: primaryTextDark, 
                   height: 1.1,
                 ),
               ),
               
-              // Increase Button
               _buildCircularIconButton(
                 icon: Icons.add_rounded,
                 onPressed: numberOfBlocks < 8 ? () => setState(() => numberOfBlocks++) : null,
                 color: accentThemeColor,
-                size: screenWidth * 0.12, 
+                size: screenWidth * 0.11, 
                 buttonColor: accentThemeColor, 
               ),
             ],
           ),
         ),
         
-        SizedBox(height: screenHeight * 0.015),
+        SizedBox(height: screenHeight * 0.012),
         
-        // Info text
         Padding(
           padding: EdgeInsets.only(left: screenWidth * 0.01),
           child: Row(
@@ -775,14 +712,14 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
               Icon(
                 Icons.info_outline_rounded,
                 color: accentThemeColor,
-                size: _adaptiveFontSize(0.038),
+                size: _adaptiveFontSize(0.035),
               ),
-              SizedBox(width: screenWidth * 0.015),
+              SizedBox(width: screenWidth * 0.012),
               Expanded(
                 child: Text(
                   'One block = focus session + break',
                   style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.031),
+                    fontSize: _adaptiveFontSize(0.029),
                     color: secondaryTextGrey,
                     fontWeight: FontWeight.w500,
                   ),
@@ -795,43 +732,39 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     );
   }
   
-  // Pomodoro Settings
   Widget _buildPomodoroSettingsVertical() {
     final screenHeight = MediaQuery.of(context).size.height;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // --- Duration Options Section ---
         Text(
           'Duration Options',
           style: TextStyle(
-            fontSize: _adaptiveFontSize(0.04),
+            fontSize: _adaptiveFontSize(0.037),
             fontWeight: FontWeight.bold,
             color: primaryTextDark,
           ),
         ),
-        SizedBox(height: screenHeight * 0.015),
+        SizedBox(height: screenHeight * 0.012),
         _pomodoroDurationOption('25min', '+ 5 min break'),
         _pomodoroDurationOption('50min', '+ 10 min break'),
 
-        SizedBox(height: screenHeight * 0.025),
+        SizedBox(height: screenHeight * 0.02),
         
-        // --- Blocks Counter Section ---
         _pomodoroBlocksCounter(),
       ],
     );
   }
 
-  // Build hardware status visual with icons - SMALLER ICONS
   Widget _buildHardwareStatusVisual() {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
     
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: screenWidth * 0.05,
-        vertical: screenHeight * 0.02, // Reduced from 0.03
+        horizontal: screenWidth * 0.04,
+        vertical: screenHeight * 0.015,
       ),
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -839,20 +772,20 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
           end: Alignment.bottomRight,
           colors: isRikazToolConnected 
               ? [
-                  accentThemeColor.withOpacity(0.15),
-                  lightestAccentColor.withOpacity(0.1),
+                  accentThemeColor.withOpacity(0.12),
+                  lightestAccentColor.withOpacity(0.08),
                 ]
               : [
-                  secondaryTextGrey.withOpacity(0.08),
-                  secondaryTextGrey.withOpacity(0.05),
+                  secondaryTextGrey.withOpacity(0.06),
+                  secondaryTextGrey.withOpacity(0.04),
                 ],
         ),
-        borderRadius: BorderRadius.circular(cardBorderRadius),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isRikazToolConnected 
-              ? accentThemeColor.withOpacity(0.4)
-              : secondaryTextGrey.withOpacity(0.2),
-          width: 1.5,
+              ? accentThemeColor.withOpacity(0.3)
+              : secondaryTextGrey.withOpacity(0.18),
+          width: 1.2,
         ),
       ),
       child: Row(
@@ -864,15 +797,15 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
             isActive: isRikazToolConnected,
           ),
           Container(
-            width: 1.5,
-            height: screenHeight * 0.05, // Reduced from 0.08
+            width: 1.2,
+            height: screenHeight * 0.04,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
                   Colors.transparent,
-                  secondaryTextGrey.withOpacity(0.2),
+                  secondaryTextGrey.withOpacity(0.15),
                   Colors.transparent,
                 ],
               ),
@@ -888,7 +821,6 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     );
   }
   
-  // Build individual hardware icon with status - NO PULSING
   Widget _buildHardwareIcon({
     required IconData icon,
     required String label,
@@ -899,9 +831,8 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     
     return Column(
       children: [
-        // Removed AnimatedBuilder and pulsing animation
         Container(
-          padding: EdgeInsets.all(screenWidth * 0.03),
+          padding: EdgeInsets.all(screenWidth * 0.025),
           decoration: BoxDecoration(
             gradient: isActive 
                 ? LinearGradient(
@@ -913,14 +844,14 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                     ],
                   )
                 : null,
-            color: isActive ? null : secondaryTextGrey.withOpacity(0.15),
+            color: isActive ? null : secondaryTextGrey.withOpacity(0.12),
             shape: BoxShape.circle,
             boxShadow: isActive 
                 ? [
                     BoxShadow(
-                      color: accentThemeColor.withOpacity(0.5),
-                      blurRadius: 16,
-                      spreadRadius: 2,
+                      color: accentThemeColor.withOpacity(0.4),
+                      blurRadius: 12,
+                      spreadRadius: 1,
                     ),
                   ]
                 : null,
@@ -928,31 +859,29 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
           child: Icon(
             icon,
             color: isActive ? Colors.white : secondaryTextGrey,
-            size: screenWidth * 0.06,
+            size: screenWidth * 0.052,
           ),
         ),
-        SizedBox(height: screenHeight * 0.008),
+        SizedBox(height: screenHeight * 0.006),
         Text(
           label,
           style: TextStyle(
-            fontSize: _adaptiveFontSize(0.028),
+            fontSize: _adaptiveFontSize(0.026),
             fontWeight: FontWeight.w600,
             color: isActive ? accentThemeColor : secondaryTextGrey,
-            letterSpacing: 0.3,
           ),
         ),
       ],
     );
   }
 
-  // Rikaz BLE connection section
   Widget _buildRikazConnect() {
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
 
     return Container(
-      padding: EdgeInsets.all(screenWidth * 0.05),
-      margin: EdgeInsets.only(bottom: screenHeight * 0.025), 
+      padding: EdgeInsets.all(screenWidth * 0.04),
+      margin: EdgeInsets.only(bottom: screenHeight * 0.02), 
       decoration: BoxDecoration(
         color: cardBackground,
         borderRadius: BorderRadius.circular(cardBorderRadius),
@@ -961,20 +890,19 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Row(
             children: [
               Icon(
                 isRikazToolConnected ? Icons.check_circle : Icons.bluetooth,
-                color: isRikazToolConnected ? Colors.green.shade600 : accentThemeColor, // CHANGED
-                size: _adaptiveFontSize(0.055),
+                color: isRikazToolConnected ? Colors.green.shade600 : accentThemeColor,
+                size: _adaptiveFontSize(0.05),
               ),
-              SizedBox(width: screenWidth * 0.02),
+              SizedBox(width: screenWidth * 0.015),
               Expanded(
                 child: Text(
                   isRikazToolConnected ? 'Hardware Connected' : 'Connect Hardware',
                   style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.045),
+                    fontSize: _adaptiveFontSize(0.04),
                     fontWeight: FontWeight.bold,
                     color: primaryTextDark,
                   ),
@@ -982,32 +910,31 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
               ),
               if (isRikazToolConnected && !_showRikazConfirmation)
                 IconButton(
-                  icon: Icon(Icons.power_settings_new, color: errorIndicatorRed),
+                  icon: Icon(Icons.power_settings_new, color: errorIndicatorRed, size: 20),
                   onPressed: _handleRikazDisconnect,
                   tooltip: 'Disconnect',
+                  padding: EdgeInsets.zero,
+                  constraints: BoxConstraints(),
                 ),
             ],
           ),
-          SizedBox(height: screenHeight * 0.015),
+          SizedBox(height: screenHeight * 0.012),
           
-          // Hardware status visual
           _buildHardwareStatusVisual(),
-          SizedBox(height: screenHeight * 0.015),
+          SizedBox(height: screenHeight * 0.012),
           
-          // Status message or connection slider
           if (_showRikazConfirmation) ...[
-            // Success confirmation
             Container(
-              padding: EdgeInsets.all(screenWidth * 0.04),
+              padding: EdgeInsets.all(screenWidth * 0.035),
               decoration: BoxDecoration(
                 color: Colors.green.shade50,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: Colors.green.shade200),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.check_circle, color: Colors.green.shade600, size: _adaptiveFontSize(0.06)),
-                  SizedBox(width: screenWidth * 0.03),
+                  Icon(Icons.check_circle, color: Colors.green.shade600, size: _adaptiveFontSize(0.05)),
+                  SizedBox(width: screenWidth * 0.025),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1015,16 +942,16 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                         Text(
                           'Connection Successful!',
                           style: TextStyle(
-                            fontSize: _adaptiveFontSize(0.04),
+                            fontSize: _adaptiveFontSize(0.037),
                             fontWeight: FontWeight.bold,
                             color: Colors.green.shade700,
                           ),
                         ),
-                        SizedBox(height: screenHeight * 0.005),
+                        SizedBox(height: screenHeight * 0.003),
                         Text(
                           'All hardware features are now active',
                           style: TextStyle(
-                            fontSize: _adaptiveFontSize(0.032),
+                            fontSize: _adaptiveFontSize(0.03),
                             color: secondaryTextGrey,
                           ),
                         ),
@@ -1035,31 +962,22 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
               ),
             ),
           ] else if (isRikazToolConnected) ...[
-            // Connected status
             Text(
-              'Your Rikaz Tools hardware is ready. All features are enabled and monitoring your focus session.',
+              'Your Rikaz Tools hardware is ready and monitoring your focus session.',
               style: TextStyle(
-                fontSize: _adaptiveFontSize(0.033),
+                fontSize: _adaptiveFontSize(0.031),
                 color: secondaryTextGrey,
-                height: 1.4,
+                height: 1.3,
               ),
             ),
           ] else ...[
-            // Not connected - show slider
-            Text(
-              'Connect your Rikaz Tools hardware via Bluetooth.',
-              style: TextStyle(
-                fontSize: _adaptiveFontSize(0.033),
-                color: secondaryTextGrey,
-                height: 1.4,
-              ),
-            ),
-            SizedBox(height: screenHeight * 0.02),
+            
+            SizedBox(height: screenHeight * 0.015),
             SlideAction(
               key: _slideKey,
               text: isLoading ? "Scanning..." : "Slide to Connect",
               textStyle: TextStyle(
-                fontSize: _adaptiveFontSize(0.038),
+                fontSize: _adaptiveFontSize(0.035),
                 fontWeight: FontWeight.w600,
                 color: Colors.white,
               ),
@@ -1073,11 +991,11 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                 child: Icon(
                   Icons.bluetooth_searching,
                   color: accentThemeColor,
-                  size: screenWidth * 0.06,
+                  size: screenWidth * 0.055,
                 ),
               ),
-              sliderButtonIconPadding: 12,
-              height: screenHeight * 0.065, 
+              sliderButtonIconPadding: 10,
+              height: screenHeight * 0.058, 
               borderRadius: cardBorderRadius,
               onSubmit: isLoading ? null : () async {
                 await _handleRikazConnect();
@@ -1090,7 +1008,6 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     );
   }
 
-  // Pomodoro duration option (25min or 50min)
   Widget _pomodoroDurationOption(String label, String breakText) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -1101,37 +1018,35 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeInOut,
-        margin: EdgeInsets.only(bottom: screenHeight * 0.012),
-        padding: EdgeInsets.all(screenWidth * 0.045),
+        margin: EdgeInsets.only(bottom: screenHeight * 0.01),
+        padding: EdgeInsets.all(screenWidth * 0.038),
         decoration: BoxDecoration(
           color: cardBackground,
-          borderRadius: BorderRadius.circular(cardBorderRadius / 1.5),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? accentThemeColor : secondaryTextGrey.withOpacity(0.25), 
-            width: isSelected ? 2 : 1.5,
+            color: isSelected ? accentThemeColor : secondaryTextGrey.withOpacity(0.2), 
+            width: isSelected ? 1.8 : 1.2,
           ),
         ),
         child: Row(
           children: [
-            // Checkmark icon
             AnimatedContainer(
               duration: const Duration(milliseconds: 250),
-              width: screenWidth * 0.065,
-              height: screenWidth * 0.065,
+              width: screenWidth * 0.058,
+              height: screenWidth * 0.058,
               decoration: BoxDecoration(
                 color: isSelected ? accentThemeColor : Colors.transparent, 
                 shape: BoxShape.circle,
                 border: isSelected 
                     ? null 
-                    : Border.all(color: secondaryTextGrey.withOpacity(0.4), width: 2),
+                    : Border.all(color: secondaryTextGrey.withOpacity(0.35), width: 1.8),
               ),
               child: isSelected
-                  ? Icon(Icons.check_rounded, color: Colors.white, size: screenWidth * 0.04)
+                  ? Icon(Icons.check_rounded, color: Colors.white, size: screenWidth * 0.035)
                   : null,
             ),
-            SizedBox(width: screenWidth * 0.04),
+            SizedBox(width: screenWidth * 0.035),
             
-            // Duration text
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1139,17 +1054,16 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                   Text(
                     label,
                     style: TextStyle(
-                      fontSize: _adaptiveFontSize(0.042),
+                      fontSize: _adaptiveFontSize(0.039),
                       fontWeight: FontWeight.bold,
                       color: isSelected ? accentThemeColor : primaryTextDark, 
-                      letterSpacing: 0.3,
                     ),
                   ),
-                  SizedBox(height: screenHeight * 0.003),
+                  SizedBox(height: screenHeight * 0.002),
                   Text(
                     breakText,
                     style: TextStyle(
-                      fontSize: _adaptiveFontSize(0.031),
+                      fontSize: _adaptiveFontSize(0.029),
                       color: secondaryTextGrey,
                       fontWeight: FontWeight.w500,
                     ),
@@ -1163,7 +1077,6 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     );
   }
 
-  // Custom duration slider
   Widget _customDurationSlider() {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -1174,70 +1087,66 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
         Row(
           children: [
             Container(
-              padding: EdgeInsets.all(screenWidth * 0.025),
+              padding: EdgeInsets.all(screenWidth * 0.022),
               decoration: BoxDecoration(
-                color: accentThemeColor.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(10),
+                color: accentThemeColor.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(9),
               ),
               child: Icon(
                 Icons.schedule_rounded,
                 color: accentThemeColor,
-                size: _adaptiveFontSize(0.05),
+                size: _adaptiveFontSize(0.045),
               ),
             ),
-            SizedBox(width: screenWidth * 0.03),
+            SizedBox(width: screenWidth * 0.025),
             Text(
               'Session Duration',
               style: TextStyle(
-                fontSize: _adaptiveFontSize(0.04),
+                fontSize: _adaptiveFontSize(0.037),
                 fontWeight: FontWeight.bold,
                 color: primaryTextDark,
-                letterSpacing: 0.3,
               ),
             ),
           ],
         ),
-        SizedBox(height: screenHeight * 0.025),
+        SizedBox(height: screenHeight * 0.02),
         
-        // Large time display - CLEANER
         Center(
           child: Column(
             children: [
               Text(
                 '${customDuration.toInt()}',
                 style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.22), // Larger
-                  fontWeight: FontWeight.w700, // Less bold
+                  fontSize: _adaptiveFontSize(0.14),
+                  fontWeight: FontWeight.w500,
                   color: primaryTextDark,
                   height: 1,
                 ),
               ),
-              SizedBox(height: screenHeight * 0.005),
+              SizedBox(height: screenHeight * 0.004),
               Text(
                 'minutes',
                 style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.038),
+                  fontSize: _adaptiveFontSize(0.035),
                   fontWeight: FontWeight.w500,
                   color: secondaryTextGrey,
-                  letterSpacing: 1,
                 ),
               ),
             ],
           ),
         ),
-        SizedBox(height: screenHeight * 0.015),
+        SizedBox(height: screenHeight * 0.012),
         
-        // "No Breaks" badge
         Center(
           child: Container(
             padding: EdgeInsets.symmetric(
-              horizontal: screenWidth * 0.04,
-              vertical: screenHeight * 0.008,
+              horizontal: screenWidth * 0.035,
+              vertical: screenHeight * 0.006,
             ),
             decoration: BoxDecoration(
-              color: secondaryTextGrey.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: secondaryTextGrey.withOpacity(0.3)),
+              color: secondaryTextGrey.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: secondaryTextGrey.withOpacity(0.25)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -1245,13 +1154,13 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                 Icon(
                   Icons.block_rounded,
                   color: secondaryTextGrey,
-                  size: _adaptiveFontSize(0.035),
+                  size: _adaptiveFontSize(0.032),
                 ),
-                SizedBox(width: screenWidth * 0.015),
+                SizedBox(width: screenWidth * 0.012),
                 Text(
                   'No Breaks',
                   style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.032),
+                    fontSize: _adaptiveFontSize(0.03),
                     fontWeight: FontWeight.w600,
                     color: secondaryTextGrey,
                   ),
@@ -1260,42 +1169,40 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
             ),
           ),
         ),
-        SizedBox(height: screenHeight * 0.025),
+        SizedBox(height: screenHeight * 0.02),
         
-        // Slider - CIRCULAR THUMB
         SliderTheme(
           data: SliderThemeData(
             activeTrackColor: accentThemeColor, 
-            inactiveTrackColor: lightestAccentColor.withOpacity(0.5),
+            inactiveTrackColor: lightestAccentColor.withOpacity(0.4),
             thumbColor: accentThemeColor,
             thumbShape: const RoundSliderThumbShape(
-              enabledThumbRadius: 14, // Circular thumb
-              elevation: 3,
+              enabledThumbRadius: 12,
+              elevation: 2,
             ),
-            overlayColor: accentThemeColor.withOpacity(0.2), 
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 26),
-            trackHeight: 6,
+            overlayColor: accentThemeColor.withOpacity(0.18), 
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 22),
+            trackHeight: 5,
           ),
           child: Slider(
             value: customDuration,
-            min: 25,
+            min: 10,
             max: 120,
-            divisions: (120 - 25),
+            divisions: (120 - 10),
             label: '${customDuration.toInt()} min',
             onChanged: (v) => setState(() => customDuration = v),
           ),
         ),
         
-        // Min-Max labels
         Padding(
-          padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.02),
+          padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.015),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                '25 min',
+                '10 min',
                 style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.028),
+                  fontSize: _adaptiveFontSize(0.026),
                   color: secondaryTextGrey,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1303,7 +1210,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
               Text(
                 '120 min',
                 style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.028),
+                  fontSize: _adaptiveFontSize(0.026),
                   color: secondaryTextGrey,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1311,22 +1218,21 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
             ],
           ),
         ),
-        SizedBox(height: screenHeight * 0.015),
+        SizedBox(height: screenHeight * 0.012),
         
-        // Info text with icon
         Row(
           children: [
             Icon(
               Icons.info_outline_rounded,
               color: accentThemeColor,
-              size: _adaptiveFontSize(0.04),
+              size: _adaptiveFontSize(0.037),
             ),
-            SizedBox(width: screenWidth * 0.02),
+            SizedBox(width: screenWidth * 0.015),
             Expanded(
               child: Text(
                 'Continuous focus without interruptions',
                 style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.031),
+                  fontSize: _adaptiveFontSize(0.029),
                   color: secondaryTextGrey,
                   fontWeight: FontWeight.w500,
                 ),
@@ -1338,28 +1244,26 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     );
   }
 
-  // Session mode toggle
   Widget _buildModeToggle() {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
 
     return Container(
-      padding: EdgeInsets.all(screenHeight * 0.005),
+      padding: EdgeInsets.all(screenHeight * 0.004),
       decoration: BoxDecoration(
-        color: const Color.fromARGB(255, 184, 184, 184).withOpacity(0.3),
-        borderRadius: BorderRadius.circular(12),
+        color: secondaryTextGrey.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(11),
       ),
       child: Row(
         children: [
           _toggleButton(SessionMode.pomodoro, 'Pomodoro', Icons.timer),
-          SizedBox(width: screenWidth * 0.02),
+          SizedBox(width: screenWidth * 0.015),
           _toggleButton(SessionMode.custom, 'Custom Focus', Icons.tune),
         ],
       ),
     );
   }
 
-  // Mode toggle button - CHANGED TO dfDeepTeal
   Widget _toggleButton(SessionMode mode, String text, IconData icon) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -1370,12 +1274,12 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
         onTap: () => setState(() => sessionMode = mode),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: EdgeInsets.symmetric(vertical: screenHeight * 0.015),
+          padding: EdgeInsets.symmetric(vertical: screenHeight * 0.013),
           decoration: BoxDecoration(
-            color: isSelected ? dfDeepTeal : Colors.transparent, // CHANGED
+            color: isSelected ? dfDeepTeal : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             boxShadow: isSelected 
-                ? [BoxShadow(color: dfDeepTeal.withOpacity(0.3), blurRadius: 8)] // CHANGED
+                ? [BoxShadow(color: dfDeepTeal.withOpacity(0.25), blurRadius: 6)]
                 : null,
           ),
           child: Row(
@@ -1383,14 +1287,14 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
             children: [
               Icon(
                 icon,
-                size: screenWidth * 0.05,
+                size: screenWidth * 0.045,
                 color: isSelected ? Colors.white : secondaryTextGrey,
               ),
-              SizedBox(width: screenWidth * 0.02),
+              SizedBox(width: screenWidth * 0.015),
               Text(
                 text,
                 style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.035),
+                  fontSize: _adaptiveFontSize(0.033),
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                   color: isSelected ? Colors.white : secondaryTextGrey,
                 ),
@@ -1402,20 +1306,15 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     );
   }
   
-  // Sound selection section - DROPDOWN WITH CLEAR COLORS
   Widget _buildSoundSelection() {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
 
-    // Define clear colors for sound options
     final Map<String, Color> soundColors = {
       'off': secondaryTextGrey,
-      'default': Color.fromARGB(255, 48, 139, 117), // Clear blue
-      'Rain': Color(0xFF5DADE2),    // Sky blue
-
-  
-      'White Noise': Color.fromARGB(255, 186, 156, 241), // Light grey
-
+      'default': Color.fromARGB(255, 48, 139, 117),
+      'Rain': Color(0xFF5DADE2),
+      'White Noise': Color.fromARGB(255, 186, 156, 241),
     };
 
     Color getSoundColor(String soundName) {
@@ -1423,7 +1322,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     }
 
     return Container(
-      padding: EdgeInsets.all(screenWidth * 0.05),
+      padding: EdgeInsets.all(screenWidth * 0.04),
       decoration: BoxDecoration(
         color: cardBackground,
         borderRadius: BorderRadius.circular(cardBorderRadius),
@@ -1432,20 +1331,19 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
           Row(
             children: [
               Icon(
                 Icons.music_note_rounded,
                 color: accentThemeColor,
-                size: _adaptiveFontSize(0.055),
+                size: _adaptiveFontSize(0.05),
               ),
-              SizedBox(width: screenWidth * 0.02),
+              SizedBox(width: screenWidth * 0.015),
               Expanded(
                 child: Text(
                   'Background Sound',
                   style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.045),
+                    fontSize: _adaptiveFontSize(0.04),
                     fontWeight: FontWeight.bold,
                     color: primaryTextDark,
                   ),
@@ -1453,36 +1351,35 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
               ),
             ],
           ),
-          SizedBox(height: screenHeight * 0.01),
+          SizedBox(height: screenHeight * 0.008),
           Text(
             'Select a sound to play during your focus session',
             style: TextStyle(
-              fontSize: _adaptiveFontSize(0.033),
+              fontSize: _adaptiveFontSize(0.031),
               color: secondaryTextGrey,
             ),
           ),
-          SizedBox(height: screenHeight * 0.02),
+          SizedBox(height: screenHeight * 0.015),
           
-          // Dropdown
           if (!_soundsLoaded)
             Center(
               child: Padding(
-                padding: EdgeInsets.all(screenHeight * 0.02),
-                child: CircularProgressIndicator(color: accentThemeColor),
+                padding: EdgeInsets.all(screenHeight * 0.015),
+                child: CircularProgressIndicator(color: accentThemeColor, strokeWidth: 2.5),
               ),
             )
           else
             Container(
               padding: EdgeInsets.symmetric(
-                horizontal: screenWidth * 0.04,
-                vertical: screenHeight * 0.005,
+                horizontal: screenWidth * 0.035,
+                vertical: screenHeight * 0.004,
               ),
               decoration: BoxDecoration(
                 color: cardBackground,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(11),
                 border: Border.all(
-                  color: accentThemeColor.withOpacity(0.3),
-                  width: 1.5,
+                  color: accentThemeColor.withOpacity(0.25),
+                  width: 1.3,
                 ),
               ),
               child: DropdownButtonHideUnderline(
@@ -1492,10 +1389,10 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                   icon: Icon(
                     Icons.keyboard_arrow_down_rounded,
                     color: accentThemeColor,
-                    size: screenWidth * 0.07,
+                    size: screenWidth * 0.065,
                   ),
                   style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.04),
+                    fontSize: _adaptiveFontSize(0.037),
                     fontWeight: FontWeight.w600,
                     color: primaryTextDark,
                   ),
@@ -1520,23 +1417,23 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                       child: Row(
                         children: [
                           Container(
-                            padding: EdgeInsets.all(screenWidth * 0.02),
+                            padding: EdgeInsets.all(screenWidth * 0.018),
                             decoration: BoxDecoration(
-                              color: soundColor.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(8),
+                              color: soundColor.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(7),
                             ),
                             child: Icon(
                               sound.icon,
                               color: soundColor,
-                              size: screenWidth * 0.05,
+                              size: screenWidth * 0.045,
                             ),
                           ),
-                          SizedBox(width: screenWidth * 0.03),
+                          SizedBox(width: screenWidth * 0.025),
                           Expanded(
                             child: Text(
                               sound.name,
                               style: TextStyle(
-                                fontSize: _adaptiveFontSize(0.04),
+                                fontSize: _adaptiveFontSize(0.037),
                                 fontWeight: FontWeight.w600,
                                 color: primaryTextDark,
                               ),
@@ -1550,24 +1447,25 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
               ),
             ),
           
-          // Preview indicator
           if (_soundsLoaded && _selectedSound.id != 'off')
             Padding(
-              padding: EdgeInsets.only(top: screenHeight * 0.015),
+              padding: EdgeInsets.only(top: screenHeight * 0.012),
               child: Row(
                 children: [
                   Icon(
                     Icons.volume_up_rounded,
                     color: accentThemeColor,
-                    size: _adaptiveFontSize(0.04),
+                    size: _adaptiveFontSize(0.037),
                   ),
-                  SizedBox(width: screenWidth * 0.02),
-                  Text(
-                    '5-second preview will play on selection',
-                    style: TextStyle(
-                      fontSize: _adaptiveFontSize(0.03),
-                      color: secondaryTextGrey,
-                      fontStyle: FontStyle.italic,
+                  SizedBox(width: screenWidth * 0.015),
+                  Expanded(
+                    child: Text(
+                      '5-second preview will play on selection',
+                      style: TextStyle(
+                        fontSize: _adaptiveFontSize(0.028),
+                        color: secondaryTextGrey,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
                   ),
                 ],
@@ -1586,7 +1484,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-    final proportionalHorizontalPadding = screenWidth * 0.05;
+    final proportionalHorizontalPadding = screenWidth * 0.06;
 
     final bool isStartButtonEnabled = !isLoading;
 
@@ -1595,13 +1493,13 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
         backgroundColor: primaryBackground,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: primaryTextDark),
+          icon: Icon(Icons.arrow_back, color: primaryTextDark, size: _adaptiveFontSize(0.055)),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
           'Set Session',
           style: TextStyle(
-            fontSize: _adaptiveFontSize(0.045),
+            fontSize: _adaptiveFontSize(0.042),
             fontWeight: FontWeight.bold,
             color: primaryTextDark,
           ),
@@ -1612,47 +1510,43 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
       body: SafeArea(
         child: Stack(
           children: [
-            // Main scrollable content
             SingleChildScrollView(
               padding: EdgeInsets.only(
                 left: proportionalHorizontalPadding,
                 right: proportionalHorizontalPadding,
-                top: screenHeight * 0.02,
-                bottom: screenHeight * 0.2,
+                top: screenHeight * 0.015,
+                bottom: screenHeight * 0.18,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Page title
                   Text(
                     sessionMode == SessionMode.pomodoro 
                         ? 'Pomodoro Session' 
                         : 'Custom Session',
                     style: TextStyle(
-                      fontSize: _adaptiveFontSize(0.055),
-                      fontWeight: FontWeight.w800,
+                      fontSize: _adaptiveFontSize(0.048),
+                      fontWeight: FontWeight.w700,
                       color: primaryTextDark,
                     ),
                   ),
+                  SizedBox(height: screenHeight * 0.003),
                   Text(
                     sessionMode == SessionMode.pomodoro
                         ? 'Structured focus and break sessions'
                         : 'Set your own uninterrupted timing',
                     style: TextStyle(
-                      fontSize: _adaptiveFontSize(0.035),
+                      fontSize: _adaptiveFontSize(0.032),
                       color: secondaryTextGrey,
                     ),
                   ),
-                  SizedBox(height: screenHeight * 0.025),
+                  SizedBox(height: screenHeight * 0.02),
 
-                  // Session mode toggle
                   _buildModeToggle(),
-                  SizedBox(height: screenHeight * 0.025),
+                  SizedBox(height: screenHeight * 0.02),
 
-                  // Rikaz BLE connection section with visuals
                   _buildRikazConnect(),
 
-                  // Session configuration
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
                     child: (sessionMode == SessionMode.pomodoro)
@@ -1668,15 +1562,15 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                           ),
                   ),
 
-                  SizedBox(height: screenHeight * 0.025),
+                  SizedBox(height: screenHeight * 0.02),
                   
-                  // Sound selection section
                   _buildSoundSelection(),
+                  
+                  SizedBox(height: screenHeight * 0.015),
                 ],
               ),
             ),
 
-            // Sticky start button at bottom
             Positioned(
               left: 0,
               right: 0,
@@ -1686,49 +1580,51 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                   color: primaryBackground,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
-                      blurRadius: 10,
-                      offset: const Offset(0, -5),
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 8,
+                      offset: const Offset(0, -3),
                     ),
                   ],
                 ),
                 padding: EdgeInsets.only(
                   left: proportionalHorizontalPadding,
                   right: proportionalHorizontalPadding,
-                  top: screenHeight * 0.02,
-                  bottom: screenHeight * 0.03,
+                  top: screenHeight * 0.015,
+                  bottom: screenHeight * 0.025,
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Friendly reminder when hardware is offline
                     if (!isRikazToolConnected)
                       Container(
-                        margin: EdgeInsets.only(bottom: screenHeight * 0.015),
-                        padding: EdgeInsets.all(screenWidth * 0.03),
+                        margin: EdgeInsets.only(bottom: screenHeight * 0.012),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: screenWidth * 0.03,
+                          vertical: screenHeight * 0.01,
+                        ),
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              accentThemeColor.withOpacity(0.1),
-                              lightestAccentColor.withOpacity(0.15),
+                              accentThemeColor.withOpacity(0.08),
+                              lightestAccentColor.withOpacity(0.12),
                             ],
                           ),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: accentThemeColor.withOpacity(0.3)),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: accentThemeColor.withOpacity(0.25)),
                         ),
                         child: Row(
                           children: [
                             Icon(
                               Icons.lightbulb_outline_rounded,
                               color: accentThemeColor,
-                              size: _adaptiveFontSize(0.045),
+                              size: _adaptiveFontSize(0.04),
                             ),
                             SizedBox(width: screenWidth * 0.02),
                             Expanded(
                               child: Text(
                                 'Connect hardware for enhanced features',
                                 style: TextStyle(
-                                  fontSize: _adaptiveFontSize(0.032),
+                                  fontSize: _adaptiveFontSize(0.03),
                                   color: primaryTextDark,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -1738,32 +1634,31 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                         ),
                       ),
 
-                    // Start session button - CHANGED TO dfDeepTeal
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: isStartButtonEnabled ? handleStartSessionPress : null,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: dfDeepTeal, // CHANGED
-                          padding: EdgeInsets.symmetric(vertical: screenHeight * 0.022),
+                          backgroundColor: dfDeepTeal,
+                          padding: EdgeInsets.symmetric(vertical: screenHeight * 0.018),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(cardBorderRadius),
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          elevation: 6,
-                          shadowColor: dfDeepTeal.withOpacity(0.4), // CHANGED
+                          elevation: 4,
+                          shadowColor: dfDeepTeal.withOpacity(0.3),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.play_arrow_rounded, color: Colors.white, size: _adaptiveFontSize(0.06)),
-                            SizedBox(width: screenWidth * 0.02),
+                            Icon(Icons.play_arrow_rounded, color: Colors.white, size: _adaptiveFontSize(0.055)),
+                            SizedBox(width: screenWidth * 0.015),
                             Text(
                               'Start Session',
                               style: TextStyle(
                                 color: Colors.white,
-                                fontSize: _adaptiveFontSize(0.04),
+                                fontSize: _adaptiveFontSize(0.038),
                                 fontWeight: FontWeight.bold,
-                                letterSpacing: 0.5,
+                                letterSpacing: 0.3,
                               ),
                             ),
                           ],

@@ -1,10 +1,50 @@
 // ============================================================================
 // FILE: rikaz_device_picker.dart
 // PURPOSE: UI for scanning and selecting Rikaz devices
+// UPDATED: Matching SetSession theme
 // ============================================================================
 
 import 'package:flutter/material.dart';
 import '/services/rikaz_light_service.dart';
+
+// =============================================================================
+// THEME DEFINITIONS - Matching SetSession
+// =============================================================================
+
+// Primary color palette
+const Color dfDeepTeal = Color(0xFF175B73); 
+const Color dfTealCyan = Color(0xFF287C85); 
+const Color dfLightSeafoam = Color(0xFF87ACA3); 
+const Color dfDeepBlue = Color(0xFF162893); 
+const Color dfNavyIndigo = Color(0xFF0C1446); 
+
+// Primary theme colors
+const Color primaryThemeColor = dfDeepTeal;
+const Color accentThemeColor = dfTealCyan;
+const Color lightestAccentColor = dfLightSeafoam;
+
+// Background colors
+const Color primaryBackground = Color(0xFFF7F7F7);
+const Color cardBackground = Color(0xFFFFFFFF);
+
+// Text colors
+const Color primaryTextDark = dfNavyIndigo;
+const Color secondaryTextGrey = Color(0xFF6B6B78);
+
+// Error/alert color
+const Color errorIndicatorRed = Color(0xFFE57373);
+
+// Standard border radius for cards
+const double cardBorderRadius = 16.0;
+
+// Standard shadow for elevated cards
+List<BoxShadow> get subtleShadow => [
+      BoxShadow(
+        color: dfNavyIndigo.withOpacity(0.08),
+        blurRadius: 10,
+        offset: const Offset(0, 5),
+      ),
+    ];
 
 class RikazDevicePicker extends StatefulWidget {
   const RikazDevicePicker({super.key});
@@ -74,14 +114,31 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Connecting to ${device.name}...'),
-          ],
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(cardBorderRadius),
+        ),
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(
+                color: accentThemeColor,
+                strokeWidth: 3,
+              ),
+              SizedBox(height: 20),
+              Text(
+                'Connecting to ${device.name}...',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: primaryTextDark,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -96,8 +153,20 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to connect to ${device.name}'),
-            backgroundColor: Colors.red,
+            content: Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.white),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text('Failed to connect to ${device.name}'),
+                ),
+              ],
+            ),
+            backgroundColor: errorIndicatorRed,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
       }
@@ -111,20 +180,33 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
 
     return Dialog(
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(cardBorderRadius),
       ),
+      backgroundColor: cardBackground,
       child: Container(
         constraints: BoxConstraints(
           maxHeight: screenHeight * 0.7,
           maxWidth: screenWidth * 0.9,
         ),
-        padding: EdgeInsets.all(20),
+        padding: EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Header
             Row(
               children: [
-                Icon(Icons.bluetooth_searching, color: Color(0xFF7A68FF), size: 28),
+                Container(
+                  padding: EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: accentThemeColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.bluetooth_searching,
+                    color: accentThemeColor,
+                    size: 28,
+                  ),
+                ),
                 SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -132,33 +214,43 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF30304D),
+                      color: primaryTextDark,
                     ),
                   ),
                 ),
                 IconButton(
-                  icon: Icon(Icons.close),
+                  icon: Icon(Icons.close, color: secondaryTextGrey),
                   onPressed: () => Navigator.pop(context),
+                  tooltip: 'Close',
                 ),
               ],
             ),
-            SizedBox(height: 16),
+            SizedBox(height: 20),
 
+            // Scanning indicator
             if (_isScanning)
               Padding(
-                padding: EdgeInsets.symmetric(vertical: 20),
+                padding: EdgeInsets.symmetric(vertical: 24),
                 child: Column(
                   children: [
-                    CircularProgressIndicator(color: Color(0xFF7A68FF)),
-                    SizedBox(height: 12),
+                    CircularProgressIndicator(
+                      color: accentThemeColor,
+                      strokeWidth: 3,
+                    ),
+                    SizedBox(height: 16),
                     Text(
                       'Scanning for devices...',
-                      style: TextStyle(color: Colors.grey.shade600),
+                      style: TextStyle(
+                        color: secondaryTextGrey,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ],
                 ),
               ),
 
+            // Error message
             if (_errorMessage != null && !_isScanning)
               Flexible(
                 child: SingleChildScrollView(
@@ -166,19 +258,36 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
                     padding: EdgeInsets.all(16),
                     margin: EdgeInsets.symmetric(vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Colors.orange.shade50,
+                          Colors.orange.shade100.withOpacity(0.3),
+                        ],
+                      ),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.orange.shade200),
+                      border: Border.all(
+                        color: Colors.orange.shade300,
+                        width: 1.5,
+                      ),
                     ),
                     child: Column(
                       children: [
-                        Icon(Icons.warning_amber_rounded, 
-                          color: Colors.orange.shade700, size: 40),
-                        SizedBox(height: 8),
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          color: Colors.orange.shade700,
+                          size: 40,
+                        ),
+                        SizedBox(height: 12),
                         Text(
                           _errorMessage!,
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.orange.shade900, fontSize: 13),
+                          style: TextStyle(
+                            color: Colors.orange.shade900,
+                            fontSize: 14,
+                            height: 1.4,
+                          ),
                         ),
                       ],
                     ),
@@ -186,6 +295,7 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
                 ),
               ),
 
+            // Device list
             if (_devices.isNotEmpty && !_isScanning)
               Flexible(
                 child: ListView.builder(
@@ -198,17 +308,27 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
                 ),
               ),
 
+            // Scan again button
             if (!_isScanning)
               Padding(
                 padding: EdgeInsets.only(top: 16),
                 child: OutlinedButton.icon(
                   onPressed: _startScan,
-                  icon: Icon(Icons.refresh),
-                  label: Text('Scan Again'),
+                  icon: Icon(Icons.refresh, size: 20),
+                  label: Text(
+                    'Scan Again',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Color(0xFF7A68FF),
-                    side: BorderSide(color: Color(0xFF7A68FF)),
-                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    foregroundColor: accentThemeColor,
+                    side: BorderSide(color: accentThemeColor, width: 1.5),
+                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
               ),
@@ -225,75 +345,108 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
     else if (device.rssi > -80) signalBars = 2;
     else signalBars = 1;
 
-    return Card(
+    return Container(
       margin: EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      shape: RoundedRectangleBorder(
+      decoration: BoxDecoration(
+        color: cardBackground,
         borderRadius: BorderRadius.circular(12),
+        boxShadow: subtleShadow,
+        border: Border.all(
+          color: accentThemeColor.withOpacity(0.2),
+          width: 1,
+        ),
       ),
-      child: InkWell(
-        onTap: () => _connectToDevice(device),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Color(0xFF7A68FF).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _connectToDevice(device),
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: Row(
+              children: [
+                // Device icon
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        accentThemeColor,
+                        accentThemeColor.withOpacity(0.7),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.lightbulb_rounded,
+                    color: Colors.white,
+                    size: 28,
+                  ),
                 ),
-                child: Icon(
-                  Icons.lightbulb,
-                  color: Color(0xFF7A68FF),
-                  size: 28,
-                ),
-              ),
-              SizedBox(width: 16),
+                SizedBox(width: 16),
 
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      device.name,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF30304D),
+                // Device info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        device.name,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: primaryTextDark,
+                        ),
                       ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      '${device.rssi} dBm',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
+                      SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.signal_cellular_alt,
+                            size: 14,
+                            color: secondaryTextGrey,
+                          ),
+                          SizedBox(width: 4),
+                          Text(
+                            '${device.rssi} dBm',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: secondaryTextGrey,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
 
-              Row(
-                children: List.generate(4, (index) {
-                  return Container(
-                    width: 4,
-                    height: 8 + (index * 4.0),
-                    margin: EdgeInsets.symmetric(horizontal: 1),
-                    decoration: BoxDecoration(
-                      color: index < signalBars 
-                        ? Color(0xFF7A68FF) 
-                        : Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  );
-                }),
-              ),
-              SizedBox(width: 8),
-              Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey.shade400),
-            ],
+                // Signal strength bars
+                Row(
+                  children: List.generate(4, (index) {
+                    return Container(
+                      width: 4,
+                      height: 8 + (index * 4.0),
+                      margin: EdgeInsets.symmetric(horizontal: 1.5),
+                      decoration: BoxDecoration(
+                        color: index < signalBars 
+                          ? accentThemeColor
+                          : secondaryTextGrey.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    );
+                  }),
+                ),
+                SizedBox(width: 12),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: secondaryTextGrey,
+                ),
+              ],
+            ),
           ),
         ),
       ),
