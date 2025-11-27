@@ -10,7 +10,7 @@ import 'package:rikazapp/widgets/rikaz_device_picker.dart';
 import 'package:rikazapp/main.dart';
 
 // ============================================================================
-// THEME COLORS - Matching HomePage theme
+// THEME COLORS
 // ============================================================================
 const Color dfDeepTeal = Color(0xFF175B73); 
 const Color dfTealCyan = Color(0xFF287C85);
@@ -27,10 +27,9 @@ const Color primaryTextDark = dfNavyIndigo;
 const Color secondaryTextGrey = Color(0xFF6B6B78);
 const Color errorIndicatorRed = Color(0xFFE57373);
 
-// Session-specific colors - SWAPPED FOR BETTER CONTRAST
-const Color focusBgColor = lightestAccentColor; // Background uses darker dfDeepTeal
-const Color breakBgColor = Color(0xFFE6B400); // Yellow for break
-const Color pausedBgColor = Color(0xFF9E9E9E); // Gray for paused
+const Color focusBgColor = lightestAccentColor;
+const Color breakBgColor = Color(0xFFE6B400);
+const Color pausedBgColor = Color(0xFF9E9E9E);
 
 // ============================================================================
 // MAIN SESSION PAGE
@@ -96,16 +95,55 @@ class _SessionPageState extends State<SessionPage>
   // ========== CONNECTION MONITORING ==========
   Timer? _connectionCheckTimer;
 
+  // ========== COMPLETION FLAGS - CRITICAL FIX ==========
+  bool _completionHandled = false;
+  bool _isShowingProgressDialog = false;
+  bool _isNavigatingAway = false;
+
+  // ========== LIGHT CONTROL DEBOUNCING - CRITICAL FIX ==========
+  DateTime? _lastLightOffTime;
+  static const Duration _lightDebounceDelay = Duration(seconds: 2);
+
   // ========== MINIMUM SESSION TIME ==========
-  // UPDATED: Changed minimum to 10 minutes
   static const int minimumSessionMinutes = 10;
+
+  // ========================================================================
+  // DEBOUNCED LIGHT OFF - PREVENTS SPAM
+  // ========================================================================
+  Future<void> _debouncedLightOff() async {
+    if (!_rikazConnected || !_lightInitialized) {
+      debugPrint('⏸️ RIKAZ: Skipping light off - device not connected');
+      return;
+    }
+
+    final now = DateTime.now();
+    
+    // Debounce: Prevent rapid repeated calls
+    if (_lastLightOffTime != null && 
+        now.difference(_lastLightOffTime!) < _lightDebounceDelay) {
+      debugPrint('⚠️ Light off debounced (too soon - ${now.difference(_lastLightOffTime!).inMilliseconds}ms)');
+      return;
+    }
+    
+    _lastLightOffTime = now;
+    
+    try {
+      bool success = await RikazLightService.turnOff();
+      if (success) {
+        debugPrint('⚫ RIKAZ: Light turned OFF');
+      } else {
+        debugPrint('❌ RIKAZ: Light off failed');
+      }
+    } catch (e) {
+      debugPrint('❌ RIKAZ: Light off error: $e');
+    }
+  }
 
   // ========================================================================
   // SEND TIMER UPDATE TO ESP32 LCD
   // ========================================================================
   Future<void> _sendTimerUpdateToESP32() async {
     if (!_rikazConnected || !_lightInitialized) {
-      print('⏸️ RIKAZ: Skipping LCD update - device not connected');
       return;
     }
     
@@ -124,15 +162,12 @@ class _SessionPageState extends State<SessionPage>
     final String jsonCommand = jsonEncode(timerCommand);
     
     try {
-      print('📺 RIKAZ: Sending to LCD: $jsonCommand');
       final bool success = await RikazLightService.sendCommand(jsonCommand);
-      if (!success) {
-        print('⚠️ RIKAZ: Failed to send timer update to LCD');
-      } else {
-        print('✅ RIKAZ: Timer sent to LCD: ${timeLeft ~/ 60}:${timeLeft % 60} ($currentStatus)');
+      if (success) {
+        debugPrint('✅ RIKAZ: Timer sent to LCD: ${timeLeft ~/ 60}:${timeLeft % 60} ($currentStatus)');
       }
     } catch (e) {
-      print('❌ RIKAZ: Error sending timer update: $e');
+      debugPrint('❌ RIKAZ: Error sending timer update: $e');
     }
   }
 
@@ -142,9 +177,9 @@ class _SessionPageState extends State<SessionPage>
     try {
       final String motivationCommand = jsonEncode({'motivation': 'show'});
       await RikazLightService.sendCommand(motivationCommand);
-      print('💪 RIKAZ: Sent motivational message to LCD');
+      debugPrint('💪 RIKAZ: Sent motivational message');
     } catch (e) {
-      print('❌ RIKAZ: Error sending motivation: $e');
+      debugPrint('❌ RIKAZ: Error sending motivation: $e');
     }
   }
 
@@ -167,7 +202,7 @@ class _SessionPageState extends State<SessionPage>
         _rikazConnected = true;
         _lightInitialized = true;
         _startConnectionMonitoring();
-        print('✅ RIKAZ: Lights re-initialized during resume attempt');
+        debugPrint('✅ RIKAZ: Lights re-initialized during resume');
       }
     } else if (_rikazConnected && _lightInitialized) {
       if (mode == 'focus') {
@@ -178,7 +213,7 @@ class _SessionPageState extends State<SessionPage>
     }
 
     if (!success && (_rikazConnected || _lightInitialized)) {
-      print('⚠️ RIKAZ: Light command failed on resume, remaining paused.');
+      debugPrint('⚠️ RIKAZ: Light command failed on resume');
       return false;
     }
 
@@ -189,7 +224,7 @@ class _SessionPageState extends State<SessionPage>
     
     _sendTimerUpdateToESP32();
     
-    print('▶️ RIKAZ: Session resumed');
+    debugPrint('▶️ Session resumed');
     return true;
   }
 
@@ -199,7 +234,7 @@ class _SessionPageState extends State<SessionPage>
   Future<void> _handleReconnectAttempt() async {
     if (!mounted) return;
     
-    print('🔄 RIKAZ: Starting reconnection attempt...');
+    debugPrint('🔄 RIKAZ: Starting reconnection...');
     
     final RikazDevice? selectedDevice = await showDialog<RikazDevice>(
       context: context,
@@ -223,9 +258,7 @@ class _SessionPageState extends State<SessionPage>
                 children: [
                   Icon(Icons.check_circle, color: Colors.white),
                   SizedBox(width: 12),
-                  Expanded(
-                    child: Text('Reconnected! Session resumed.'),
-                  ),
+                  Expanded(child: Text('Reconnected! Session resumed.')),
                 ],
               ),
               backgroundColor: Colors.green.shade600,
@@ -236,15 +269,13 @@ class _SessionPageState extends State<SessionPage>
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Reconnected but light control failed. Please try again.'),
+              content: Text('Reconnected but light control failed.'),
               backgroundColor: Colors.orange.shade700,
               duration: const Duration(seconds: 3),
             ),
           );
         }
       }
-    } else {
-      print('❌ RIKAZ: Reconnection cancelled. Session remains paused.');
     }
   }
 
@@ -260,7 +291,7 @@ class _SessionPageState extends State<SessionPage>
       });
       pulseController.stop();
       _sendTimerUpdateToESP32();
-      print('⏸️ RIKAZ: Session paused due to light command failure');
+      debugPrint('⏸️ Session paused due to light failure');
     }
     
     if (showSnackbar) {
@@ -274,12 +305,9 @@ class _SessionPageState extends State<SessionPage>
             textColor: Colors.white,
             onPressed: () {
               if (mounted && status == 'running') {
-                setState(() {
-                  status = 'paused';
-                });
+                setState(() => status = 'paused');
                 pulseController.stop();
                 _sendTimerUpdateToESP32();
-                print('⏸️ RIKAZ: Session paused via SnackBar Reconnect button');
               }
               _handleReconnectAttempt();
             },
@@ -291,19 +319,18 @@ class _SessionPageState extends State<SessionPage>
     if (!RikazConnectionState.isConnected) {
       _rikazConnected = false;
       _lightInitialized = false;
-      print('🔌 RIKAZ: Connection flags reset');
     }
   }
 
   // ========================================================================
-  // START SESSION IN DATABASE - UPDATED COLUMN NAME
+  // START SESSION IN DATABASE
   // ========================================================================
   Future<void> _startSessionInDB() async {
     final supabase = Supabase.instance.client;
     final currentUserId = supabase.auth.currentUser?.id;
 
     if (currentUserId == null) {
-      print('Error: User not authenticated. Cannot start session.');
+      debugPrint('Error: User not authenticated');
       return;
     }
 
@@ -319,7 +346,6 @@ class _SessionPageState extends State<SessionPage>
         'user_id': currentUserId,
         'session_type': widget.sessionType,
         'start_time': _sessionStartTime!.toIso8601String(),
-        // Renamed column
         'planned_duration': finalPlannedDuration,
         'pomodoro_type': pomodoroType,
         'camera_monitored': widget.isCameraDetectionEnabled ?? false,
@@ -331,100 +357,106 @@ class _SessionPageState extends State<SessionPage>
             _currentSessionId = response.first['session_id'].toString();
           });
         }
-        print('✅ Session Started in DB with ID: $_currentSessionId');
+        debugPrint('✅ Session Started in DB: $_currentSessionId');
       }
     } catch (e) {
-      print('❌ Error starting session in DB: $e');
+      debugPrint('❌ Error starting session in DB: $e');
     }
   }
 
   // ========================================================================
-  // SHOW PROGRESS LEVEL DIALOG - Updated with new theme
+  // SHOW PROGRESS LEVEL DIALOG - FIXED WITH PREVENTION FLAGS
   // ========================================================================
   Future<String?> _showProgressLevelDialog() async {
-    return showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        final screenWidth = MediaQuery.of(context).size.width;
+    // CRITICAL: Prevent multiple dialogs
+    if (_isShowingProgressDialog) {
+      debugPrint('⚠️ Progress dialog already showing');
+      return null;
+    }
 
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Container(
-            padding: EdgeInsets.all(screenWidth * 0.06),
-            decoration: BoxDecoration(
-              color: cardBackground,
-              borderRadius: BorderRadius.circular(20),
+    debugPrint('📊 Showing progress dialog');
+    _isShowingProgressDialog = true;
+
+    try {
+      final result = await showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext dialogContext) {
+          final screenWidth = MediaQuery.of(dialogContext).size.width;
+
+          return WillPopScope(
+            onWillPop: () async => false, // Prevent back button
+            child: Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              child: Container(
+                padding: EdgeInsets.all(screenWidth * 0.06),
+                decoration: BoxDecoration(
+                  color: cardBackground,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: EdgeInsets.all(screenWidth * 0.04),
+                      decoration: BoxDecoration(
+                        color: accentThemeColor.withOpacity(0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.track_changes, size: screenWidth * 0.15, color: accentThemeColor),
+                    ),
+                    SizedBox(height: screenWidth * 0.04),
+                    Text('Session Complete!', style: TextStyle(
+                      fontSize: screenWidth * 0.055,
+                      fontWeight: FontWeight.bold,
+                      color: primaryTextDark,
+                    ), textAlign: TextAlign.center),
+                    SizedBox(height: screenWidth * 0.02),
+                    Text('How much of your goal did you achieve?', style: TextStyle(
+                      fontSize: screenWidth * 0.038,
+                      color: secondaryTextGrey,
+                    ), textAlign: TextAlign.center),
+                    SizedBox(height: screenWidth * 0.06),
+                    _buildProgressOption(dialogContext,
+                      level: 'fully',
+                      title: 'Fully Achieved',
+                      subtitle: 'Completed everything',
+                      icon: Icons.verified,
+                      color: const Color(0xFF10B981),
+                    ),
+                    SizedBox(height: screenWidth * 0.03),
+                    _buildProgressOption(dialogContext,
+                      level: 'partially',
+                      title: 'Partially Done',
+                      subtitle: 'Made good progress',
+                      icon: Icons.trending_up,
+                      color: const Color(0xFFF59E0B),
+                    ),
+                    SizedBox(height: screenWidth * 0.03),
+                    _buildProgressOption(dialogContext,
+                      level: 'barely',
+                      title: 'Barely Started',
+                      subtitle: 'Struggled to focus',
+                      icon: Icons.sentiment_dissatisfied,
+                      color: errorIndicatorRed,
+                    ),
+                  ],
+                ),
+              ),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: EdgeInsets.all(screenWidth * 0.04),
-                  decoration: BoxDecoration(
-                    color: accentThemeColor.withOpacity(0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.track_changes,
-                    size: screenWidth * 0.15,
-                    color: accentThemeColor,
-                  ),
-                ),
-                SizedBox(height: screenWidth * 0.04),
-                Text(
-                  'Session Complete!',
-                  style: TextStyle(
-                    fontSize: screenWidth * 0.055,
-                    fontWeight: FontWeight.bold,
-                    color: primaryTextDark,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: screenWidth * 0.02),
-                Text(
-                  'How much of your goal did you achieve?',
-                  style: TextStyle(
-                    fontSize: screenWidth * 0.038,
-                    color: secondaryTextGrey,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: screenWidth * 0.06),
-                _buildProgressOption(
-                  context,
-                  level: 'fully',
-                  title: 'Fully Achieved',
-                  subtitle: 'Completed everything I set out to do',
-                  icon: Icons.verified,
-                  color: const Color(0xFF10B981),
-                ),
-                SizedBox(height: screenWidth * 0.03),
-                _buildProgressOption(
-                  context,
-                  level: 'partially',
-                  title: 'Partially Done',
-                  subtitle: 'Made good progress but didn\'t finish',
-                  icon: Icons.trending_up,
-                  color: const Color(0xFFF59E0B),
-                ),
-                SizedBox(height: screenWidth * 0.03),
-                _buildProgressOption(
-                  context,
-                  level: 'barely',
-                  title: 'Barely Started',
-                  subtitle: 'Struggled to stay focused',
-                  icon: Icons.sentiment_dissatisfied,
-                  color: errorIndicatorRed,
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+          );
+        },
+      );
+
+      return result;
+    } catch (e) {
+      debugPrint('❌ Progress dialog error: $e');
+      return null;
+    } finally {
+      if (mounted) {
+        _isShowingProgressDialog = false;
+      }
+    }
   }
 
   Widget _buildProgressOption(
@@ -464,27 +496,20 @@ class _SessionPageState extends State<SessionPage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: screenWidth * 0.042,
-                        fontWeight: FontWeight.bold,
-                        color: primaryTextDark,
-                      ),
-                    ),
+                    Text(title, style: TextStyle(
+                      fontSize: screenWidth * 0.042,
+                      fontWeight: FontWeight.bold,
+                      color: primaryTextDark,
+                    )),
                     SizedBox(height: screenWidth * 0.01),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: screenWidth * 0.032,
-                        color: secondaryTextGrey,
-                      ),
-                    ),
+                    Text(subtitle, style: TextStyle(
+                      fontSize: screenWidth * 0.032,
+                      color: secondaryTextGrey,
+                    )),
                   ],
                 ),
               ),
-              Icon(Icons.arrow_forward_ios,
-                  color: color, size: screenWidth * 0.04),
+              Icon(Icons.arrow_forward_ios, color: color, size: screenWidth * 0.04),
             ],
           ),
         ),
@@ -493,32 +518,41 @@ class _SessionPageState extends State<SessionPage>
   }
 
   // ========================================================================
-  // END SESSION IN DATABASE - UPDATED COLUMNS AND MINIMUM DURATION CHECK
+  // END SESSION IN DATABASE - FIXED WITH COMPLETION FLAGS
   // ========================================================================
   Future<void> _endSessionInDB({bool completed = false}) async {
+    // CRITICAL: Prevent multiple executions
+    if (_completionHandled) {
+      debugPrint('⚠️ Session completion already handled');
+      return;
+    }
+
     final supabase = Supabase.instance.client;
 
     if (_currentSessionId == null) {
-      print('Error: Cannot end session. Session ID is missing.');
+      debugPrint('Error: Cannot end session. Session ID missing');
       return;
     }
 
     final int actualFocusDurationMinutes = (_totalFocusSeconds ~/ 60);
 
-    // UPDATED: Check against the new 10-minute minimum
+    // Check minimum duration
     if (actualFocusDurationMinutes < minimumSessionMinutes) {
-      print('❌ Session too short (<$minimumSessionMinutes min). Not saved.');
+      debugPrint('❌ Session too short (<$minimumSessionMinutes min). Deleting.');
       try {
         await supabase
             .from('Focus_Session')
             .delete()
             .eq('session_id', _currentSessionId!);
-        print('🗑️ Short session deleted from DB.');
+        debugPrint('🗑️ Short session deleted');
       } catch (e) {
-        print('⚠️ Error deleting short session: $e');
+        debugPrint('⚠️ Error deleting short session: $e');
       }
       return;
     }
+
+    // Mark as handled BEFORE showing dialog
+    _completionHandled = true;
 
     String? progressLevel = await _showProgressLevelDialog();
     progressLevel ??= 'partially';
@@ -528,14 +562,14 @@ class _SessionPageState extends State<SessionPage>
     try {
       await supabase.from('Focus_Session').update({
         'end_time': endDateTime,
-        // Renamed column
         'actual_duration': actualFocusDurationMinutes,
         'progress_level': progressLevel,
       }).eq('session_id', _currentSessionId!);
 
-      print('✅ Session ended. Duration: $actualFocusDurationMinutes min, Progress: $progressLevel');
+      debugPrint('✅ Session ended. Duration: $actualFocusDurationMinutes min, Progress: $progressLevel');
     } catch (e) {
-      print('❌ Error ending session in DB: $e');
+      debugPrint('❌ Error ending session in DB: $e');
+      _completionHandled = false; // Reset on error
     }
   }
 
@@ -579,15 +613,12 @@ class _SessionPageState extends State<SessionPage>
             _lightInitialized = true;
             _startConnectionMonitoring();
             _sendTimerUpdateToESP32();
-            print('🔵 RIKAZ: Session started - Focus light ON');
+            debugPrint('🔵 RIKAZ: Focus light ON');
           } else if (mounted && !success) {
             _handleLightCommandFailure();
-            print('❌ RIKAZ: Initial light command failed. Session paused.');
           }
         }
       });
-    } else if (!_rikazConnected) {
-      print('⚠️ RIKAZ: Tools not connected, light control disabled');
     }
 
     pulseController = AnimationController(
@@ -622,8 +653,7 @@ class _SessionPageState extends State<SessionPage>
             _lightInitialized = false;
           });
           
-          print('⚠️ CONNECTION LOST - Session continues running (no auto-pause)');
-          print('📊 Current status: $status (unchanged)');
+          debugPrint('⚠️ Connection lost - session continues');
         }
         
         _showDeviceLostWarning();
@@ -644,38 +674,26 @@ class _SessionPageState extends State<SessionPage>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: cardBackground,
         icon: Icon(Icons.link_off, color: errorIndicatorRed, size: 48),
-        title: Text(
-          'Rikaz Tools Disconnected',
-          style: TextStyle(color: primaryTextDark, fontWeight: FontWeight.bold),
-        ),
+        title: Text('Rikaz Tools Disconnected',
+          style: TextStyle(color: primaryTextDark, fontWeight: FontWeight.bold)),
         content: Text(
-          'The Bluetooth connection to your Rikaz device was lost.\n\n'
-          'Your session is still running without external feedback.\n\n'
+          'The Bluetooth connection was lost.\n\n'
+          'Your session is still running.\n\n'
           'Click "Reconnect" to restore the connection.',
           style: TextStyle(color: secondaryTextGrey, height: 1.4),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Continue Without Rikaz',
-              style: TextStyle(color: secondaryTextGrey),
-            ),
+            child: Text('Continue Without', style: TextStyle(color: secondaryTextGrey)),
           ),
           ElevatedButton.icon(
             onPressed: () {
               Navigator.pop(context);
-              
               if (mounted && status == 'running') {
-                setState(() {
-                  status = 'paused';
-                });
-                if (pulseController.isAnimating) {
-                  pulseController.stop();
-                }
-                print('⏸️ RIKAZ: Session paused - User is reconnecting');
+                setState(() => status = 'paused');
+                if (pulseController.isAnimating) pulseController.stop();
               }
-              
               _handleReconnectAttempt();
             },
             icon: Icon(Icons.bluetooth_searching),
@@ -689,8 +707,6 @@ class _SessionPageState extends State<SessionPage>
         ],
       ),
     );
-    
-    debugPrint('⚠️ RIKAZ: BLE connection lost. Session continues running.');
   }
 
   // ========================================================================
@@ -721,61 +737,82 @@ class _SessionPageState extends State<SessionPage>
     });
   }
 
+  // ========================================================================
+  // PHASE END - FIXED WITH COMPLETION FLAGS
+  // ========================================================================
   void onPhaseEnd() async { 
     if (!mounted) return;
 
+    // CRITICAL: Prevent multiple executions
+    if (_completionHandled) {
+      debugPrint('⚠️ Phase end already handled');
+      return;
+    }
+
     if (!isPomodoro) {
-      setState(() => status = 'idle');
+      // Custom session end
       _timer?.cancel();
+      
+      // Mark completion handled
+      _completionHandled = true;
+      
+      setState(() => status = 'idle');
 
       if (_rikazConnected && _lightInitialized) {
         final String completeCommand = jsonEncode({'sessionComplete': 'true'});
         await RikazLightService.sendCommand(completeCommand);
-        
-        bool success = await RikazLightService.turnOff();
-        if (!success) {
-          print('❌ RIKAZ: Final turnOff failed due to connection loss.');
-        }
-        print('⚫ RIKAZ: Custom session ended - Light OFF');
+        await _debouncedLightOff();
+        debugPrint('⚫ Custom session ended');
       }
 
-      _endSessionInDB(completed: true);
+      await _endSessionInDB(completed: true);
+      
+      // Navigate away
+      if (mounted && !_isNavigatingAway) {
+        _isNavigatingAway = true;
+        Navigator.pushNamedAndRemoveUntil(context, '/tabs', (route) => false);
+      }
       return;
     }
 
+    // Pomodoro logic
     if (mode == 'focus') {
       if (!completedBlocks.contains(currentBlock)) {
         completedBlocks.add(currentBlock);
         _sendMotivationalMessage();
       }
       
-      // Check if this is the last block - if so, end the session instead of taking a break
+      // Check if this is the last block
       if (currentBlock >= totalBlocks) {
-        if (_rikazConnected && _lightInitialized) {
-          final String completeCommand = jsonEncode({'sessionComplete': 'true'});
-          await RikazLightService.sendCommand(completeCommand);
-          
-          bool success = await RikazLightService.turnOff();
-          if (!success) {
-            print('❌ RIKAZ: Final turnOff failed due to connection loss.');
-          }
-          print('⚫ RIKAZ: Pomodoro complete - Light OFF');
-        }
+        // Session complete
+        _timer?.cancel();
+        
+        // Mark completion handled
+        _completionHandled = true;
         
         setState(() {
           mode = 'focus';
-          currentBlock = 1;
-          completedBlocks.clear();
-          timeLeft = focusMinutes * 60;
           status = 'idle';
         });
-        _timer?.cancel();
 
-        _endSessionInDB(completed: true);
+        if (_rikazConnected && _lightInitialized) {
+          final String completeCommand = jsonEncode({'sessionComplete': 'true'});
+          await RikazLightService.sendCommand(completeCommand);
+          await _debouncedLightOff();
+          debugPrint('⚫ Pomodoro complete');
+        }
+        
+        await _endSessionInDB(completed: true);
+        
+        // Navigate away
+        if (mounted && !_isNavigatingAway) {
+          _isNavigatingAway = true;
+          Navigator.pushNamedAndRemoveUntil(context, '/tabs', (route) => false);
+        }
         return;
       }
       
-      // Not the last block, so take a break
+      // Not last block, take break
       setState(() {
         mode = 'break';
         timeLeft = breakMinutes * 60;
@@ -788,14 +825,12 @@ class _SessionPageState extends State<SessionPage>
           return; 
         }
         _sendTimerUpdateToESP32();
-        print('🟡 RIKAZ: Break started - Break light ON');
+        debugPrint('🟡 Break started');
       }
     } else {
-      // Break is over, move to next focus block
-      final next = currentBlock + 1;
-      
+      // Break over, next focus
       setState(() {
-        currentBlock = next;
+        currentBlock++;
         mode = 'focus';
         timeLeft = focusMinutes * 60;
       });
@@ -807,7 +842,7 @@ class _SessionPageState extends State<SessionPage>
           return; 
         }
         _sendTimerUpdateToESP32();
-        print('🔵 RIKAZ: Focus resumed - Focus light ON');
+        debugPrint('🔵 Focus resumed');
       }
     }
   }
@@ -824,14 +859,14 @@ class _SessionPageState extends State<SessionPage>
       setState(() { status = nextStatus; });
       pulseController.stop();
       _sendTimerUpdateToESP32();
-      print('⏸️ RIKAZ: Session manually paused (light remains ON)');
+      debugPrint('⏸️ Session paused');
     } else if (nextStatus == 'running') {
       await _handleLightAndResume();
     }
   }
 
   // ========================================================================
-  // QUIT SESSION HANDLER - UPDATED WITH 10 MINUTE WARNING
+  // QUIT SESSION HANDLER
   // ========================================================================
   void onQuit() {
     final String previousStatus = status;
@@ -868,9 +903,8 @@ class _SessionPageState extends State<SessionPage>
           ],
         ),
         content: Text(
-          // Updated message for 10-minute check
           belowMinimum 
-              ? 'You\'ve only focused for $actualFocusDurationMinutes minutes. Sessions under $minimumSessionMinutes minutes won\'t be saved for future analysis.\n\nAre you sure you want to quit?'
+              ? 'You\'ve only focused for $actualFocusDurationMinutes minutes. Sessions under $minimumSessionMinutes minutes won\'t be saved.\n\nAre you sure you want to quit?'
               : 'Are you sure you want to end this session? Your progress will be saved.',
           style: TextStyle(color: secondaryTextGrey, height: 1.4),
         ),
@@ -885,10 +919,7 @@ class _SessionPageState extends State<SessionPage>
                 }
               }
             },
-            child: Text(
-              'Continue Session',
-              style: TextStyle(color: secondaryTextGrey, fontWeight: FontWeight.w600),
-            ),
+            child: Text('Continue Session', style: TextStyle(color: secondaryTextGrey, fontWeight: FontWeight.w600)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -899,20 +930,19 @@ class _SessionPageState extends State<SessionPage>
               } catch (_) {}
 
               if (_rikazConnected && _lightInitialized) {
-                await RikazLightService.turnOff();
-                print('⚫ RIKAZ: Session quit - Light OFF');
+                await _debouncedLightOff();
               }
 
               Navigator.pop(dialogContext);
 
+              // Mark as handled before saving
+              _completionHandled = true;
+
               await _endSessionInDB(completed: false);
 
-              if (mounted) {
-                Navigator.pushNamedAndRemoveUntil(
-                  context,
-                  '/tabs',
-                  (route) => false,
-                );
+              if (mounted && !_isNavigatingAway) {
+                _isNavigatingAway = true;
+                Navigator.pushNamedAndRemoveUntil(context, '/tabs', (route) => false);
               }
             },
             style: ElevatedButton.styleFrom(
@@ -946,9 +976,8 @@ class _SessionPageState extends State<SessionPage>
     _timer?.cancel();
     _connectionCheckTimer?.cancel();
 
-    if (_rikazConnected && _lightInitialized) {
-      RikazLightService.turnOff();
-      print('⚫ RIKAZ: Session disposed - Light OFF');
+    if (_rikazConnected && _lightInitialized && !_completionHandled) {
+      _debouncedLightOff();
     }
 
     try {
@@ -965,13 +994,13 @@ class _SessionPageState extends State<SessionPage>
   Color get backgroundColor {
     if (status == 'paused') return pausedBgColor;
     if (mode == 'break') return const Color.fromARGB(255, 247, 181, 0);
-    return focusBgColor; // Now dfDeepTeal (darker background)
+    return focusBgColor;
   }
 
   Color get ringColor {
     if (status == 'paused') return pausedBgColor.withOpacity(0.6);
     if (mode == 'break') return const Color.fromARGB(255, 255, 169, 8);
-    return accentThemeColor; // Using accentThemeColor (lighter teal) for better contrast
+    return accentThemeColor;
   }
 
   // ========================================================================
@@ -990,12 +1019,8 @@ class _SessionPageState extends State<SessionPage>
     return Scaffold(
       body: Stack(
         children: [
-          // Top colored section (full background)
-          Container(
-            color: backgroundColor,
-          ),
+          Container(color: backgroundColor),
           
-          // Bottom white section with fully circular/rounded top
           Positioned(
             top: screenHeight * 0.38,
             left: -screenWidth * 0.5,
@@ -1019,16 +1044,13 @@ class _SessionPageState extends State<SessionPage>
             ),
           ),
 
-          // Main scrollable content
           SafeArea(
             child: Column(
               children: [
-                // Fixed top section with timer and buttons
                 Column(
                   children: [
                     SizedBox(height: screenHeight * 0.05),
 
-                    // Session Type Label
                     Container(
                       padding: EdgeInsets.symmetric(
                         horizontal: screenWidth * 0.04,
@@ -1052,11 +1074,9 @@ class _SessionPageState extends State<SessionPage>
 
                     SizedBox(height: screenHeight * 0.04),
 
-                    // Circular Timer with enhanced shadow
                     Stack(
                       alignment: Alignment.center,
                       children: [
-                        // Outer white circle with shadow
                         Container(
                           width: timerDiameter,
                           height: timerDiameter,
@@ -1073,7 +1093,6 @@ class _SessionPageState extends State<SessionPage>
                             ],
                           ),
                         ),
-                        // Progress ring
                         SizedBox(
                           width: timerDiameter * 0.92,
                           height: timerDiameter * 0.92,
@@ -1084,48 +1103,37 @@ class _SessionPageState extends State<SessionPage>
                             ),
                           ),
                         ),
-                        // Time and info
                         Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(
-                              formatTime(timeLeft),
-                              style: TextStyle(
-                                fontSize: screenWidth * 0.13,
-                                fontWeight: FontWeight.w600,
-                                color: primaryTextDark,
-                                letterSpacing: 2,
-                              ),
-                            ),
+                            Text(formatTime(timeLeft), style: TextStyle(
+                              fontSize: screenWidth * 0.13,
+                              fontWeight: FontWeight.w600,
+                              color: primaryTextDark,
+                              letterSpacing: 2,
+                            )),
                             SizedBox(height: screenHeight * 0.01),
-                            // Block counter for Pomodoro
                             if (isPomodoro && !isBreak)
-                              Text(
-                                '$currentBlock/$totalBlocks Sessions',
+                              Text('$currentBlock/$totalBlocks Sessions',
                                 style: TextStyle(
                                   fontSize: screenWidth * 0.036,
                                   color: secondaryTextGrey,
                                   fontWeight: FontWeight.w500,
-                                ),
-                              )
+                                ))
                             else if (isBreak)
-                              Text(
-                                'Take a rest',
+                              Text('Take a rest',
                                 style: TextStyle(
                                   fontSize: screenWidth * 0.036,
                                   color: secondaryTextGrey,
                                   fontWeight: FontWeight.w500,
-                                ),
-                              )
+                                ))
                             else
-                              Text(
-                                'Stay focused',
+                              Text('Stay focused',
                                 style: TextStyle(
                                   fontSize: screenWidth * 0.036,
                                   color: secondaryTextGrey,
                                   fontWeight: FontWeight.w500,
-                                ),
-                              ),
+                                )),
                           ],
                         ),
                       ],
@@ -1133,10 +1141,9 @@ class _SessionPageState extends State<SessionPage>
 
                     SizedBox(height: screenHeight * 0.04),
 
-                    // Control Buttons - Only Pause/Resume button shown
                     Container(
                       decoration: BoxDecoration(
-                        color: isPaused ? pausedBgColor : accentThemeColor, // accentThemeColor when running, gray when paused
+                        color: isPaused ? pausedBgColor : accentThemeColor,
                         borderRadius: BorderRadius.circular(30),
                         boxShadow: [
                           BoxShadow(
@@ -1159,20 +1166,15 @@ class _SessionPageState extends State<SessionPage>
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(
-                                  isPaused ? Icons.play_arrow : Icons.pause,
-                                  color: Colors.white,
-                                  size: screenWidth * 0.06,
-                                ),
+                                Icon(isPaused ? Icons.play_arrow : Icons.pause,
+                                  color: Colors.white, size: screenWidth * 0.06),
                                 SizedBox(width: screenWidth * 0.02),
-                                Text(
-                                  isPaused ? 'Resume' : 'Pause',
+                                Text(isPaused ? 'Resume' : 'Pause',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
                                     fontSize: screenWidth * 0.04,
-                                  ),
-                                ),
+                                  )),
                               ],
                             ),
                           ),
@@ -1182,7 +1184,6 @@ class _SessionPageState extends State<SessionPage>
 
                     SizedBox(height: screenHeight * 0.02),
 
-                    // End Session Button
                     Container(
                       decoration: BoxDecoration(
                         color: errorIndicatorRed,
@@ -1208,20 +1209,13 @@ class _SessionPageState extends State<SessionPage>
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(
-                                  Icons.close,
-                                  color: Colors.white,
-                                  size: screenWidth * 0.05,
-                                ),
+                                Icon(Icons.close, color: Colors.white, size: screenWidth * 0.05),
                                 SizedBox(width: screenWidth * 0.015),
-                                Text(
-                                  'End Session',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: screenWidth * 0.04,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+                                Text('End Session', style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: screenWidth * 0.04,
+                                  fontWeight: FontWeight.bold,
+                                )),
                               ],
                             ),
                           ),
@@ -1233,7 +1227,6 @@ class _SessionPageState extends State<SessionPage>
                   ],
                 ),
 
-                // Sound Section - scrollable if needed
                 Expanded(
                   child: SingleChildScrollView(
                     child: Padding(
@@ -1285,8 +1278,6 @@ class _ProgressRingPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     const strokeWidth = 12.0;
-    final rect = Offset.zero & size;
-
     final paint = Paint()
       ..color = color
       ..strokeCap = StrokeCap.round
@@ -1319,11 +1310,8 @@ class _ProgressRingPainter extends CustomPainter {
 // SOUND OPTIONS MODEL
 // ============================================================================
 class SoundOption {
-  final String id;
-  final String name;
+  final String id, name, iconName, colorHex;
   final String? filePathUrl;
-  final String iconName;
-  final String colorHex;
 
   SoundOption({
     required this.id,
@@ -1333,27 +1321,18 @@ class SoundOption {
     required this.colorHex,
   });
 
-  factory SoundOption.off() {
-    return SoundOption(
-      id: 'off',
-      name: 'No Sound',
-      filePathUrl: null,
-      iconName: 'volume_off_rounded',
-      colorHex: '#64748B',
-    );
-  }
+  factory SoundOption.off() => SoundOption(
+    id: 'off', name: 'No Sound', filePathUrl: null,
+    iconName: 'volume_off_rounded', colorHex: '#64748B',
+  );
 
   IconData get icon {
-    switch (iconName) {
-      case 'water_drop_outlined':
-        return Icons.water_drop_outlined;
-      case 'water_rounded':
-        return Icons.water_rounded;
-      case 'waves_rounded':
-        return Icons.waves_rounded;
-      default:
-        return Icons.volume_off_rounded;
-    }
+    const iconMap = {
+      'water_drop_outlined': Icons.water_drop_outlined,
+      'water_rounded': Icons.water_rounded,
+      'waves_rounded': Icons.waves_rounded,
+    };
+    return iconMap[iconName] ?? Icons.volume_off_rounded;
   }
 
   Color get color {
@@ -1363,7 +1342,7 @@ class SoundOption {
 }
 
 // ============================================================================
-// SOUND CONTROL SECTION - UPDATED TO AUTO-PLAY PRESELECTED SOUND
+// SOUND CONTROL SECTION
 // ============================================================================
 class SoundSection extends StatefulWidget {
   final String? preselectedSoundId;
@@ -1394,13 +1373,6 @@ class _SoundSectionState extends State<SoundSection> {
     super.initState();
     _audioPlayer.setReleaseMode(ReleaseMode.loop);
     
-    // Debug logging
-    print('🎵 SoundSection init:');
-    print('   - preselectedSoundId: ${widget.preselectedSoundId}');
-    print('   - preselectedSoundName: ${widget.preselectedSoundName}');
-    print('   - preselectedSoundUrl: ${widget.preselectedSoundUrl}');
-    
-    // Initialize with preselected sound or off
     if (widget.preselectedSoundId != null && 
         widget.preselectedSoundId != 'off' &&
         widget.preselectedSoundUrl != null) {
@@ -1412,9 +1384,6 @@ class _SoundSectionState extends State<SoundSection> {
         colorHex: '#287C85',
       );
       
-      print('🎵 Initialized with sound: ${_currentSound.name}');
-      
-      // Auto-play the preselected sound
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted && !_hasAutoPlayed) {
           _autoPlayPreselectedSound();
@@ -1422,7 +1391,6 @@ class _SoundSectionState extends State<SoundSection> {
       });
     } else {
       _currentSound = SoundOption.off();
-      print('🎵 Initialized with no sound (off)');
     }
     
     _soundsFuture = _fetchSoundsFromDB();
@@ -1441,9 +1409,9 @@ class _SoundSectionState extends State<SoundSection> {
           _hasAutoPlayed = true;
         });
       }
-      print('🎵 AUTO-PLAY: Started playing ${_currentSound.name}');
+      debugPrint('🎵 AUTO-PLAY: ${_currentSound.name}');
     } catch (e) {
-      print('❌ Error auto-playing sound: $e');
+      debugPrint('❌ Error auto-playing: $e');
       if (mounted) {
         setState(() {
           _currentSound = SoundOption.off();
@@ -1480,22 +1448,19 @@ class _SoundSectionState extends State<SoundSection> {
         ));
       }
 
-      // Update current sound with proper icon and color if it matches fetched data
       if (_currentSound.id != 'off') {
         final matchingSound = fetchedSounds.firstWhere(
           (s) => s.id == _currentSound.id,
           orElse: () => _currentSound,
         );
         if (mounted && matchingSound.id == _currentSound.id) {
-          setState(() {
-            _currentSound = matchingSound;
-          });
+          setState(() => _currentSound = matchingSound);
         }
       }
 
       return fetchedSounds;
     } catch (e) {
-      print('❌ Error fetching sounds: $e');
+      debugPrint('❌ Error fetching sounds: $e');
       return [SoundOption.off()];
     }
   }
@@ -1518,9 +1483,8 @@ class _SoundSectionState extends State<SoundSection> {
           _isSoundPlaying = true;
           _isExpanded = false;
         });
-        print('🎵 Playing: ${selectedSound.name}');
       } catch (e) {
-        print('Error playing sound from URL: $e');
+        debugPrint('Error playing: $e');
         setState(() {
           _currentSound = SoundOption.off();
           _isSoundPlaying = false;
@@ -1535,27 +1499,18 @@ class _SoundSectionState extends State<SoundSection> {
 
     if (_isSoundPlaying) {
       await _audioPlayer.pause();
-      if (mounted) {
-        setState(() => _isSoundPlaying = false);
-      }
-      print('⏸️ Paused: ${_currentSound.name}');
+      if (mounted) setState(() => _isSoundPlaying = false);
     } else {
       await _audioPlayer.resume();
-      if (mounted) {
-        setState(() => _isSoundPlaying = true);
-      }
-      print('▶️ Resumed: ${_currentSound.name}');
+      if (mounted) setState(() => _isSoundPlaying = true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-
-    // Always show current sound's icon and color if it's not 'off'
     final displayIcon = _currentSound.id != 'off' ? _currentSound.icon : Icons.volume_off_rounded;
     final displayColor = _currentSound.id != 'off' ? _currentSound.color : secondaryTextGrey;
-    // Show actual sound name when a sound is selected (not 'off'), otherwise show "Background Sound"
     final String displayText = _currentSound.id != 'off' && _currentSound.name.isNotEmpty
         ? _currentSound.name
         : 'Background Sound';
@@ -1566,9 +1521,7 @@ class _SoundSectionState extends State<SoundSection> {
         InkWell(
           onTap: () {
             if (!mounted) return;
-            setState(() {
-              _isExpanded = !_isExpanded;
-            });
+            setState(() => _isExpanded = !_isExpanded);
           },
           borderRadius: BorderRadius.circular(16),
           child: Row(
@@ -1580,22 +1533,15 @@ class _SoundSectionState extends State<SoundSection> {
                   borderRadius: BorderRadius.circular(8),
                   color: displayColor.withOpacity(0.1),
                 ),
-                child: Icon(
-                  displayIcon,
-                  color: displayColor,
-                  size: screenWidth * 0.045,
-                ),
+                child: Icon(displayIcon, color: displayColor, size: screenWidth * 0.045),
               ),
               SizedBox(width: screenWidth * 0.03),
               Expanded(
-                child: Text(
-                  displayText,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: primaryTextDark,
-                    fontSize: screenWidth * 0.04,
-                  ),
-                ),
+                child: Text(displayText, style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: primaryTextDark,
+                  fontSize: screenWidth * 0.04,
+                )),
               ),
               if (_currentSound.id != 'off')
                 IconButton(
@@ -1616,14 +1562,13 @@ class _SoundSectionState extends State<SoundSection> {
         ),
         AnimatedCrossFade(
           duration: const Duration(milliseconds: 300),
-          crossFadeState:
-              _isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+          crossFadeState: _isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
           firstChild: const SizedBox.shrink(),
           secondChild: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               SizedBox(height: 8),
-              Divider(height: 1, color: secondaryTextGrey.withOpacity(0.2), thickness: 1),
+              Divider(height: 1, color: secondaryTextGrey.withOpacity(0.2)),
               FutureBuilder<List<SoundOption>>(
                 future: _soundsFuture,
                 builder: (context, snapshot) {
@@ -1633,36 +1578,27 @@ class _SoundSectionState extends State<SoundSection> {
                       child: Center(child: CircularProgressIndicator(color: accentThemeColor)),
                     );
                   }
-                  if (snapshot.hasError) {
+                  if (snapshot.hasError || !snapshot.hasData) {
                     return Padding(
                       padding: EdgeInsets.all(screenWidth * 0.04),
-                      child: Center(
-                        child: Text(
-                          'Could not load sounds',
-                          style: TextStyle(color: secondaryTextGrey),
-                        ),
-                      ),
+                      child: Center(child: Text('Could not load sounds', style: TextStyle(color: secondaryTextGrey))),
                     );
                   }
-                  if (snapshot.hasData) {
-                    final sounds = snapshot.data!;
-                    return ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: sounds.length,
-                      itemBuilder: (context, index) {
-                        final sound = sounds[index];
-                        final bool isThisOneSelected =
-                            sound.id == _currentSound.id && _isSoundPlaying;
-                        return _SoundRow(
-                          sound: sound,
-                          isSelected: isThisOneSelected,
-                          onTap: () => _onSoundSelected(sound),
-                        );
-                      },
-                    );
-                  }
-                  return const SizedBox.shrink();
+                  final sounds = snapshot.data!;
+                  return ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: sounds.length,
+                    itemBuilder: (context, index) {
+                      final sound = sounds[index];
+                      final isSelected = sound.id == _currentSound.id && _isSoundPlaying;
+                      return _SoundRow(
+                        sound: sound,
+                        isSelected: isSelected,
+                        onTap: () => _onSoundSelected(sound),
+                      );
+                    },
+                  );
                 },
               ),
             ],
@@ -1678,11 +1614,7 @@ class _SoundRow extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
 
-  const _SoundRow({
-    required this.sound,
-    required this.isSelected,
-    required this.onTap,
-  });
+  const _SoundRow({required this.sound, required this.isSelected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1701,29 +1633,18 @@ class _SoundRow extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
                 color: sound.color.withOpacity(0.1),
               ),
-              child: Icon(
-                sound.icon,
-                color: sound.color,
-                size: screenWidth * 0.045,
-              ),
+              child: Icon(sound.icon, color: sound.color, size: screenWidth * 0.045),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(
-                sound.name,
-                style: TextStyle(
-                  fontWeight: FontWeight.w500,
-                  color: primaryTextDark,
-                  fontSize: screenWidth * 0.037,
-                ),
-              ),
+              child: Text(sound.name, style: TextStyle(
+                fontWeight: FontWeight.w500,
+                color: primaryTextDark,
+                fontSize: screenWidth * 0.037,
+              )),
             ),
             if (isSelected)
-              Icon(
-                Icons.check_circle,
-                color: accentThemeColor,
-                size: screenWidth * 0.05,
-              ),
+              Icon(Icons.check_circle, color: accentThemeColor, size: screenWidth * 0.05),
           ],
         ),
       ),

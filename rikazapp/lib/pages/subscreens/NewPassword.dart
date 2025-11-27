@@ -406,16 +406,7 @@ class _NewPasswordState extends State<NewPassword> {
                   ),
                 ),
 
-              TextButton(
-                onPressed: _goBackToLogin,
-                child: const Text(
-                  'Cancel and return to login',
-                  style: TextStyle(
-                    color: secondaryTextGrey,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
+             
             ],
           ),
         ),
