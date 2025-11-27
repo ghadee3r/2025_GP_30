@@ -19,10 +19,11 @@ Unlike traditional focus apps, Rikaz combines **AI-based distraction detection**
 Rikaz uses a combination of software and hardware tools:  
 
 **Software Stack**  
-- **React Native** – Mobile application framework (JavaScript).  
+
 - **TensorFlow / Roboflow** – Machine learning and computer vision.  
 - **Google Calendar API** – Session scheduling and reminders.  
-- **SQLite / Backend server** – Data storage and synchronization.  
+- **Flutter (Dart)** - UI 
+- **Supabase** - database, auth, and security
 - **Arduino IDE + WLED** – Hardware programming and LED control.  
 - **GitHub** – Version control and collaboration.  
 - **Jira & Confluence** – Project management and documentation.  
@@ -57,3 +58,10 @@ Rikaz uses a combination of software and hardware tools:
 (Ensure Android Studio and Android SDK are installed).
 
 
+
+---
+## Students Names:
+- Ghadeer Alnuwaysir, 444200420
+- Rana Albridi, 444201094
+- Noha Alrasheed, 443200837
+- Raseel Alluhaib, 444200585
