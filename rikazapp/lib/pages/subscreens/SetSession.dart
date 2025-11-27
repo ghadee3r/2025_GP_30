@@ -130,7 +130,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
   // Session configuration
   late SessionMode sessionMode;
   String pomodoroDuration = '25min';
-  double numberOfBlocks = 4;
+  double numberOfBlocks = 0; // Changed default to 0
   double customDuration = 70;
 
   // Session settings
@@ -138,6 +138,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
   double sensitivity = 0.5;
   String notificationStyle = 'Both';
   bool isConfigurationOpen = false;
+  bool _blocksFieldError = false; // New validation state
   
   // Sound selection
   SoundOption _selectedSound = SoundOption.off();
@@ -156,6 +157,8 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
   bool _hasShownDisconnectWarning = false;
 
   final GlobalKey<SlideActionState> _slideKey = GlobalKey<SlideActionState>();
+  final ScrollController _scrollController = ScrollController(); // New scroll controller
+  final GlobalKey _blocksCounterKey = GlobalKey(); // Key for blocks counter widget
   
   // Pulse animation
   late AnimationController _pulseController;
@@ -229,6 +232,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     _audioPlayer.stop();
     _audioPlayer.dispose();
     _pulseController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
   
@@ -305,11 +309,32 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     return _Constants.soundColors[soundName] ?? _Constants.soundColors['default']!;
   }
 
+  // Scroll to blocks counter field
+  void _scrollToBlocksCounter() {
+    if (_blocksCounterKey.currentContext != null) {
+      Scrollable.ensureVisible(
+        _blocksCounterKey.currentContext!,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+        alignment: 0.3,
+      );
+    }
+  }
+
   // =============================================================================
   // SESSION START HANDLING
   // =============================================================================
 
   void handleStartSessionPress() {
+    // Validate number of blocks for Pomodoro mode
+    if (sessionMode == SessionMode.pomodoro && numberOfBlocks == 0) {
+      setState(() {
+        _blocksFieldError = true;
+      });
+      _scrollToBlocksCounter();
+      return;
+    }
+    
     if (!isRikazToolConnected) {
       _showDialog(
         title: 'Hardware Not Connected',
@@ -854,6 +879,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
 
   Widget _buildBlocksCounter() {
     return Column(
+      key: _blocksCounterKey, // Key for scrolling to this widget
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildIconLabel(
@@ -862,7 +888,8 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
           iconColor: accentThemeColor,
         ),
         SizedBox(height: mediumGap),
-        Container(
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
           width: double.infinity,
           padding: EdgeInsets.symmetric(
             horizontal: _screenWidth * 0.025, 
@@ -871,28 +898,45 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
           decoration: BoxDecoration(
             color: cardBackground,
             borderRadius: BorderRadius.circular(cardBorderRadius),
-            border: Border.all(color: secondaryTextGrey.withOpacity(0.2), width: 1.5),
+            border: Border.all(
+              color: _blocksFieldError ? errorIndicatorRed : secondaryTextGrey.withOpacity(0.2),
+              width: _blocksFieldError ? 2.0 : 1.5,
+            ),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _buildCircularIconButton(
                 icon: Icons.remove_rounded,
-                onPressed: numberOfBlocks > _Constants.minPomodoroBlocks 
-                  ? () => setState(() => numberOfBlocks--) 
+                onPressed: numberOfBlocks > 1 
+                  ? () {
+                      setState(() {
+                        numberOfBlocks--;
+                      });
+                    }
                   : null,
                 size: _screenWidth * 0.11,
               ),
-              Text(numberOfBlocks.toInt().toString(), style: TextStyle(
-                fontSize: _adaptiveFontSize(0.14),
-                fontWeight: FontWeight.w500,
-                color: primaryTextDark,
-                height: 1.1,
-              )),
+              Text(
+                numberOfBlocks == 0 ? '-' : numberOfBlocks.toInt().toString(), 
+                style: TextStyle(
+                  fontSize: _adaptiveFontSize(0.14),
+                  fontWeight: FontWeight.w500,
+                  color: _blocksFieldError ? errorIndicatorRed : primaryTextDark,
+                  height: 1.1,
+                )
+              ),
               _buildCircularIconButton(
                 icon: Icons.add_rounded,
                 onPressed: numberOfBlocks < _Constants.maxPomodoroBlocks 
-                  ? () => setState(() => numberOfBlocks++) 
+                  ? () {
+                      setState(() {
+                        numberOfBlocks++;
+                        if (numberOfBlocks > 0) {
+                          _blocksFieldError = false;
+                        }
+                      });
+                    }
                   : null,
                 size: _screenWidth * 0.11,
               ),
@@ -904,11 +948,24 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
           padding: EdgeInsets.only(left: _screenWidth * 0.01),
           child: Row(
             children: [
-              Icon(Icons.info_outline_rounded, 
-                color: accentThemeColor, 
-                size: _adaptiveFontSize(0.035)),
+              Icon(
+                _blocksFieldError ? Icons.error_outline : Icons.info_outline_rounded, 
+                color: _blocksFieldError ? errorIndicatorRed : accentThemeColor, 
+                size: _adaptiveFontSize(0.035)
+              ),
               SizedBox(width: _screenWidth * 0.012),
-              Expanded(child: Text('One block = focus session + break', style: captionStyle)),
+              Expanded(
+                child: Text(
+                  _blocksFieldError 
+                      ? 'Please select number of blocks to continue'
+                      : 'One block = focus session + break', 
+                  style: TextStyle(
+                    fontSize: _adaptiveFontSize(0.029),
+                    color: _blocksFieldError ? errorIndicatorRed : secondaryTextGrey,
+                    fontWeight: FontWeight.w500,
+                  )
+                )
+              ),
             ],
           ),
         ),
@@ -1252,7 +1309,15 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     final isSelected = sessionMode == mode;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => sessionMode = mode),
+        onTap: () {
+          setState(() {
+            sessionMode = mode;
+            // Reset error state when switching modes
+            if (mode == SessionMode.custom) {
+              _blocksFieldError = false;
+            }
+          });
+        },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           padding: EdgeInsets.symmetric(vertical: _screenHeight * 0.013),
@@ -1440,6 +1505,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
         child: Stack(
           children: [
             SingleChildScrollView(
+              controller: _scrollController,
               padding: EdgeInsets.only(
                 left: proportionalHorizontalPadding,
                 right: proportionalHorizontalPadding,
