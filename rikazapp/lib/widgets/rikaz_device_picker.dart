@@ -1,7 +1,7 @@
 // ============================================================================
 // FILE: rikaz_device_picker.dart
 // PURPOSE: UI for scanning and selecting Rikaz devices
-// UPDATED: Matching SetSession theme
+// UPDATED: Fixed overflow, made flexible and compact
 // ============================================================================
 
 import 'package:flutter/material.dart';
@@ -89,8 +89,7 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
                 '• Device is powered on\n'
                 '• Bluetooth is enabled\n'
                 '• Device is nearby\n'
-                '• Location is ON\n\n'
-                'Device name: "Rikaz-Light"';
+                '• Location is ON';
           }
         });
       }
@@ -119,7 +118,7 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
           borderRadius: BorderRadius.circular(cardBorderRadius),
         ),
         child: Padding(
-          padding: EdgeInsets.all(24),
+          padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -127,11 +126,11 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
                 color: accentThemeColor,
                 strokeWidth: 3,
               ),
-              SizedBox(height: 20),
+              const SizedBox(height: 16),
               Text(
                 'Connecting to ${device.name}...',
-                style: TextStyle(
-                  fontSize: 16,
+                style: const TextStyle(
+                  fontSize: 15,
                   fontWeight: FontWeight.w600,
                   color: primaryTextDark,
                 ),
@@ -155,8 +154,8 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
           SnackBar(
             content: Row(
               children: [
-                Icon(Icons.error_outline, color: Colors.white),
-                SizedBox(width: 12),
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Text('Failed to connect to ${device.name}'),
                 ),
@@ -183,151 +182,175 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
         borderRadius: BorderRadius.circular(cardBorderRadius),
       ),
       backgroundColor: cardBackground,
-      child: Container(
+      child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxHeight: screenHeight * 0.7,
-          maxWidth: screenWidth * 0.9,
+          maxHeight: screenHeight * 0.65,
+          maxWidth: screenWidth * 0.85,
         ),
-        padding: EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             // Header
-            Row(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: accentThemeColor.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    Icons.bluetooth_searching,
-                    color: accentThemeColor,
-                    size: 28,
-                  ),
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Select Rikaz Device',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: primaryTextDark,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 12, 16),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: accentThemeColor.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                  ),
-                ),
-                IconButton(
-                  icon: Icon(Icons.close, color: secondaryTextGrey),
-                  onPressed: () => Navigator.pop(context),
-                  tooltip: 'Close',
-                ),
-              ],
-            ),
-            SizedBox(height: 20),
-
-            // Scanning indicator
-            if (_isScanning)
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Column(
-                  children: [
-                    CircularProgressIndicator(
+                    child: const Icon(
+                      Icons.bluetooth_searching,
                       color: accentThemeColor,
-                      strokeWidth: 3,
+                      size: 24,
                     ),
-                    SizedBox(height: 16),
-                    Text(
-                      'Scanning for devices...',
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Select Rikaz Device',
                       style: TextStyle(
-                        color: secondaryTextGrey,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: primaryTextDark,
                       ),
                     ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: secondaryTextGrey, size: 22),
+                    onPressed: () => Navigator.pop(context),
+                    tooltip: 'Close',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+            ),
+
+            const Divider(height: 1, thickness: 1),
+
+            // Content area - scrollable
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Scanning indicator
+                    if (_isScanning)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        child: Column(
+                          children: [
+                            CircularProgressIndicator(
+                              color: accentThemeColor,
+                              strokeWidth: 3,
+                            ),
+                            const SizedBox(height: 14),
+                            const Text(
+                              'Scanning for devices...',
+                              style: TextStyle(
+                                color: secondaryTextGrey,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    // Error message
+                    if (_errorMessage != null && !_isScanning)
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Colors.orange.shade50,
+                              Colors.orange.shade100.withOpacity(0.3),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.orange.shade300,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.warning_amber_rounded,
+                              color: Colors.orange.shade700,
+                              size: 32,
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              _errorMessage!,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.orange.shade900,
+                                fontSize: 13,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    // Device list
+                    if (_devices.isNotEmpty && !_isScanning)
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _devices.length,
+                        separatorBuilder: (context, index) => const SizedBox(height: 10),
+                        itemBuilder: (context, index) {
+                          final device = _devices[index];
+                          return _buildDeviceTile(device);
+                        },
+                      ),
                   ],
                 ),
               ),
+            ),
 
-            // Error message
-            if (_errorMessage != null && !_isScanning)
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Container(
-                    padding: EdgeInsets.all(16),
-                    margin: EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Colors.orange.shade50,
-                          Colors.orange.shade100.withOpacity(0.3),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.orange.shade300,
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.warning_amber_rounded,
-                          color: Colors.orange.shade700,
-                          size: 40,
-                        ),
-                        SizedBox(height: 12),
-                        Text(
-                          _errorMessage!,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.orange.shade900,
-                            fontSize: 14,
-                            height: 1.4,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-            // Device list
-            if (_devices.isNotEmpty && !_isScanning)
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _devices.length,
-                  itemBuilder: (context, index) {
-                    final device = _devices[index];
-                    return _buildDeviceTile(device, screenWidth);
-                  },
-                ),
-              ),
-
-            // Scan again button
+            // Bottom button area
             if (!_isScanning)
-              Padding(
-                padding: EdgeInsets.only(top: 16),
-                child: OutlinedButton.icon(
-                  onPressed: _startScan,
-                  icon: Icon(Icons.refresh, size: 20),
-                  label: Text(
-                    'Scan Again',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
+              Container(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(
+                      color: secondaryTextGrey.withOpacity(0.2),
+                      width: 1,
                     ),
                   ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: accentThemeColor,
-                    side: BorderSide(color: accentThemeColor, width: 1.5),
-                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _startScan,
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text(
+                      'Scan Again',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: accentThemeColor,
+                      side: const BorderSide(color: accentThemeColor, width: 1.5),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                 ),
@@ -338,7 +361,7 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
     );
   }
 
-  Widget _buildDeviceTile(RikazDevice device, double screenWidth) {
+  Widget _buildDeviceTile(RikazDevice device) {
     int signalBars = 0;
     if (device.rssi > -60) signalBars = 4;
     else if (device.rssi > -70) signalBars = 3;
@@ -346,11 +369,16 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
     else signalBars = 1;
 
     return Container(
-      margin: EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: cardBackground,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: subtleShadow,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(
+            color: dfNavyIndigo.withOpacity(0.06),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
         border: Border.all(
           color: accentThemeColor.withOpacity(0.2),
           width: 1,
@@ -360,14 +388,14 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
         color: Colors.transparent,
         child: InkWell(
           onTap: () => _connectToDevice(device),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           child: Padding(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),
             child: Row(
               children: [
                 // Device icon
                 Container(
-                  padding: EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
@@ -377,42 +405,44 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
                         accentThemeColor.withOpacity(0.7),
                       ],
                     ),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(
+                  child: const Icon(
                     Icons.lightbulb_rounded,
                     color: Colors.white,
-                    size: 28,
+                    size: 22,
                   ),
                 ),
-                SizedBox(width: 16),
+                const SizedBox(width: 12),
 
                 // Device info
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         device.name,
-                        style: TextStyle(
-                          fontSize: 16,
+                        style: const TextStyle(
+                          fontSize: 15,
                           fontWeight: FontWeight.bold,
                           color: primaryTextDark,
                         ),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 3),
                       Row(
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.signal_cellular_alt,
-                            size: 14,
+                            size: 12,
                             color: secondaryTextGrey,
                           ),
-                          SizedBox(width: 4),
+                          const SizedBox(width: 4),
                           Text(
                             '${device.rssi} dBm',
-                            style: TextStyle(
-                              fontSize: 13,
+                            style: const TextStyle(
+                              fontSize: 12,
                               color: secondaryTextGrey,
                               fontWeight: FontWeight.w500,
                             ),
@@ -425,11 +455,12 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
 
                 // Signal strength bars
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: List.generate(4, (index) {
                     return Container(
-                      width: 4,
-                      height: 8 + (index * 4.0),
-                      margin: EdgeInsets.symmetric(horizontal: 1.5),
+                      width: 3,
+                      height: 6 + (index * 3.5),
+                      margin: const EdgeInsets.symmetric(horizontal: 1.5),
                       decoration: BoxDecoration(
                         color: index < signalBars 
                           ? accentThemeColor
@@ -439,10 +470,10 @@ class _RikazDevicePickerState extends State<RikazDevicePicker> {
                     );
                   }),
                 ),
-                SizedBox(width: 12),
-                Icon(
+                const SizedBox(width: 8),
+                const Icon(
                   Icons.arrow_forward_ios,
-                  size: 16,
+                  size: 14,
                   color: secondaryTextGrey,
                 ),
               ],
