@@ -706,17 +706,17 @@ class _SessionPageState extends State<SessionPage>
         return;
       }
 
-      if (timeLeft <= 1) {
+      setState(() {
+        timeLeft--;
+        if (mode == 'focus') {
+          _totalFocusSeconds++;
+        }
+      });
+      
+      _sendTimerUpdateToESP32();
+
+      if (timeLeft <= 0) {
         onPhaseEnd();
-      } else {
-        setState(() {
-          timeLeft--;
-          if (mode == 'focus') {
-            _totalFocusSeconds++;
-          }
-        });
-        
-        _sendTimerUpdateToESP32();
       }
     });
   }
@@ -749,24 +749,8 @@ class _SessionPageState extends State<SessionPage>
         _sendMotivationalMessage();
       }
       
-      setState(() {
-        mode = 'break';
-        timeLeft = breakMinutes * 60;
-      });
-
-      if (_rikazConnected && _lightInitialized) {
-        bool success = await RikazLightService.setBreakLight();
-        if (mounted && !success) {
-          _handleLightCommandFailure();
-          return; 
-        }
-        _sendTimerUpdateToESP32();
-        print('🟡 RIKAZ: Break started - Break light ON');
-      }
-    } else {
-      final next = currentBlock + 1;
-      
-      if (next > totalBlocks) {
+      // Check if this is the last block - if so, end the session instead of taking a break
+      if (currentBlock >= totalBlocks) {
         if (_rikazConnected && _lightInitialized) {
           final String completeCommand = jsonEncode({'sessionComplete': 'true'});
           await RikazLightService.sendCommand(completeCommand);
@@ -788,22 +772,42 @@ class _SessionPageState extends State<SessionPage>
         _timer?.cancel();
 
         _endSessionInDB(completed: true);
-      } else {
-        setState(() {
-          currentBlock = next;
-          mode = 'focus';
-          timeLeft = focusMinutes * 60;
-        });
+        return;
+      }
+      
+      // Not the last block, so take a break
+      setState(() {
+        mode = 'break';
+        timeLeft = breakMinutes * 60;
+      });
 
-        if (_rikazConnected && _lightInitialized) {
-          bool success = await RikazLightService.setFocusLight();
-          if (mounted && !success) {
-            _handleLightCommandFailure();
-            return; 
-          }
-          _sendTimerUpdateToESP32();
-          print('🔵 RIKAZ: Focus resumed - Focus light ON');
+      if (_rikazConnected && _lightInitialized) {
+        bool success = await RikazLightService.setBreakLight();
+        if (mounted && !success) {
+          _handleLightCommandFailure();
+          return; 
         }
+        _sendTimerUpdateToESP32();
+        print('🟡 RIKAZ: Break started - Break light ON');
+      }
+    } else {
+      // Break is over, move to next focus block
+      final next = currentBlock + 1;
+      
+      setState(() {
+        currentBlock = next;
+        mode = 'focus';
+        timeLeft = focusMinutes * 60;
+      });
+
+      if (_rikazConnected && _lightInitialized) {
+        bool success = await RikazLightService.setFocusLight();
+        if (mounted && !success) {
+          _handleLightCommandFailure();
+          return; 
+        }
+        _sendTimerUpdateToESP32();
+        print('🔵 RIKAZ: Focus resumed - Focus light ON');
       }
     }
   }
@@ -1129,100 +1133,52 @@ class _SessionPageState extends State<SessionPage>
 
                     SizedBox(height: screenHeight * 0.04),
 
-                    // Control Buttons
-                    if (!isBreak)
-                      Container(
-                        decoration: BoxDecoration(
-                          color: isPaused ? pausedBgColor : accentThemeColor, // accentThemeColor when running, gray when paused
-                          borderRadius: BorderRadius.circular(30),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(30),
-                            onTap: onPauseResume,
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: screenWidth * 0.08,
-                                vertical: screenWidth * 0.038,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    isPaused ? Icons.play_arrow : Icons.pause,
-                                    color: Colors.white,
-                                    size: screenWidth * 0.06,
-                                  ),
-                                  SizedBox(width: screenWidth * 0.02),
-                                  Text(
-                                    isPaused ? 'Resume' : 'Pause',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: screenWidth * 0.04,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                    // Control Buttons - Only Pause/Resume button shown
+                    Container(
+                      decoration: BoxDecoration(
+                        color: isPaused ? pausedBgColor : accentThemeColor, // accentThemeColor when running, gray when paused
+                        borderRadius: BorderRadius.circular(30),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
                           ),
-                        ),
-                      )
-                    else
-                      // Games button during break
-                      Container(
-                        decoration: BoxDecoration(
-                          color: backgroundColor,
+                        ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
                           borderRadius: BorderRadius.circular(30),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
+                          onTap: onPauseResume,
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: screenWidth * 0.08,
+                              vertical: screenWidth * 0.038,
                             ),
-                          ],
-                        ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(30),
-                            onTap: () => Navigator.of(context).pushNamed('/games'),
-                            child: Padding(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: screenWidth * 0.08,
-                                vertical: screenWidth * 0.038,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.videogame_asset,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  isPaused ? Icons.play_arrow : Icons.pause,
+                                  color: Colors.white,
+                                  size: screenWidth * 0.06,
+                                ),
+                                SizedBox(width: screenWidth * 0.02),
+                                Text(
+                                  isPaused ? 'Resume' : 'Pause',
+                                  style: TextStyle(
                                     color: Colors.white,
-                                    size: screenWidth * 0.06,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: screenWidth * 0.04,
                                   ),
-                                  SizedBox(width: screenWidth * 0.02),
-                                  Text(
-                                    'Play Games',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: screenWidth * 0.04,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
                       ),
+                    ),
 
                     SizedBox(height: screenHeight * 0.02),
 
