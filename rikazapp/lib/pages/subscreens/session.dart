@@ -530,29 +530,35 @@ class _SessionPageState extends State<SessionPage>
     final supabase = Supabase.instance.client;
 
     if (_currentSessionId == null) {
-      debugPrint('Error: Cannot end session. Session ID missing');
+      debugPrint('❌ Cannot end session. Session ID missing');
       return;
     }
 
     final int actualFocusDurationMinutes = (_totalFocusSeconds ~/ 60);
 
-    // Check minimum duration
+    // Check minimum duration FIRST - before setting flag
     if (actualFocusDurationMinutes < minimumSessionMinutes) {
       debugPrint('❌ Session too short (<$minimumSessionMinutes min). Deleting.');
+      
+      // Mark as handled BEFORE deletion
+      _completionHandled = true;
+      
       try {
         await supabase
             .from('Focus_Session')
             .delete()
             .eq('session_id', _currentSessionId!);
-        debugPrint('🗑️ Short session deleted');
+        debugPrint('🗑️ Short session deleted (ID: $_currentSessionId)');
       } catch (e) {
         debugPrint('⚠️ Error deleting short session: $e');
       }
       return;
     }
 
-    // Mark as handled BEFORE showing dialog
+    // Mark as handled BEFORE showing dialog (prevents multiple dialogs)
     _completionHandled = true;
+    
+    debugPrint('💾 Ending session (ID: $_currentSessionId, Duration: $actualFocusDurationMinutes min)');
 
     String? progressLevel = await _showProgressLevelDialog();
     progressLevel ??= 'partially';
@@ -566,10 +572,10 @@ class _SessionPageState extends State<SessionPage>
         'progress_level': progressLevel,
       }).eq('session_id', _currentSessionId!);
 
-      debugPrint('✅ Session ended. Duration: $actualFocusDurationMinutes min, Progress: $progressLevel');
+      debugPrint('✅ Session saved: Duration=$actualFocusDurationMinutes min, Progress=$progressLevel');
     } catch (e) {
-      debugPrint('❌ Error ending session in DB: $e');
-      _completionHandled = false; // Reset on error
+      debugPrint('❌ Error updating session in DB: $e');
+      // Don't reset flag on error - session is still "handled"
     }
   }
 
@@ -753,9 +759,6 @@ class _SessionPageState extends State<SessionPage>
       // Custom session end
       _timer?.cancel();
       
-      // Mark completion handled
-      _completionHandled = true;
-      
       setState(() => status = 'idle');
 
       if (_rikazConnected && _lightInitialized) {
@@ -786,9 +789,6 @@ class _SessionPageState extends State<SessionPage>
       if (currentBlock >= totalBlocks) {
         // Session complete
         _timer?.cancel();
-        
-        // Mark completion handled
-        _completionHandled = true;
         
         setState(() {
           mode = 'focus';
@@ -866,7 +866,7 @@ class _SessionPageState extends State<SessionPage>
   }
 
   // ========================================================================
-  // QUIT SESSION HANDLER
+  // QUIT SESSION HANDLER - FIXED
   // ========================================================================
   void onQuit() {
     final String previousStatus = status;
@@ -935,9 +935,8 @@ class _SessionPageState extends State<SessionPage>
 
               Navigator.pop(dialogContext);
 
-              // Mark as handled before saving
-              _completionHandled = true;
-
+              // CRITICAL FIX: Do NOT set _completionHandled here
+              // Let _endSessionInDB handle it AFTER showing the progress dialog
               await _endSessionInDB(completed: false);
 
               if (mounted && !_isNavigatingAway) {

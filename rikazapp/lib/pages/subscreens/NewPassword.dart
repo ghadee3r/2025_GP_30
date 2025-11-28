@@ -139,7 +139,7 @@ class _NewPasswordState extends State<NewPassword> {
 
   // Helper to validate password
   String? _validatePasswordRequirements(String password) {
-    if (password.length < 12) return "Must be at least 12 characters.";
+    if (password.length < 8) return "Must be at least 8 characters.";
     if (!RegExp(r'[A-Z]').hasMatch(password)) return "Must contain an uppercase letter.";
     if (!RegExp(r'[a-z]').hasMatch(password)) return "Must contain a lowercase letter.";
     if (!RegExp(r'\d').hasMatch(password)) return "Must contain a number.";
