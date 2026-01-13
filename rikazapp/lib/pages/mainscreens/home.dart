@@ -658,6 +658,70 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  // =========================================================================
+  // HANDLE SINGLE EVENT DELETE
+  // =========================================================================
+  // Deletes a single event (one at a time, no multi-select)
+  
+  Future<void> _handleSingleDelete(calendar.Event event) async {
+    if (!_client.isConnected || event.id == null) return;
+
+    // Check if this is a recurring event
+    String? recurringChoice;
+    if (event.recurringEventId != null) {
+      // Ask user which occurrences to delete
+      recurringChoice = await showDialog<String>(
+        context: context,
+        builder: (context) => _buildRecurringDeleteDialog(),
+      );
+      
+      if (recurringChoice == null) return; // User cancelled
+    }
+
+    // Confirm deletion
+    final confirmDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => _buildThemedDialog(
+        title: 'Delete Session?',
+        content: 'Are you sure you want to delete this session?',
+        cancelText: 'Cancel',
+        confirmText: 'Delete',
+        isDestructive: true,
+      ),
+    );
+
+    if (confirmDelete == true) {
+      // Perform deletion
+      bool success = false;
+      
+      if (event.recurringEventId != null && recurringChoice != null) {
+        // Handle recurring event based on choice
+        if (recurringChoice == 'this') {
+          success = await _client.deleteEvent(event.id!);
+        } else if (recurringChoice == 'future') {
+          final eventDate = event.start!.dateTime!.toLocal();
+          success = await _client.deleteRecurringEventFromDate(event.recurringEventId!, eventDate);
+        } else if (recurringChoice == 'all') {
+          success = await _client.deleteEvent(event.recurringEventId!);
+        }
+      } else {
+        // Regular one-time event
+        success = await _client.deleteEvent(event.id!);
+      }
+      
+      // Refresh schedule and show feedback
+      await _fetchSchedule();
+      
+      if (mounted) {
+        _showSnackbar(
+          success ? 'Session deleted successfully.' : 'Failed to delete session.',
+          success ? Colors.green : Colors.red,
+        );
+      }
+    }
+  }
+
+
   void _setScheduleView(ScheduleView view) {
     setState(() {
       _scheduleView = view;
@@ -1493,16 +1557,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return Padding(
       padding: EdgeInsets.only(bottom: screenHeight * 0.01),
       child: GestureDetector(
-        onTap: () {
-            if (_isSelectionMode && event.id != null) {
-                _toggleEventSelection(event.id!);
-            }
-        },
-        onLongPress: () {
-            if (event.id != null) {
-                _enterSelectionMode(event.id!);
-            }
-        },
+        // Removed selection mode - single delete only
+        onTap: null, // No tap action needed
         child: Container(
           decoration: BoxDecoration(
             color: isSelected ? color.withOpacity(0.15) : cardBackground,
@@ -1518,16 +1574,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
           child: Row(
             children: [
-              // Checkbox if in selection mode
-              if (_isSelectionMode)
-                 Padding(
-                   padding: EdgeInsets.symmetric(horizontal: 12),
-                   child: Icon(
-                       isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
-                       color: isSelected ? color : secondaryTextGrey,
-                   ),
-                 )
-              else 
+              // Removed checkbox - no longer needed
+              // (Selection mode removed)
                  Container(
                     width: screenWidth * 0.02,
                     height: screenHeight * 0.08, 
@@ -1560,15 +1608,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 ),
               ),
               
-              if (!_isSelectionMode && _isCalendarConnected && event.id != null) 
+              if (_isCalendarConnected && event.id != null) 
                 PopupMenuButton<String>(
                   icon: Icon(Icons.more_vert, color: secondaryTextGrey, size: screenWidth * 0.055),
                   onSelected: (value) async {
                     if (value == 'edit') {
                       _showEventOverlay(eventToEdit: event);
-                    } else if (value == 'select_delete') {
-                      // Enter selection mode for delete
-                      _enterSelectionMode(event.id!);
+                    } else if (value == 'delete') {
+                      // Delete single event
+                      await _handleSingleDelete(event);
                     }
                   },
                   itemBuilder: (context) => [
@@ -1583,12 +1631,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                       ),
                     ),
                     const PopupMenuItem(
-                      value: 'select_delete',
+                      value: 'delete',
                       child: Row(
                         children: [
                           Icon(Icons.delete_outline, size: 20, color: Colors.red),
                           SizedBox(width: 8),
-                          Text('Select to Delete'),
+                          Text('Delete'),
                         ],
                       ),
                     ),
@@ -1794,59 +1842,68 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      // Cancel button - Made smaller
                       TextButton.icon(
                         onPressed: _exitSelectionMode,
-                        icon: Icon(Icons.close, color: secondaryTextGrey, size: 20),
+                        icon: Icon(Icons.close, color: secondaryTextGrey, size: 18),
                         label: Text(
                           "Cancel",
                           style: TextStyle(
                             color: secondaryTextGrey, 
-                            fontSize: 15, 
+                            fontSize: 13, 
                             fontWeight: FontWeight.w600
                           ),
                         ),
                         style: TextButton.styleFrom(
-                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          padding: EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                          minimumSize: Size(0, 0),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                       ),
+                      
+                      // Selected count badge - Made smaller
                       Container(
-                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           color: primaryThemeColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(16),
                         ),
                         child: Text(
                           "${_selectedEventsToDelete.length} selected",
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 12,
                             fontWeight: FontWeight.bold,
                             color: primaryThemeColor,
                           ),
                         ),
                       ),
+                      
+                      // Delete button - Made smaller
                       ElevatedButton.icon(
                         onPressed: _isBulkDeleting ? null : _handleBulkDelete,
                         icon: _isBulkDeleting
                             ? SizedBox(
-                                width: 16,
-                                height: 16,
+                                width: 14,
+                                height: 14,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
                                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                 ),
                               )
-                            : Icon(Icons.delete_outline, color: Colors.white, size: 20),
+                            : Icon(Icons.delete_outline, color: Colors.white, size: 18),
                         label: Text(
                           "Delete",
                           style: TextStyle(
                             color: Colors.white, 
-                            fontSize: 15, 
+                            fontSize: 13, 
                             fontWeight: FontWeight.w600
                           ),
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: errorIndicatorRed,
-                          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          minimumSize: Size(0, 0),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -2991,19 +3048,37 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                           ),
                           SizedBox(height: screenHeight * 0.015), 
                           
+                          // Frequency dropdown - DISABLED when editing
                           DropdownButtonFormField<String>(
                             value: recurrenceOptions.keys.firstWhere(
                                 (k) => recurrenceOptions[k] == _selectedRecurrence, 
                                 orElse: () => 'One-time'
                             ),
-                            decoration: _inputDecoration(label: 'Repeat', icon: Icons.repeat),
+                            decoration: _inputDecoration(
+                              label: 'Repeat', 
+                              icon: Icons.repeat,
+                            ).copyWith(
+                              // Gray out when editing
+                              filled: isEditing,
+                              fillColor: isEditing ? Colors.grey.shade200 : null,
+                              suffixIcon: isEditing 
+                                ? Icon(Icons.lock, color: Colors.grey.shade600, size: 20)
+                                : null,
+                            ),
                             items: recurrenceOptions.keys.map((String key) {
                               return DropdownMenuItem<String>(
                                 value: key,
-                                child: Text(key, style: TextStyle(fontSize: _adaptiveFontSize(0.032))),
+                                child: Text(
+                                  key, 
+                                  style: TextStyle(
+                                    fontSize: _adaptiveFontSize(0.032),
+                                    color: isEditing ? Colors.grey.shade600 : primaryTextDark,
+                                  ),
+                                ),
                               );
                             }).toList(),
-                            onChanged: (String? key) {
+                            // Disable dropdown when editing (onChanged = null)
+                            onChanged: isEditing ? null : (String? key) {
                               setState(() {
                                 _selectedRecurrence = recurrenceOptions[key];
                                 if (_selectedRecurrence != null && _selectedRecurrence != 'custom') {
@@ -3016,8 +3091,41 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                                 _markDirty();
                               });
                             },
+                            disabledHint: Text(
+                              recurrenceOptions.keys.firstWhere(
+                                  (k) => recurrenceOptions[k] == _selectedRecurrence, 
+                                  orElse: () => 'One-time'
+                              ),
+                              style: TextStyle(
+                                fontSize: _adaptiveFontSize(0.032),
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
                           ),
                           SizedBox(height: screenHeight * 0.008),
+                          
+                          // Show lock message when editing
+                          if (isEditing)
+                            Padding(
+                              padding: EdgeInsets.only(left: 12, right: 12, top: 4),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.info_outline, size: 16, color: Colors.grey.shade600),
+                                  SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      'Frequency cannot be changed when editing',
+                                      style: TextStyle(
+                                        fontSize: _adaptiveFontSize(0.028),
+                                        color: Colors.grey.shade600,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          
                           Padding(
                             padding: EdgeInsets.only(left: 12, right: 12),
                             child: Text(
