@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
+import 'package:google_sign_in/google_sign_in.dart';
 
 // =============================================================================
 // THEME COLORS
@@ -28,6 +29,12 @@ const String _signupRoute = "/signup";
 const String _forgotPasswordRoute = "/forgot-password"; 
 
 final supabase = sb.Supabase.instance.client;
+
+// ========= Google Sign-In =========
+// Since you added the json/plist files, we don't need hardcoded IDs here.
+final GoogleSignIn _googleSignIn = GoogleSignIn(
+  scopes: ['email', 'profile'],
+);
 
 // --- Custom Alert Dialog Helper ---
 void _showAlert(BuildContext context, String title, String message) {
@@ -62,11 +69,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isSubmitting = false;
-
-  // UX State: Track if login failed to turn borders red
   bool _hasLoginError = false;
-
-  // UX State: Password Visibility Toggle
   bool _obscurePassword = true;
 
   @override
@@ -76,11 +79,60 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  Future<void> _handleGoogleSignIn() async {
+    setState(() => _isSubmitting = true);
+
+    try {
+      // Force account selection screen
+      await _googleSignIn.signOut();
+      
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      
+      if (googleUser == null) {
+        setState(() => _isSubmitting = false);
+        return;
+      }
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final String? idToken = googleAuth.idToken;
+      final String? accessToken = googleAuth.accessToken; // REQUIRED for Supabase
+
+      if (idToken == null || accessToken == null) {
+        throw Exception('Failed to retrieve tokens from Google.');
+      }
+
+      // Sign in with Supabase using BOTH tokens
+      final sb.AuthResponse response = await supabase.auth.signInWithIdToken(
+        provider: sb.OAuthProvider.google,
+        idToken: idToken,
+        accessToken: accessToken, // DO NOT OMIT
+      );
+
+      if (!mounted) return;
+
+      if (response.user != null) {
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          '/tabs',
+          (route) => false,
+          arguments: 0,
+        );
+      } else {
+        _showAlert(context, "Login Error", "Failed to sign in with Google.");
+      }
+    } catch (e) {
+      debugPrint('Google Sign-In Error: $e');
+      if (mounted) {
+        _showAlert(context, "Login Error", "An error occurred during Google sign-in.");
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
   Future<void> _handleLogin() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
 
-    // Reset error state at the start of a new attempt
     setState(() {
       _hasLoginError = false;
     });
@@ -91,16 +143,12 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     
     if (password.length < 6) { 
-        setState(() {
-          _hasLoginError = true; // Turn borders red
-        });
+        setState(() => _hasLoginError = true);
         _showAlert(context, "Login Error", "Incorrect email or password.");
         return;
     }
 
-    setState(() {
-      _isSubmitting = true;
-    });
+    setState(() => _isSubmitting = true);
 
     try {
       final sb.AuthResponse response = await supabase.auth.signInWithPassword(
@@ -123,23 +171,16 @@ class _LoginScreenState extends State<LoginScreen> {
     } on sb.AuthException catch (e) {
       debugPrint("Supabase Login Error: ${e.message}");
       if (mounted) {
-        setState(() {
-          _hasLoginError = true; // Turn borders red
-        });
-        
+        setState(() => _hasLoginError = true);
         _showAlert(context, "Login Error", "Incorrect email or password.");
       }
     } catch (e) {
       debugPrint("Generic Login Error: $e");
       if (mounted) {
-        _showAlert(context, "Login Error", "An unexpected network or server error occurred.");
+        _showAlert(context, "Login Error", "An unexpected network error occurred.");
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-        });
-      }
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
@@ -150,7 +191,7 @@ class _LoginScreenState extends State<LoginScreen> {
     bool obscureText = false,
     bool autocorrect = true,
     bool hasError = false,
-    VoidCallback? onToggleVisibility, // Added visibility toggle callback
+    VoidCallback? onToggleVisibility,
   }) {
     return TextField(
       controller: controller,
@@ -163,7 +204,6 @@ class _LoginScreenState extends State<LoginScreen> {
         hintText: hintText,
         hintStyle: const TextStyle(color: secondaryTextGrey),
         contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-        // Red border on error, Grey otherwise
         enabledBorder: UnderlineInputBorder(
           borderSide: BorderSide(
             color: hasError ? errorIndicatorRed : secondaryTextGrey, 
@@ -176,7 +216,6 @@ class _LoginScreenState extends State<LoginScreen> {
             width: 2
           ),
         ),
-        // Add the Eye Icon if onToggleVisibility is provided
         suffixIcon: onToggleVisibility != null ? IconButton(
           icon: Icon(
             obscureText ? Icons.visibility : Icons.visibility_off,
@@ -200,34 +239,53 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                // Logo
-                Image.asset(
-                  _rikazLogoPath,
-                  height: 120,
-                  width: 120,
-                ),
+                Image.asset(_rikazLogoPath, height: 120, width: 120),
                 const SizedBox(height: 16),
-
-                // Title
                 const Text(
                   'Welcome Back to Rikaz',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: primaryTextDark,
-                  ),
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: primaryTextDark),
                 ),
-                // Subtitle
                 const Text(
                   'Log in to continue your journey',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: secondaryTextGrey,
-                  ),
+                  style: TextStyle(fontSize: 14, color: secondaryTextGrey),
                 ),
                 const SizedBox(height: 32),
+
+                // Fixed Google Sign-In Button
+                ElevatedButton.icon(
+                  onPressed: _isSubmitting ? null : _handleGoogleSignIn,
+                  icon: Image.asset(
+                    'assets/images/google_logo.png',
+                    height: 24,
+                    width: 24,
+                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.login, color: primaryTextDark),
+                  ),
+                  label: Text(
+                    _isSubmitting ? "Signing in..." : "Continue with Google",
+                    style: const TextStyle(color: primaryTextDark, fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: BorderSide(color: secondaryTextGrey.withOpacity(0.3), width: 1),
+                    elevation: 0,
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: secondaryTextGrey.withOpacity(0.3))),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      child: Text('OR', style: TextStyle(color: secondaryTextGrey, fontSize: 14, fontWeight: FontWeight.w500)),
+                    ),
+                    Expanded(child: Divider(color: secondaryTextGrey.withOpacity(0.3))),
+                  ],
+                ),
+                const SizedBox(height: 20),
 
                 _buildTextInput(
                   controller: _emailController,
@@ -238,7 +296,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 12),
                 
-                // Password Field with Visibility Toggle
                 _buildTextInput(
                   controller: _passwordController,
                   hintText: "Password",
@@ -246,80 +303,53 @@ class _LoginScreenState extends State<LoginScreen> {
                   obscureText: _obscurePassword,
                   autocorrect: false,
                   hasError: _hasLoginError,
-                  onToggleVisibility: () {
-                    setState(() {
-                      _obscurePassword = !_obscurePassword;
-                    });
-                  },
+                  onToggleVisibility: () => setState(() => _obscurePassword = !_obscurePassword),
                 ),
                 const SizedBox(height: 16),
                 
-                // --- FORGOT PASSWORD LINK ---
                 Align(
                   alignment: Alignment.centerRight,
                   child: GestureDetector(
                     onTap: () {
-                       if (!_isSubmitting) {
-                          Navigator.of(context).pushNamed(_forgotPasswordRoute);
-                       }
+                       if (!_isSubmitting) Navigator.of(context).pushNamed(_forgotPasswordRoute);
                     },
                     child: const Text(
                       'Forgot Password?',
-                      style: TextStyle(
-                        color: primaryThemeColor,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: TextStyle(color: primaryThemeColor, fontSize: 14, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ),
                 const SizedBox(height: 24),
 
-                // Log In Button
                 ElevatedButton(
                   onPressed: _isSubmitting ? null : _handleLogin, 
                   style: ElevatedButton.styleFrom(
                     backgroundColor: dfDeepTeal, 
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8.0),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
                     elevation: 5,
                   ),
                   child: Text(
                     _isSubmitting ? "Logging in..." : "Log In", 
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ),
                 const SizedBox(height: 20),
 
-                // Sign Up Link
                 GestureDetector(
                   onTap: () {
-                    if (!_isSubmitting) {
-                      Navigator.of(context).pushReplacementNamed(_signupRoute);
-                    }
+                    if (!_isSubmitting) Navigator.of(context).pushReplacementNamed(_signupRoute);
                   },
                   child: const Padding(
                     padding: EdgeInsets.symmetric(vertical: 10, horizontal: 20),
                     child: Text.rich(
                       TextSpan(
-                        text: 'Don’t have an account? ',
-                        style: TextStyle(
-                          color: secondaryTextGrey,
-                          fontSize: 15,
-                        ),
+                        text: 'Don\'t have an account? ',
+                        style: TextStyle(color: secondaryTextGrey, fontSize: 15),
                         children: [
                           TextSpan(
                             text: 'Sign Up',
-                            style: TextStyle(
-                              color: primaryThemeColor,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: TextStyle(color: primaryThemeColor, fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),

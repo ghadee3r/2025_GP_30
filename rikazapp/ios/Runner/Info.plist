@@ -8,6 +8,10 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
 	<string>Rikaz</string>
+	<key>GIDServerClientID</key>
+	<string>464258371961-fvldlcji8c3api52vf61hckarncifqpd.apps.googleusercontent.com</string>
+	<key>GIDClientID</key>
+	<string>4464258371961-sk013ngtpvprvtru88hh4m3h52i80q21.apps.googleusercontent.com</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
