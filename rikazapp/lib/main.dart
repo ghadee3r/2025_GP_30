@@ -3,7 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'pages/mainscreens/home.dart';
 import 'pages/mainscreens/progress.dart';
-import 'pages/mainscreens/games.dart';
+import 'pages/mainscreens/games/games.dart';
 import 'pages/mainscreens/profile.dart';
 import 'pages/subscreens/SetSession.dart';
 import 'pages/subscreens/session.dart';

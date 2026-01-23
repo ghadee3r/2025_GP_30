@@ -8,6 +8,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:rikazapp/services/rikaz_light_service.dart';
 import 'package:rikazapp/widgets/rikaz_device_picker.dart';
 import 'package:rikazapp/main.dart';
+import 'package:rikazapp/pages/mainscreens/games/games.dart';
 
 // ============================================================================
 // THEME COLORS
@@ -31,9 +32,6 @@ const Color focusBgColor = lightestAccentColor;
 const Color breakBgColor = Color(0xFFE6B400);
 const Color pausedBgColor = Color(0xFF9E9E9E);
 
-// ============================================================================
-// MAIN SESSION PAGE
-// ============================================================================
 class SessionPage extends StatefulWidget {
   final String sessionType;
   final String duration;
@@ -64,1198 +62,339 @@ class SessionPage extends StatefulWidget {
   State<SessionPage> createState() => _SessionPageState();
 }
 
-class _SessionPageState extends State<SessionPage>
-    with SingleTickerProviderStateMixin {
-  
-  // ========== RIKAZ LIGHT CONNECTION STATE ==========
+class _SessionPageState extends State<SessionPage> with SingleTickerProviderStateMixin {
   bool _rikazConnected = false;
   bool _lightInitialized = false;
-
-  // ========== SESSION CONFIGURATION ==========
   late bool isPomodoro;
   late int focusMinutes;
   late int breakMinutes;
   late int totalBlocks;
-
-  // ========== DATABASE TRACKING ==========
   String? _currentSessionId;
   DateTime? _sessionStartTime;
   int _totalFocusSeconds = 0;
-
-  // ========== SESSION STATE ==========
   String mode = 'focus';
   String status = 'running';
   int currentBlock = 1;
   int timeLeft = 0;
   List<int> completedBlocks = [];
   Timer? _timer;
-
   late AnimationController pulseController;
-
-  // ========== CONNECTION MONITORING ==========
   Timer? _connectionCheckTimer;
-
-  // ========== COMPLETION FLAGS - CRITICAL FIX ==========
   bool _completionHandled = false;
   bool _isShowingProgressDialog = false;
   bool _isNavigatingAway = false;
-
-  // ========== LIGHT CONTROL DEBOUNCING - CRITICAL FIX ==========
   DateTime? _lastLightOffTime;
   static const Duration _lightDebounceDelay = Duration(seconds: 2);
-
-  // ========== MINIMUM SESSION TIME ==========
   static const int minimumSessionMinutes = 10;
 
-  // ========================================================================
-  // DEBOUNCED LIGHT OFF - PREVENTS SPAM
-  // ========================================================================
   Future<void> _debouncedLightOff() async {
-    if (!_rikazConnected || !_lightInitialized) {
-      debugPrint('⏸️ RIKAZ: Skipping light off - device not connected');
-      return;
-    }
-
+    if (!_rikazConnected || !_lightInitialized) return;
     final now = DateTime.now();
-    
-    // Debounce: Prevent rapid repeated calls
-    if (_lastLightOffTime != null && 
-        now.difference(_lastLightOffTime!) < _lightDebounceDelay) {
-      debugPrint('⚠️ Light off debounced (too soon - ${now.difference(_lastLightOffTime!).inMilliseconds}ms)');
-      return;
-    }
-    
+    if (_lastLightOffTime != null && now.difference(_lastLightOffTime!) < _lightDebounceDelay) return;
     _lastLightOffTime = now;
-    
-    try {
-      bool success = await RikazLightService.turnOff();
-      if (success) {
-        debugPrint('⚫ RIKAZ: Light turned OFF');
-      } else {
-        debugPrint('❌ RIKAZ: Light off failed');
-      }
-    } catch (e) {
-      debugPrint('❌ RIKAZ: Light off error: $e');
-    }
+    try { await RikazLightService.turnOff(); } catch (e) { debugPrint('Light error: $e'); }
   }
 
-  // ========================================================================
-  // SEND TIMER UPDATE TO ESP32 LCD
-  // ========================================================================
   Future<void> _sendTimerUpdateToESP32() async {
-    if (!_rikazConnected || !_lightInitialized) {
-      return;
-    }
-    
-    final String currentStatus = status == 'running' ? 'running' : 'paused';
-    final String currentMode = mode;
-    
-    final Map<String, dynamic> timerCommand = {
-      'timer': {
-        'minutes': timeLeft ~/ 60,
-        'seconds': timeLeft % 60,
-        'status': currentStatus,
-        'mode': currentMode,
-      }
-    };
-    
-    final String jsonCommand = jsonEncode(timerCommand);
-    
+    if (!_rikazConnected || !_lightInitialized) return;
     try {
-      final bool success = await RikazLightService.sendCommand(jsonCommand);
-      if (success) {
-        debugPrint('✅ RIKAZ: Timer sent to LCD: ${timeLeft ~/ 60}:${timeLeft % 60} ($currentStatus)');
-      }
-    } catch (e) {
-      debugPrint('❌ RIKAZ: Error sending timer update: $e');
-    }
+      final cmd = jsonEncode({'timer': {'minutes': timeLeft ~/ 60, 'seconds': timeLeft % 60, 'status': status, 'mode': mode}});
+      await RikazLightService.sendCommand(cmd);
+    } catch (e) { debugPrint('LCD error: $e'); }
   }
 
   Future<void> _sendMotivationalMessage() async {
     if (!_rikazConnected || !_lightInitialized) return;
-    
-    try {
-      final String motivationCommand = jsonEncode({'motivation': 'show'});
-      await RikazLightService.sendCommand(motivationCommand);
-      debugPrint('💪 RIKAZ: Sent motivational message');
-    } catch (e) {
-      debugPrint('❌ RIKAZ: Error sending motivation: $e');
-    }
+    try { await RikazLightService.sendCommand(jsonEncode({'motivation': 'show'})); } catch (_) {}
   }
 
-  // ========================================================================
-  // REUSABLE RESUME LOGIC
-  // ========================================================================
   Future<bool> _handleLightAndResume() async {
     if (!mounted) return false;
-    
     bool success = true;
-
     if (RikazConnectionState.isConnected && !_lightInitialized) {
-      if (mode == 'focus') {
-        success = await RikazLightService.setFocusLight();
-      } else if (mode == 'break') {
-        success = await RikazLightService.setBreakLight();
-      }
-      
-      if (success) {
-        _rikazConnected = true;
-        _lightInitialized = true;
-        _startConnectionMonitoring();
-        debugPrint('✅ RIKAZ: Lights re-initialized during resume');
-      }
+      success = mode == 'focus' ? await RikazLightService.setFocusLight() : await RikazLightService.setBreakLight();
+      if (success) { _rikazConnected = true; _lightInitialized = true; _startConnectionMonitoring(); }
     } else if (_rikazConnected && _lightInitialized) {
-      if (mode == 'focus') {
-        success = await RikazLightService.setFocusLight();
-      } else if (mode == 'break') {
-        success = await RikazLightService.setBreakLight();
-      }
+      success = mode == 'focus' ? await RikazLightService.setFocusLight() : await RikazLightService.setBreakLight();
     }
-
-    if (!success && (_rikazConnected || _lightInitialized)) {
-      debugPrint('⚠️ RIKAZ: Light command failed on resume');
-      return false;
-    }
-
-    setState(() {
-      status = 'running';
-    });
+    if (!success && (_rikazConnected || _lightInitialized)) return false;
+    setState(() => status = 'running');
     pulseController.repeat(reverse: true);
-    
     _sendTimerUpdateToESP32();
-    
-    debugPrint('▶️ Session resumed');
     return true;
   }
 
-  // ========================================================================
-  // RECONNECTION HANDLER
-  // ========================================================================
   Future<void> _handleReconnectAttempt() async {
     if (!mounted) return;
-    
-    debugPrint('🔄 RIKAZ: Starting reconnection...');
-    
     final RikazDevice? selectedDevice = await showDialog<RikazDevice>(
       context: context,
       barrierDismissible: false,
       builder: (context) => const RikazDevicePicker(),
     );
-    
-    if (!mounted) return;
-    
-    if (selectedDevice != null) {
-      RikazConnectionState.isConnected = true;
-      _rikazConnected = true;
-      
-      final bool resumeSuccess = await _handleLightAndResume();
-      
-      if (mounted) {
-        if (resumeSuccess) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  Icon(Icons.check_circle, color: Colors.white),
-                  SizedBox(width: 12),
-                  Expanded(child: Text('Reconnected! Session resumed.')),
-                ],
-              ),
-              backgroundColor: Colors.green.shade600,
-              duration: const Duration(seconds: 2),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Reconnected but light control failed.'),
-              backgroundColor: Colors.orange.shade700,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-        }
-      }
-    }
+    if (!mounted || selectedDevice == null) return;
+    RikazConnectionState.isConnected = true;
+    _rikazConnected = true;
+    await _handleLightAndResume();
   }
 
-  // ========================================================================
-  // HANDLE LIGHT COMMAND FAILURE
-  // ========================================================================
   void _handleLightCommandFailure({bool showSnackbar = true}) {
     if (!mounted) return;
-    
-    if (status == 'running') {
-      setState(() {
-        status = 'paused';
-      });
-      pulseController.stop();
-      _sendTimerUpdateToESP32();
-      debugPrint('⏸️ Session paused due to light failure');
-    }
-    
+    if (status == 'running') { setState(() => status = 'paused'); pulseController.stop(); _sendTimerUpdateToESP32(); }
     if (showSnackbar) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('⚠️ Rikaz Light connection lost. Session paused.'),
-          backgroundColor: Colors.orange.shade700,
-          duration: const Duration(seconds: 3),
-          action: SnackBarAction(
-            label: 'Reconnect',
-            textColor: Colors.white,
-            onPressed: () {
-              if (mounted && status == 'running') {
-                setState(() => status = 'paused');
-                pulseController.stop();
-                _sendTimerUpdateToESP32();
-              }
-              _handleReconnectAttempt();
-            },
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('Connection lost. Paused.'),
+        action: SnackBarAction(label: 'Reconnect', onPressed: () => _handleReconnectAttempt()),
+      ));
     }
-    
-    if (!RikazConnectionState.isConnected) {
-      _rikazConnected = false;
-      _lightInitialized = false;
-    }
+    if (!RikazConnectionState.isConnected) { _rikazConnected = false; _lightInitialized = false; }
   }
 
-  // ========================================================================
-  // START SESSION IN DATABASE
-  // ========================================================================
   Future<void> _startSessionInDB() async {
     final supabase = Supabase.instance.client;
-    final currentUserId = supabase.auth.currentUser?.id;
-
-    if (currentUserId == null) {
-      debugPrint('Error: User not authenticated');
-      return;
-    }
-
-    final int finalPlannedDuration =
-        isPomodoro ? (focusMinutes * totalBlocks) : focusMinutes;
-    final String? pomodoroType =
-        isPomodoro ? '$focusMinutes-$breakMinutes' : null;
-
+    final uid = supabase.auth.currentUser?.id;
+    if (uid == null) return;
+    final planned = isPomodoro ? (focusMinutes * totalBlocks) : focusMinutes;
     _sessionStartTime = DateTime.now();
-
     try {
-      final response = await supabase.from('Focus_Session').insert({
-        'user_id': currentUserId,
-        'session_type': widget.sessionType,
-        'start_time': _sessionStartTime!.toIso8601String(),
-        'planned_duration': finalPlannedDuration,
-        'pomodoro_type': pomodoroType,
+      final res = await supabase.from('Focus_Session').insert({
+        'user_id': uid, 'session_type': widget.sessionType, 'start_time': _sessionStartTime!.toIso8601String(),
+        'planned_duration': planned, 'pomodoro_type': isPomodoro ? '$focusMinutes-$breakMinutes' : null,
         'camera_monitored': widget.isCameraDetectionEnabled ?? false,
       }).select('session_id');
-
-      if (response.isNotEmpty) {
-        if (mounted) {
-          setState(() {
-            _currentSessionId = response.first['session_id'].toString();
-          });
-        }
-        debugPrint('✅ Session Started in DB: $_currentSessionId');
-      }
-    } catch (e) {
-      debugPrint('❌ Error starting session in DB: $e');
-    }
+      if (res.isNotEmpty && mounted) setState(() => _currentSessionId = res.first['session_id'].toString());
+    } catch (e) { debugPrint('DB Start Error: $e'); }
   }
 
-  // ========================================================================
-  // SHOW PROGRESS LEVEL DIALOG - FIXED WITH PREVENTION FLAGS
-  // ========================================================================
-  Future<String?> _showProgressLevelDialog() async {
-    // CRITICAL: Prevent multiple dialogs
-    if (_isShowingProgressDialog) {
-      debugPrint('⚠️ Progress dialog already showing');
-      return null;
-    }
-
-    debugPrint('📊 Showing progress dialog');
-    _isShowingProgressDialog = true;
-
-    try {
-      final result = await showDialog<String>(
-        context: context,
-        barrierDismissible: false,
-        builder: (BuildContext dialogContext) {
-          final screenWidth = MediaQuery.of(dialogContext).size.width;
-
-          return WillPopScope(
-            onWillPop: () async => false, // Prevent back button
-            child: Dialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              child: Container(
-                padding: EdgeInsets.all(screenWidth * 0.06),
-                decoration: BoxDecoration(
-                  color: cardBackground,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: EdgeInsets.all(screenWidth * 0.04),
-                      decoration: BoxDecoration(
-                        color: accentThemeColor.withOpacity(0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.track_changes, size: screenWidth * 0.15, color: accentThemeColor),
-                    ),
-                    SizedBox(height: screenWidth * 0.04),
-                    Text('Session Complete!', style: TextStyle(
-                      fontSize: screenWidth * 0.055,
-                      fontWeight: FontWeight.bold,
-                      color: primaryTextDark,
-                    ), textAlign: TextAlign.center),
-                    SizedBox(height: screenWidth * 0.02),
-                    Text('How much of your goal did you achieve?', style: TextStyle(
-                      fontSize: screenWidth * 0.038,
-                      color: secondaryTextGrey,
-                    ), textAlign: TextAlign.center),
-                    SizedBox(height: screenWidth * 0.06),
-                    _buildProgressOption(dialogContext,
-                      level: 'fully',
-                      title: 'Fully Achieved',
-                      subtitle: 'Completed everything',
-                      icon: Icons.verified,
-                      color: const Color(0xFF10B981),
-                    ),
-                    SizedBox(height: screenWidth * 0.03),
-                    _buildProgressOption(dialogContext,
-                      level: 'partially',
-                      title: 'Partially Done',
-                      subtitle: 'Made good progress',
-                      icon: Icons.trending_up,
-                      color: const Color(0xFFF59E0B),
-                    ),
-                    SizedBox(height: screenWidth * 0.03),
-                    _buildProgressOption(dialogContext,
-                      level: 'barely',
-                      title: 'Barely Started',
-                      subtitle: 'Struggled to focus',
-                      icon: Icons.sentiment_dissatisfied,
-                      color: errorIndicatorRed,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      );
-
-      return result;
-    } catch (e) {
-      debugPrint('❌ Progress dialog error: $e');
-      return null;
-    } finally {
-      if (mounted) {
-        _isShowingProgressDialog = false;
-      }
-    }
-  }
-
-  Widget _buildProgressOption(
-    BuildContext context, {
-    required String level,
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-  }) {
-    final screenWidth = MediaQuery.of(context).size.width;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => Navigator.of(context).pop(level),
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: EdgeInsets.all(screenWidth * 0.04),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: color.withOpacity(0.3), width: 1.5),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(screenWidth * 0.025),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: color, size: screenWidth * 0.06),
-              ),
-              SizedBox(width: screenWidth * 0.04),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title, style: TextStyle(
-                      fontSize: screenWidth * 0.042,
-                      fontWeight: FontWeight.bold,
-                      color: primaryTextDark,
-                    )),
-                    SizedBox(height: screenWidth * 0.01),
-                    Text(subtitle, style: TextStyle(
-                      fontSize: screenWidth * 0.032,
-                      color: secondaryTextGrey,
-                    )),
-                  ],
-                ),
-              ),
-              Icon(Icons.arrow_forward_ios, color: color, size: screenWidth * 0.04),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ========================================================================
-  // END SESSION IN DATABASE - FIXED WITH COMPLETION FLAGS
-  // ========================================================================
   Future<void> _endSessionInDB({bool completed = false}) async {
-    // CRITICAL: Prevent multiple executions
-    if (_completionHandled) {
-      debugPrint('⚠️ Session completion already handled');
-      return;
-    }
-
+    if (_completionHandled) return;
     final supabase = Supabase.instance.client;
-
-    if (_currentSessionId == null) {
-      debugPrint('❌ Cannot end session. Session ID missing');
-      return;
-    }
-
-    final int actualFocusDurationMinutes = (_totalFocusSeconds ~/ 60);
-
-    // Check minimum duration FIRST - before setting flag
-    if (actualFocusDurationMinutes < minimumSessionMinutes) {
-      debugPrint('❌ Session too short (<$minimumSessionMinutes min). Deleting.');
-      
-      // Mark as handled BEFORE deletion
+    if (_currentSessionId == null) return;
+    final actual = (_totalFocusSeconds ~/ 60);
+    if (actual < minimumSessionMinutes) {
       _completionHandled = true;
-      
-      try {
-        await supabase
-            .from('Focus_Session')
-            .delete()
-            .eq('session_id', _currentSessionId!);
-        debugPrint('🗑️ Short session deleted (ID: $_currentSessionId)');
-      } catch (e) {
-        debugPrint('⚠️ Error deleting short session: $e');
-      }
+      try { await supabase.from('Focus_Session').delete().eq('session_id', _currentSessionId!); } catch (_) {}
       return;
     }
-
-    // Mark as handled BEFORE showing dialog (prevents multiple dialogs)
     _completionHandled = true;
-    
-    debugPrint('💾 Ending session (ID: $_currentSessionId, Duration: $actualFocusDurationMinutes min)');
-
-    String? progressLevel = await _showProgressLevelDialog();
-    progressLevel ??= 'partially';
-
-    final endDateTime = DateTime.now().toIso8601String();
-
+    String? progress = await _showProgressLevelDialog() ?? 'partially';
     try {
       await supabase.from('Focus_Session').update({
-        'end_time': endDateTime,
-        'actual_duration': actualFocusDurationMinutes,
-        'progress_level': progressLevel,
+        'end_time': DateTime.now().toIso8601String(), 'actual_duration': actual, 'progress_level': progress,
       }).eq('session_id', _currentSessionId!);
-
-      debugPrint('✅ Session saved: Duration=$actualFocusDurationMinutes min, Progress=$progressLevel');
-    } catch (e) {
-      debugPrint('❌ Error updating session in DB: $e');
-      // Don't reset flag on error - session is still "handled"
-    }
+    } catch (e) { debugPrint('DB End Error: $e'); }
   }
 
-  // ========================================================================
-  // INITIALIZATION
-  // ========================================================================
-  @override
-  void initState() {
-    super.initState();
-    
-    isPomodoro = widget.sessionType == 'pomodoro';
-
-    if (isPomodoro) {
-      if (widget.duration == '25min') {
-        focusMinutes = 25;
-        breakMinutes = 5;
-      } else {
-        focusMinutes = 50;
-        breakMinutes = 10;
-      }
-      totalBlocks = int.tryParse(widget.numberOfBlocks ?? '4') ?? 4;
-    } else {
-      focusMinutes = int.tryParse(widget.duration.replaceAll(RegExp(r'[^0-9]'), '')) ?? 70;
-      breakMinutes = 0;
-      totalBlocks = 1;
-    }
-
-    _rikazConnected = widget.rikazConnected ?? false;
-
-    timeLeft = focusMinutes * 60;
-    startTimer();
-
-    _startSessionInDB();
-
-    if (_rikazConnected && !_lightInitialized) {
-      Future.delayed(const Duration(milliseconds: 500), () async {
-        if (mounted && status == 'running') {
-          bool success = await RikazLightService.setFocusLight();
-          
-          if (mounted && success) {
-            _lightInitialized = true;
-            _startConnectionMonitoring();
-            _sendTimerUpdateToESP32();
-            debugPrint('🔵 RIKAZ: Focus light ON');
-          } else if (mounted && !success) {
-            _handleLightCommandFailure();
-          }
-        }
-      });
-    }
-
-    pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    )..repeat(reverse: true);
-  }
-
-  // ========================================================================
-  // START CONNECTION MONITORING
-  // ========================================================================
-  void _startConnectionMonitoring() {
-    _connectionCheckTimer?.cancel();
-    
-    _connectionCheckTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
-      if (!mounted || !RikazConnectionState.isConnected) {
-        timer.cancel();
-        return;
-      }
-      
-      final bool stillConnected = await RikazLightService.isConnected();
-      
-      if (!stillConnected) {
-        timer.cancel();
-        
-        await RikazLightService.disconnect();
-        RikazConnectionState.isConnected = false;
-
-        if (mounted) {
-          setState(() {
-            _rikazConnected = false;
-            _lightInitialized = false;
-          });
-          
-          debugPrint('⚠️ Connection lost - session continues');
-        }
-        
-        _showDeviceLostWarning();
-      }
-    });
-  }
-
-  // ========================================================================
-  // SHOW DEVICE LOST WARNING
-  // ========================================================================
-  void _showDeviceLostWarning() {
-    if (!mounted) return;
-    
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: cardBackground,
-        icon: Icon(Icons.link_off, color: errorIndicatorRed, size: 48),
-        title: Text('Rikaz Tools Disconnected',
-          style: TextStyle(color: primaryTextDark, fontWeight: FontWeight.bold)),
-        content: Text(
-          'The Bluetooth connection was lost.\n\n'
-          'Your session is still running.\n\n'
-          'Click "Reconnect" to restore the connection.',
-          style: TextStyle(color: secondaryTextGrey, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Continue Without', style: TextStyle(color: secondaryTextGrey)),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              if (mounted && status == 'running') {
-                setState(() => status = 'paused');
-                if (pulseController.isAnimating) pulseController.stop();
-              }
-              _handleReconnectAttempt();
-            },
-            icon: Icon(Icons.bluetooth_searching),
-            label: const Text('Reconnect'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: accentThemeColor,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-          ),
-        ],
+  // === NAVIGATION LOGIC ===
+  Future<void> _navigateToBreakActivities() async {
+    _timer?.cancel(); 
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => GamesScreen(breakSecondsRemaining: timeLeft),
       ),
     );
+
+    if (mounted) {
+      if (result is int) {
+        setState(() => timeLeft = result);
+      }
+      
+      if (timeLeft <= 0 && mode == 'break') {
+        onPhaseEnd();
+      } else {
+        startTimer();
+      }
+    }
   }
 
-  // ========================================================================
-  // TIMER LOGIC
-  // ========================================================================
-  
   void startTimer() {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (status != 'running') return;
-      if (!mounted) {
-        _timer?.cancel();
+      if (!mounted) { _timer?.cancel(); return; }
+      setState(() {
+        if (timeLeft > 0) timeLeft--;
+        if (mode == 'focus') _totalFocusSeconds++;
+      });
+      _sendTimerUpdateToESP32();
+      if (timeLeft <= 0) onPhaseEnd();
+    });
+  }
+
+  void onPhaseEnd() async { 
+    if (!mounted || _completionHandled) return;
+    if (!isPomodoro) {
+      _timer?.cancel(); setState(() => status = 'idle');
+      if (_rikazConnected) { await RikazLightService.sendCommand(jsonEncode({'sessionComplete': 'true'})); await _debouncedLightOff(); }
+      await _endSessionInDB(completed: true);
+      if (mounted && !_isNavigatingAway) { _isNavigatingAway = true; Navigator.pushNamedAndRemoveUntil(context, '/tabs', (route) => false); }
+      return;
+    }
+    if (mode == 'focus') {
+      if (!completedBlocks.contains(currentBlock)) { completedBlocks.add(currentBlock); _sendMotivationalMessage(); }
+      if (currentBlock >= totalBlocks) {
+        _timer?.cancel(); setState(() { mode = 'focus'; status = 'idle'; });
+        if (_rikazConnected) { await RikazLightService.sendCommand(jsonEncode({'sessionComplete': 'true'})); await _debouncedLightOff(); }
+        await _endSessionInDB(completed: true);
+        if (mounted && !_isNavigatingAway) { _isNavigatingAway = true; Navigator.pushNamedAndRemoveUntil(context, '/tabs', (route) => false); }
         return;
       }
+      setState(() { mode = 'break'; timeLeft = 5; }); 
+      if (_rikazConnected) { await RikazLightService.setBreakLight(); _sendTimerUpdateToESP32(); }
+    } else {
+      setState(() { currentBlock++; mode = 'focus'; timeLeft = focusMinutes * 60; });
+      if (_rikazConnected) { await RikazLightService.setFocusLight(); _sendTimerUpdateToESP32(); }
+    }
+    startTimer();
+  }
 
-      setState(() {
-        timeLeft--;
-        if (mode == 'focus') {
-          _totalFocusSeconds++;
+  @override
+  void initState() {
+    super.initState();
+    isPomodoro = widget.sessionType == 'pomodoro';
+    if (isPomodoro) {
+      if (widget.duration == '25min') { focusMinutes = 25; breakMinutes = 5; } 
+      else { focusMinutes = 50; breakMinutes = 10; }
+      totalBlocks = int.tryParse(widget.numberOfBlocks ?? '4') ?? 4;
+    } else {
+      focusMinutes = int.tryParse(widget.duration.replaceAll(RegExp(r'[^0-9]'), '')) ?? 70;
+      breakMinutes = 0; totalBlocks = 1;
+    }
+    _rikazConnected = widget.rikazConnected ?? false;
+    timeLeft = 3; 
+    startTimer();
+    _startSessionInDB();
+    if (_rikazConnected) {
+      Future.delayed(const Duration(milliseconds: 500), () async {
+        if (mounted && status == 'running') {
+          if (await RikazLightService.setFocusLight()) { _lightInitialized = true; _startConnectionMonitoring(); _sendTimerUpdateToESP32(); }
+          else _handleLightCommandFailure();
         }
       });
-      
-      _sendTimerUpdateToESP32();
+    }
+    pulseController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))..repeat(reverse: true);
+  }
 
-      if (timeLeft <= 0) {
-        onPhaseEnd();
+  void _startConnectionMonitoring() {
+    _connectionCheckTimer?.cancel();
+    _connectionCheckTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
+      if (!mounted || !RikazConnectionState.isConnected) { timer.cancel(); return; }
+      if (!await RikazLightService.isConnected()) {
+        timer.cancel(); await RikazLightService.disconnect();
+        RikazConnectionState.isConnected = false;
+        if (mounted) setState(() { _rikazConnected = false; _lightInitialized = false; });
+        _handleLightCommandFailure(showSnackbar: true);
       }
     });
   }
 
-  // ========================================================================
-  // PHASE END - FIXED WITH COMPLETION FLAGS
-  // ========================================================================
-  void onPhaseEnd() async { 
-    if (!mounted) return;
-
-    // CRITICAL: Prevent multiple executions
-    if (_completionHandled) {
-      debugPrint('⚠️ Phase end already handled');
-      return;
-    }
-
-    if (!isPomodoro) {
-      // Custom session end
-      _timer?.cancel();
-      
-      setState(() => status = 'idle');
-
-      if (_rikazConnected && _lightInitialized) {
-        final String completeCommand = jsonEncode({'sessionComplete': 'true'});
-        await RikazLightService.sendCommand(completeCommand);
-        await _debouncedLightOff();
-        debugPrint('⚫ Custom session ended');
-      }
-
-      await _endSessionInDB(completed: true);
-      
-      // Navigate away
-      if (mounted && !_isNavigatingAway) {
-        _isNavigatingAway = true;
-        Navigator.pushNamedAndRemoveUntil(context, '/tabs', (route) => false);
-      }
-      return;
-    }
-
-    // Pomodoro logic
-    if (mode == 'focus') {
-      if (!completedBlocks.contains(currentBlock)) {
-        completedBlocks.add(currentBlock);
-        _sendMotivationalMessage();
-      }
-      
-      // Check if this is the last block
-      if (currentBlock >= totalBlocks) {
-        // Session complete
-        _timer?.cancel();
-        
-        setState(() {
-          mode = 'focus';
-          status = 'idle';
-        });
-
-        if (_rikazConnected && _lightInitialized) {
-          final String completeCommand = jsonEncode({'sessionComplete': 'true'});
-          await RikazLightService.sendCommand(completeCommand);
-          await _debouncedLightOff();
-          debugPrint('⚫ Pomodoro complete');
-        }
-        
-        await _endSessionInDB(completed: true);
-        
-        // Navigate away
-        if (mounted && !_isNavigatingAway) {
-          _isNavigatingAway = true;
-          Navigator.pushNamedAndRemoveUntil(context, '/tabs', (route) => false);
-        }
-        return;
-      }
-      
-      // Not last block, take break
-      setState(() {
-        mode = 'break';
-        timeLeft = breakMinutes * 60;
-      });
-
-      if (_rikazConnected && _lightInitialized) {
-        bool success = await RikazLightService.setBreakLight();
-        if (mounted && !success) {
-          _handleLightCommandFailure();
-          return; 
-        }
-        _sendTimerUpdateToESP32();
-        debugPrint('🟡 Break started');
-      }
-    } else {
-      // Break over, next focus
-      setState(() {
-        currentBlock++;
-        mode = 'focus';
-        timeLeft = focusMinutes * 60;
-      });
-
-      if (_rikazConnected && _lightInitialized) {
-        bool success = await RikazLightService.setFocusLight();
-        if (mounted && !success) {
-          _handleLightCommandFailure();
-          return; 
-        }
-        _sendTimerUpdateToESP32();
-        debugPrint('🔵 Focus resumed');
-      }
-    }
-  }
-
-  // ========================================================================
-  // PAUSE/RESUME HANDLER
-  // ========================================================================
   void onPauseResume() async {
     if (!mounted) return;
-    
-    final nextStatus = status == 'paused' ? 'running' : 'paused';
-    
-    if (nextStatus == 'paused') {
-      setState(() { status = nextStatus; });
-      pulseController.stop();
-      _sendTimerUpdateToESP32();
-      debugPrint('⏸️ Session paused');
-    } else if (nextStatus == 'running') {
-      await _handleLightAndResume();
-    }
+    if (status == 'paused') await _handleLightAndResume();
+    else { setState(() => status = 'paused'); pulseController.stop(); _sendTimerUpdateToESP32(); }
   }
 
-  // ========================================================================
-  // QUIT SESSION HANDLER - FIXED
-  // ========================================================================
   void onQuit() {
-    final String previousStatus = status;
-    
-    setState(() => status = 'paused');
-    if (pulseController.isAnimating) {
-      pulseController.stop();
-    }
-
-    if (!mounted) return;
-
-    final int actualFocusDurationMinutes = (_totalFocusSeconds ~/ 60);
-    final bool belowMinimum = actualFocusDurationMinutes < minimumSessionMinutes;
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: cardBackground,
-        title: Row(
-          children: [
-            Icon(
-              belowMinimum ? Icons.warning_amber_rounded : Icons.exit_to_app,
-              color: belowMinimum ? Colors.orange : errorIndicatorRed,
-              size: 28,
-            ),
-            SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                belowMinimum ? 'Session Too Short' : 'End Session?',
-                style: TextStyle(fontSize: 20, color: primaryTextDark, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-        content: Text(
-          belowMinimum 
-              ? 'You\'ve only focused for $actualFocusDurationMinutes minutes. Sessions under $minimumSessionMinutes minutes won\'t be saved.\n\nAre you sure you want to quit?'
-              : 'Are you sure you want to end this session? Your progress will be saved.',
-          style: TextStyle(color: secondaryTextGrey, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(dialogContext);
-              if (mounted) {
-                setState(() => status = previousStatus);
-                if (previousStatus == 'running') {
-                  pulseController.repeat(reverse: true);
-                }
-              }
-            },
-            child: Text('Continue Session', style: TextStyle(color: secondaryTextGrey, fontWeight: FontWeight.w600)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              _timer?.cancel();
-
-              try {
-                pulseController.dispose();
-              } catch (_) {}
-
-              if (_rikazConnected && _lightInitialized) {
-                await _debouncedLightOff();
-              }
-
-              Navigator.pop(dialogContext);
-
-              // CRITICAL FIX: Do NOT set _completionHandled here
-              // Let _endSessionInDB handle it AFTER showing the progress dialog
-              await _endSessionInDB(completed: false);
-
-              if (mounted && !_isNavigatingAway) {
-                _isNavigatingAway = true;
-                Navigator.pushNamedAndRemoveUntil(context, '/tabs', (route) => false);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: errorIndicatorRed,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: Text(belowMinimum ? 'Quit Anyway' : 'End Session'),
-          ),
-        ],
-      ),
-    );
+    final prev = status;
+    setState(() => status = 'paused'); pulseController.stop();
+    showDialog(context: context, builder: (ctx) => AlertDialog(
+      title: Text('End Session?'), content: Text('Are you sure?'),
+      actions: [
+        TextButton(onPressed: () { Navigator.pop(ctx); if (mounted) setState(() => status = prev); if (prev == 'running') pulseController.repeat(reverse: true); }, child: Text('No')),
+        ElevatedButton(onPressed: () async {
+          _timer?.cancel(); if (_rikazConnected) await _debouncedLightOff();
+          Navigator.pop(ctx); await _endSessionInDB();
+          if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/tabs', (r) => false);
+        }, child: Text('Yes')),
+      ],
+    ));
   }
 
-  String formatTime(int seconds) {
-    final m = (seconds ~/ 60).toString().padLeft(2, '0');
-    final s = (seconds % 60).toString().padLeft(2, '0');
-    return '$m:$s';
-  }
+  Future<String?> _showProgressLevelDialog() async { return null; } 
 
-  double get progress {
-    final total = (mode == 'focus' ? focusMinutes : breakMinutes) * 60;
-    return (1 - (timeLeft / max(total, 1))).clamp(0, 1);
-  }
+  String formatTime(int s) => '${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}';
+  double get progress => (1 - (timeLeft / max((mode == 'focus' ? focusMinutes : breakMinutes) * 60, 1))).clamp(0, 1);
+  Color get backgroundColor => status == 'paused' ? pausedBgColor : (mode == 'break' ? breakBgColor : focusBgColor);
+  Color get ringColor => status == 'paused' ? pausedBgColor.withOpacity(0.6) : (mode == 'break' ? Colors.orange : accentThemeColor);
 
-  // ========================================================================
-  // CLEANUP
-  // ========================================================================
-  @override
-  void dispose() {
-    _timer?.cancel();
-    _connectionCheckTimer?.cancel();
-
-    if (_rikazConnected && _lightInitialized && !_completionHandled) {
-      _debouncedLightOff();
-    }
-
-    try {
-      if (pulseController.isAnimating) pulseController.stop();
-      pulseController.dispose();
-    } catch (_) {}
-
-    super.dispose();
-  }
-
-  // ========================================================================
-  // GET BACKGROUND COLOR BASED ON STATE
-  // ========================================================================
-  Color get backgroundColor {
-    if (status == 'paused') return pausedBgColor;
-    if (mode == 'break') return const Color.fromARGB(255, 247, 181, 0);
-    return focusBgColor;
-  }
-
-  Color get ringColor {
-    if (status == 'paused') return pausedBgColor.withOpacity(0.6);
-    if (mode == 'break') return const Color.fromARGB(255, 255, 169, 8);
-    return accentThemeColor;
-  }
-
-  // ========================================================================
-  // UI BUILD
-  // ========================================================================
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-
     final bool isPaused = status == 'paused';
-    final bool isBreak = mode == 'break';
-
     final timerDiameter = screenWidth * 0.75;
 
     return Scaffold(
       body: Stack(
         children: [
           Container(color: backgroundColor),
-          
           Positioned(
             top: screenHeight * 0.38,
             left: -screenWidth * 0.5,
             right: -screenWidth * 0.5,
             bottom: 0,
             child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(screenWidth * 1.5),
-                  topRight: Radius.circular(screenWidth * 1.5),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 20,
-                    offset: const Offset(0, -5),
-                  ),
-                ],
-              ),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(screenWidth * 1.5)), boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 20)]),
             ),
           ),
-
           SafeArea(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center, 
               children: [
-                Column(
-                  children: [
-                    SizedBox(height: screenHeight * 0.05),
-
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: screenWidth * 0.04,
-                        vertical: screenHeight * 0.012,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        isPomodoro
-                            ? (isBreak ? 'Break Time' : 'Pomodoro Focus')
-                            : 'Custom Session',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: screenWidth * 0.035,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-
-                    SizedBox(height: screenHeight * 0.04),
-
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Container(
-                          width: timerDiameter,
-                          height: timerDiameter,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.15),
-                                blurRadius: 35,
-                                spreadRadius: 5,
-                                offset: const Offset(0, 12),
-                              ),
-                            ],
-                          ),
-                        ),
-                        SizedBox(
-                          width: timerDiameter * 0.92,
-                          height: timerDiameter * 0.92,
-                          child: CustomPaint(
-                            painter: _ProgressRingPainter(
-                              progress: progress,
-                              color: ringColor,
-                            ),
-                          ),
-                        ),
-                        Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(formatTime(timeLeft), style: TextStyle(
-                              fontSize: screenWidth * 0.13,
-                              fontWeight: FontWeight.w600,
-                              color: primaryTextDark,
-                              letterSpacing: 2,
-                            )),
-                            SizedBox(height: screenHeight * 0.01),
-                            if (isPomodoro && !isBreak)
-                              Text('$currentBlock/$totalBlocks Sessions',
-                                style: TextStyle(
-                                  fontSize: screenWidth * 0.036,
-                                  color: secondaryTextGrey,
-                                  fontWeight: FontWeight.w500,
-                                ))
-                            else if (isBreak)
-                              Text('Take a rest',
-                                style: TextStyle(
-                                  fontSize: screenWidth * 0.036,
-                                  color: secondaryTextGrey,
-                                  fontWeight: FontWeight.w500,
-                                ))
-                            else
-                              Text('Stay focused',
-                                style: TextStyle(
-                                  fontSize: screenWidth * 0.036,
-                                  color: secondaryTextGrey,
-                                  fontWeight: FontWeight.w500,
-                                )),
-                          ],
-                        ),
-                      ],
-                    ),
-
-                    SizedBox(height: screenHeight * 0.04),
-
-                    Container(
-                      decoration: BoxDecoration(
-                        color: isPaused ? pausedBgColor : accentThemeColor,
-                        borderRadius: BorderRadius.circular(30),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(30),
-                          onTap: onPauseResume,
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: screenWidth * 0.08,
-                              vertical: screenWidth * 0.038,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(isPaused ? Icons.play_arrow : Icons.pause,
-                                  color: Colors.white, size: screenWidth * 0.06),
-                                SizedBox(width: screenWidth * 0.02),
-                                Text(isPaused ? 'Resume' : 'Pause',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: screenWidth * 0.04,
-                                  )),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    SizedBox(height: screenHeight * 0.02),
-
-                    Container(
-                      decoration: BoxDecoration(
-                        color: errorIndicatorRed,
-                        borderRadius: BorderRadius.circular(30),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(30),
-                          onTap: onQuit,
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: screenWidth * 0.08,
-                              vertical: screenWidth * 0.038,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.close, color: Colors.white, size: screenWidth * 0.05),
-                                SizedBox(width: screenWidth * 0.015),
-                                Text('End Session', style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: screenWidth * 0.04,
-                                  fontWeight: FontWeight.bold,
-                                )),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    SizedBox(height: screenHeight * 0.03),
-                  ],
+                SizedBox(width: double.infinity, height: screenHeight * 0.05),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  decoration: BoxDecoration(color: Colors.white30, borderRadius: BorderRadius.circular(20)),
+                  child: Text(isPomodoro ? (mode == 'break' ? 'Break Time' : 'Pomodoro Focus') : 'Custom Session', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
-
+                SizedBox(height: screenHeight * 0.04),
+                Stack(alignment: Alignment.center, children: [
+                  Container(width: timerDiameter, height: timerDiameter, decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 30)])),
+                  SizedBox(width: timerDiameter * 0.92, height: timerDiameter * 0.92, child: CustomPaint(painter: _ProgressRingPainter(progress: progress, color: ringColor))),
+                  Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Text(formatTime(timeLeft), style: TextStyle(fontSize: 50, fontWeight: FontWeight.bold, color: primaryTextDark)),
+                    Text(mode == 'break' ? 'Take a rest' : 'Stay focused', style: TextStyle(color: secondaryTextGrey)),
+                  ]),
+                ]),
+                SizedBox(height: screenHeight * 0.04),
+                
+                if (mode == 'break') ...[
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: dfDeepTeal, foregroundColor: Colors.white, padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12)),
+                    onPressed: _navigateToBreakActivities,
+                    icon: Icon(Icons.videogame_asset_outlined),
+                    label: Text('Play Activity'),
+                  ),
+                  SizedBox(height: 20),
+                ],
+                
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: isPaused ? pausedBgColor : accentThemeColor, foregroundColor: Colors.white, padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12)),
+                  onPressed: onPauseResume,
+                  icon: Icon(isPaused ? Icons.play_arrow : Icons.pause),
+                  label: Text(isPaused ? 'Resume' : 'Pause'),
+                ),
+                SizedBox(height: 20),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: errorIndicatorRed, foregroundColor: Colors.white, padding: EdgeInsets.symmetric(horizontal: 30, vertical: 12)),
+                  onPressed: onQuit,
+                  icon: Icon(Icons.close),
+                  label: Text('End Session'),
+                ),
+                
+                // === FIXED OVERFLOW: EXPANDED SCROLLABLE AREA ===
                 Expanded(
                   child: SingleChildScrollView(
                     child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: screenWidth * 0.05),
+                      padding: const EdgeInsets.all(20.0),
                       child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.08),
-                              blurRadius: 15,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Padding(
-                          padding: EdgeInsets.all(screenWidth * 0.04),
-                          child: SoundSection(
-                            preselectedSoundId: widget.selectedSoundId,
-                            preselectedSoundName: widget.selectedSoundName,
-                            preselectedSoundUrl: widget.selectedSoundUrl,
-                          ),
-                        ),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)]),
+                        padding: EdgeInsets.all(16),
+                        child: SoundSection(preselectedSoundId: widget.selectedSoundId, preselectedSoundName: widget.selectedSoundName, preselectedSoundUrl: widget.selectedSoundUrl),
                       ),
                     ),
                   ),
                 ),
-
-                SizedBox(height: screenHeight * 0.02),
               ],
             ),
           ),
@@ -1265,44 +404,16 @@ class _SessionPageState extends State<SessionPage>
   }
 }
 
-// ============================================================================
-// PROGRESS RING PAINTER
-// ============================================================================
 class _ProgressRingPainter extends CustomPainter {
-  final double progress;
-  final Color color;
-
+  final double progress; final Color color;
   _ProgressRingPainter({required this.progress, required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const strokeWidth = 12.0;
-    final paint = Paint()
-      ..color = color
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth;
-
-    final bgPaint = Paint()
-      ..color = Colors.grey[300]!
-      ..strokeWidth = strokeWidth
-      ..style = PaintingStyle.stroke;
-
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = (size.width - strokeWidth) / 2;
-
-    canvas.drawCircle(center, radius, bgPaint);
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      -pi / 2,
-      2 * pi * progress,
-      false,
-      paint,
-    );
+  @override void paint(Canvas canvas, Size size) {
+    final p = Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 12..strokeCap = StrokeCap.round;
+    final bg = Paint()..color = Colors.grey[300]!..style = PaintingStyle.stroke..strokeWidth = 12;
+    canvas.drawCircle(Offset(size.width/2, size.height/2), (size.width-12)/2, bg);
+    canvas.drawArc(Rect.fromCircle(center: Offset(size.width/2, size.height/2), radius: (size.width-12)/2), -pi/2, 2*pi*progress, false, p);
   }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  @override bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
 // ============================================================================
