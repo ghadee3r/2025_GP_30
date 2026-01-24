@@ -239,10 +239,12 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
         if (mounted && !_isNavigatingAway) { _isNavigatingAway = true; Navigator.pushNamedAndRemoveUntil(context, '/tabs', (route) => false); }
         return;
       }
-      setState(() { mode = 'break'; timeLeft = 5; }); 
+      // REVERTED TO 5 MINUTES FOR BREAK
+      setState(() { mode = 'break'; timeLeft = 5 * 60; }); 
       if (_rikazConnected) { await RikazLightService.setBreakLight(); _sendTimerUpdateToESP32(); }
     } else {
-      setState(() { currentBlock++; mode = 'focus'; timeLeft = focusMinutes * 60; });
+      // BACK TO FOCUS - KEPT AT 3 SECONDS FOR TESTING
+      setState(() { currentBlock++; mode = 'focus'; timeLeft = 3; });
       if (_rikazConnected) { await RikazLightService.setFocusLight(); _sendTimerUpdateToESP32(); }
     }
     startTimer();
@@ -261,7 +263,10 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
       breakMinutes = 0; totalBlocks = 1;
     }
     _rikazConnected = widget.rikazConnected ?? false;
+    
+    // KEEP FOCUS AT 3 SECONDS FOR TESTING
     timeLeft = 3; 
+    
     startTimer();
     _startSessionInDB();
     if (_rikazConnected) {
@@ -382,7 +387,6 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
                   label: Text('End Session'),
                 ),
                 
-                // === FIXED OVERFLOW: EXPANDED SCROLLABLE AREA ===
                 Expanded(
                   child: SingleChildScrollView(
                     child: Padding(
@@ -415,6 +419,7 @@ class _ProgressRingPainter extends CustomPainter {
   }
   @override bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
+
 
 // ============================================================================
 // SOUND OPTIONS MODEL
