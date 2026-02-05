@@ -1,6 +1,11 @@
 // ============================================================================
 // FILE: SetSession.dart
-// PURPOSE: Session configuration page with BLE device connection
+// PURPOSE: Session configuration page with BLE device connection + Camera
+// NOTES:
+// - Adds: 30s/60s/90s camera sensitivity thresholds
+// - Adds: Camera preview dialog
+// - Adds: Subtle notification options (light/sound checkboxes)
+// - Adds: Pass notificationSoundUrl + subtle settings to Session route args
 // ============================================================================
 
 import 'dart:async';
@@ -54,12 +59,12 @@ class _Constants {
   static const Duration pulseAnimationDuration = Duration(milliseconds: 1000);
   static const Duration successAnimationDuration = Duration(milliseconds: 600);
   static const Duration connectionCheckInterval = Duration(seconds: 5);
-  
+
   static const double minCustomDuration = 10;
   static const double maxCustomDuration = 120;
   static const double minPomodoroBlocks = 1;
   static const double maxPomodoroBlocks = 8;
-  
+
   static const Map<String, Color> soundColors = {
     'off': secondaryTextGrey,
     'default': Color.fromARGB(255, 48, 139, 117),
@@ -99,11 +104,16 @@ class SoundOption {
 
   IconData get icon {
     switch (iconName) {
-      case 'water_drop_outlined': return Icons.water_drop_outlined;
-      case 'water_rounded': return Icons.water_rounded;
-      case 'waves_rounded': return Icons.waves_rounded;
-      case 'volume_off_rounded': return Icons.volume_off_rounded;
-      default: return Icons.music_note_rounded;
+      case 'water_drop_outlined':
+        return Icons.water_drop_outlined;
+      case 'water_rounded':
+        return Icons.water_rounded;
+      case 'waves_rounded':
+        return Icons.waves_rounded;
+      case 'volume_off_rounded':
+        return Icons.volume_off_rounded;
+      default:
+        return Icons.music_note_rounded;
     }
   }
 
@@ -126,26 +136,40 @@ class SetSessionPage extends StatefulWidget {
   State<SetSessionPage> createState() => _SetSessionPageState();
 }
 
-class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProviderStateMixin {
+class _SetSessionPageState extends State<SetSessionPage>
+    with SingleTickerProviderStateMixin {
   // Session configuration
   late SessionMode sessionMode;
   String pomodoroDuration = '25min';
-  double numberOfBlocks = 0; // Changed default to 0
+  double numberOfBlocks = 0;
   double customDuration = 70;
 
-  // Session settings
-  bool isCameraDetectionEnabled = true;
+  // Session settings - Camera configuration
+  bool isCameraDetectionEnabled = false;
+
+  // 0.0 = High (30s), 0.5 = Medium (60s), 1.0 = Low (90s)
   double sensitivity = 0.5;
-  String notificationStyle = 'Both';
+
+  // 'subtle' or 'strong'
+  String notificationStyle = 'subtle';
+
+  // Subtle notification options
+  bool subtleUseLight = true;
+  bool subtleUseSound = false;
+
   bool isConfigurationOpen = false;
-  bool _blocksFieldError = false; // New validation state
-  
+  bool _blocksFieldError = false;
+
   // Sound selection
   SoundOption _selectedSound = SoundOption.off();
   List<SoundOption> _availableSounds = [];
   bool _soundsLoaded = false;
   final AudioPlayer _audioPlayer = AudioPlayer();
   Timer? _previewTimer;
+
+  // Notification sound
+  String? _notificationSoundUrl;
+  final AudioPlayer _notificationPlayer = AudioPlayer();
 
   // BLE connection state
   bool get isRikazToolConnected => RikazConnectionState.isConnected;
@@ -156,10 +180,14 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
   bool _deviceWasConnected = false;
   bool _hasShownDisconnectWarning = false;
 
+  // Camera status
+  String _cameraStatus = 'unknown'; // 'connected', 'disconnected', 'unknown'
+  StreamSubscription? _cameraStatusSubscription;
+
   final GlobalKey<SlideActionState> _slideKey = GlobalKey<SlideActionState>();
-  final ScrollController _scrollController = ScrollController(); // New scroll controller
-  final GlobalKey _blocksCounterKey = GlobalKey(); // Key for blocks counter widget
-  
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _blocksCounterKey = GlobalKey();
+
   // Pulse animation
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
@@ -170,8 +198,10 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
 
   // Computed properties
   bool get canStartSession => !isLoading;
-  bool get showDisconnectButton => isRikazToolConnected && !_showRikazConfirmation;
+  bool get showDisconnectButton =>
+      isRikazToolConnected && !_showRikazConfirmation;
   bool get shouldShowHardwareTip => !isRikazToolConnected;
+  bool get canEnableCamera => isRikazToolConnected && !_showRikazConfirmation;
 
   // Spacing helpers
   double get horizontalPadding => _screenWidth * 0.04;
@@ -182,34 +212,35 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
 
   // Text style helpers
   TextStyle get headingStyle => TextStyle(
-    fontSize: _adaptiveFontSize(0.048),
-    fontWeight: FontWeight.w700,
-    color: primaryTextDark,
-  );
-  
+        fontSize: _adaptiveFontSize(0.048),
+        fontWeight: FontWeight.w700,
+        color: primaryTextDark,
+      );
+
   TextStyle get subheadingStyle => TextStyle(
-    fontSize: _adaptiveFontSize(0.037),
-    fontWeight: FontWeight.bold,
-    color: primaryTextDark,
-  );
-  
+        fontSize: _adaptiveFontSize(0.037),
+        fontWeight: FontWeight.bold,
+        color: primaryTextDark,
+      );
+
   TextStyle get bodyStyle => TextStyle(
-    fontSize: _adaptiveFontSize(0.032),
-    color: secondaryTextGrey,
-  );
-  
+        fontSize: _adaptiveFontSize(0.032),
+        color: secondaryTextGrey,
+      );
+
   TextStyle get captionStyle => TextStyle(
-    fontSize: _adaptiveFontSize(0.029),
-    color: secondaryTextGrey,
-    fontWeight: FontWeight.w500,
-  );
+        fontSize: _adaptiveFontSize(0.029),
+        color: secondaryTextGrey,
+        fontWeight: FontWeight.w500,
+      );
 
   @override
   void initState() {
     super.initState();
     sessionMode = widget.initialMode ?? SessionMode.pomodoro;
     _loadSounds();
-    
+    _loadNotificationSound();
+
     _pulseController = AnimationController(
       duration: _Constants.pulseAnimationDuration,
       vsync: this,
@@ -217,29 +248,32 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.15).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
-    
+
     if (RikazConnectionState.isConnected) {
       debugPrint('🔌 Restored connection state from previous session');
       isConfigurationOpen = true;
       _startConnectionMonitoring();
+      _setupCameraStatusListener();
     }
   }
 
   @override
   void dispose() {
     _connectionCheckTimer?.cancel();
+    _cameraStatusSubscription?.cancel();
     _previewTimer?.cancel();
     _audioPlayer.stop();
     _audioPlayer.dispose();
+    _notificationPlayer.dispose();
     _pulseController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
-  
+
   // =============================================================================
   // DATA LOADING
   // =============================================================================
-  
+
   Future<void> _loadSounds() async {
     try {
       final supabase = sb.Supabase.instance.client;
@@ -275,17 +309,28 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
       }
     }
   }
-  
+
+  Future<void> _loadNotificationSound() async {
+    try {
+      final supabase = sb.Supabase.instance.client;
+      final url = supabase.storage.from('sounds').getPublicUrl('notify.mp3');
+      setState(() => _notificationSoundUrl = url);
+      debugPrint('✅ Notification sound loaded: $url');
+    } catch (e) {
+      debugPrint('❌ Error loading notification sound: $e');
+    }
+  }
+
   Future<void> _playPreview(SoundOption sound) async {
     _previewTimer?.cancel();
     await _audioPlayer.stop();
-    
+
     if (sound.id == 'off' || sound.filePathUrl == null) return;
-    
+
     try {
       await _audioPlayer.play(UrlSource(sound.filePathUrl!));
       print('🎵 Playing preview: ${sound.name}');
-      
+
       _previewTimer = Timer(_Constants.soundPreviewDuration, () async {
         await _audioPlayer.stop();
         print('⏹️ Preview stopped');
@@ -293,6 +338,210 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     } catch (e) {
       print('❌ Error playing sound preview: $e');
     }
+  }
+
+  Future<void> _playNotificationPreview() async {
+    if (_notificationSoundUrl == null) return;
+
+    try {
+      await _notificationPlayer.stop();
+      await _notificationPlayer.play(UrlSource(_notificationSoundUrl!));
+      debugPrint('🔔 Playing notification preview');
+    } catch (e) {
+      debugPrint('❌ Error playing notification preview: $e');
+    }
+  }
+
+  // =============================================================================
+  // CAMERA CONTROL
+  // =============================================================================
+
+  void _setupCameraStatusListener() {
+    RikazLightService.onCameraStatusChanged = (String status) {
+      if (mounted) {
+        setState(() {
+          _cameraStatus = status;
+        });
+        debugPrint('📷 Camera status updated: $status');
+      }
+    };
+
+    // Request initial status
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted && isRikazToolConnected) {
+        RikazLightService.requestCameraStatus();
+      }
+    });
+  }
+
+  Future<void> _toggleCameraDetection(bool value) async {
+    if (!isRikazToolConnected) return;
+
+    setState(() => isCameraDetectionEnabled = value);
+
+    if (value) {
+      // Enable camera detection
+      final String sensitivityLevel = _getSensitivityLevel();
+
+      final bool success = await RikazLightService.enableCameraDetection(
+        sensitivity: sensitivityLevel,
+        notificationStyle: notificationStyle,
+      );
+
+      if (success) {
+        debugPrint('✅ Camera detection enabled');
+        _showSnackBar('Camera detection enabled', Colors.green.shade600);
+      } else {
+        setState(() => isCameraDetectionEnabled = false);
+        _showSnackBar('Failed to enable camera', errorIndicatorRed);
+      }
+    } else {
+      // Disable camera detection
+      final bool success = await RikazLightService.disableCameraDetection();
+
+      if (success) {
+        debugPrint('📷 Camera detection disabled');
+        _showSnackBar('Camera detection disabled', secondaryTextGrey);
+      }
+    }
+  }
+
+  String _getSensitivityLevel() {
+    if (sensitivity <= 0.33) return 'high';
+    if (sensitivity <= 0.67) return 'medium';
+    return 'low';
+  }
+
+  String _getSensitivityLabel() {
+    if (sensitivity <= 0.33) return 'High (30s)';
+    if (sensitivity <= 0.67) return 'Medium (60s)';
+    return 'Low (90s)';
+  }
+
+  Future<void> _updateCameraSensitivity(double value) async {
+    setState(() => sensitivity = value);
+
+    if (isCameraDetectionEnabled && isRikazToolConnected) {
+      final String sensitivityLevel = _getSensitivityLevel();
+      await RikazLightService.enableCameraDetection(
+        sensitivity: sensitivityLevel,
+        notificationStyle: notificationStyle,
+      );
+      debugPrint('⚙️ Updated sensitivity to: $sensitivityLevel');
+    }
+  }
+
+  Future<void> _updateNotificationStyle(String style) async {
+    setState(() => notificationStyle = style);
+
+    if (isCameraDetectionEnabled && isRikazToolConnected) {
+      final String sensitivityLevel = _getSensitivityLevel();
+      await RikazLightService.enableCameraDetection(
+        sensitivity: sensitivityLevel,
+        notificationStyle: style,
+      );
+      debugPrint('⚙️ Updated notification style to: $style');
+    }
+
+    // Play preview for strong style
+    if (style == 'strong' && _notificationSoundUrl != null) {
+      await _playNotificationPreview();
+    }
+  }
+
+  void _showCameraPreview() {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(cardBorderRadius),
+        ),
+        child: Container(
+          padding: EdgeInsets.all(_screenWidth * 0.04),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.videocam_rounded,
+                      color: accentThemeColor,
+                      size: _adaptiveFontSize(0.05)),
+                  SizedBox(width: _screenWidth * 0.02),
+                  Text(
+                    'Camera Preview',
+                    style: TextStyle(
+                      fontSize: _adaptiveFontSize(0.042),
+                      fontWeight: FontWeight.bold,
+                      color: primaryTextDark,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: secondaryTextGrey),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              SizedBox(height: mediumGap),
+              Container(
+                width: double.infinity,
+                height: _screenHeight * 0.35,
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: accentThemeColor.withOpacity(0.3),
+                    width: 2,
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Icon(
+                        Icons.videocam_off_rounded,
+                        size: _screenWidth * 0.15,
+                        color: Colors.white.withOpacity(0.3),
+                      ),
+                      Positioned(
+                        bottom: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.7),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            _cameraStatus == 'connected'
+                                ? 'Camera Connected - Live preview not available in setup'
+                                : 'Camera Not Connected',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: _adaptiveFontSize(0.028),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              SizedBox(height: mediumGap),
+              Text(
+                'Camera preview will be active during your session when distraction detection is enabled.',
+                style: TextStyle(
+                  fontSize: _adaptiveFontSize(0.03),
+                  color: secondaryTextGrey,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // =============================================================================
@@ -309,7 +558,6 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     return _Constants.soundColors[soundName] ?? _Constants.soundColors['default']!;
   }
 
-  // Scroll to blocks counter field
   void _scrollToBlocksCounter() {
     if (_blocksCounterKey.currentContext != null) {
       Scrollable.ensureVisible(
@@ -326,7 +574,6 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
   // =============================================================================
 
   void handleStartSessionPress() {
-    // Validate number of blocks for Pomodoro mode
     if (sessionMode == SessionMode.pomodoro && numberOfBlocks == 0) {
       setState(() {
         _blocksFieldError = true;
@@ -334,7 +581,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
       _scrollToBlocksCounter();
       return;
     }
-    
+
     if (!isRikazToolConnected) {
       _showDialog(
         title: 'Hardware Not Connected',
@@ -347,11 +594,12 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
       );
       return;
     }
-    
+
     if (_deviceWasConnected && !isRikazToolConnected && _hasShownDisconnectWarning) {
       _showDialog(
         title: 'Device Unplugged',
-        content: 'Rikaz Tools device appears to be unplugged.\n\nThe session will start without hardware control.',
+        content:
+            'Rikaz Tools device appears to be unplugged.\n\nThe session will start without hardware control.',
         icon: Icons.warning_amber_rounded,
         iconColor: Colors.orange.shade600,
         cancelText: 'Cancel',
@@ -360,18 +608,17 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
       );
       return;
     }
-    
+
     _navigateToSession();
   }
-  
+
   void _navigateToSession() {
-    final String sessionType = sessionMode == SessionMode.pomodoro ? 'pomodoro' : 'custom';
-    final String durationValue = sessionMode == SessionMode.pomodoro 
-        ? pomodoroDuration 
-        : customDuration.toInt().toString();
-    final String? blocks = sessionMode == SessionMode.pomodoro 
-        ? numberOfBlocks.toInt().toString() 
-        : null;
+    final String sessionType =
+        sessionMode == SessionMode.pomodoro ? 'pomodoro' : 'custom';
+    final String durationValue =
+        sessionMode == SessionMode.pomodoro ? pomodoroDuration : customDuration.toInt().toString();
+    final String? blocks =
+        sessionMode == SessionMode.pomodoro ? numberOfBlocks.toInt().toString() : null;
 
     _previewTimer?.cancel();
     _audioPlayer.stop();
@@ -386,10 +633,13 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
         'isCameraDetectionEnabled': isCameraDetectionEnabled,
         'sensitivity': sensitivity,
         'notificationStyle': notificationStyle,
+        'subtleUseLight': subtleUseLight,
+        'subtleUseSound': subtleUseSound,
         'rikazConnected': RikazConnectionState.isConnected,
         'selectedSoundId': _selectedSound.id,
         'selectedSoundName': _selectedSound.name,
         'selectedSoundUrl': _selectedSound.filePathUrl,
+        'notificationSoundUrl': _notificationSoundUrl,
       },
     );
   }
@@ -403,10 +653,10 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
 
     setState(() => isLoading = true);
 
-    final RikazDevice? selectedDevice = await showDialog<RikazDevice>( 
+    final RikazDevice? selectedDevice = await showDialog<RikazDevice>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const RikazDevicePicker(), 
+      builder: (context) => const RikazDevicePicker(),
     );
 
     if (!mounted) return;
@@ -414,14 +664,14 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     if (selectedDevice != null) {
       RikazConnectionState.setConnected(true);
       _connectedDeviceName = selectedDevice.name;
-      
+
       setState(() {
         isLoading = false;
         _showRikazConfirmation = true;
       });
-      
+
       print('✅ Rikaz Tools: Connected to ${selectedDevice.name}');
-      
+
       if (mounted) {
         try {
           await _pulseController.forward();
@@ -436,11 +686,12 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
           print('⚠️ Pulse animation error: $e');
         }
       }
-      
+
       _startConnectionMonitoring();
-      
+      _setupCameraStatusListener();
+
       await Future.delayed(_Constants.connectionSuccessDuration);
-      
+
       if (mounted) {
         setState(() {
           _showRikazConfirmation = false;
@@ -463,15 +714,15 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     _connectionCheckTimer?.cancel();
     _deviceWasConnected = true;
     _hasShownDisconnectWarning = false;
-    
+
     _connectionCheckTimer = Timer.periodic(_Constants.connectionCheckInterval, (timer) async {
       if (!mounted || !RikazConnectionState.isConnected) {
         timer.cancel();
         return;
       }
-      
+
       final bool stillConnected = await RikazLightService.isConnected();
-      
+
       if (!stillConnected) {
         timer.cancel();
         await RikazLightService.disconnect();
@@ -481,10 +732,12 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
           setState(() {
             isConfigurationOpen = false;
             _connectedDeviceName = null;
-            _deviceWasConnected = false; 
+            _deviceWasConnected = false;
+            isCameraDetectionEnabled = false;
+            _cameraStatus = 'unknown';
           });
         }
-        
+
         _showDeviceLostWarning();
       } else if (stillConnected && !_deviceWasConnected) {
         _deviceWasConnected = true;
@@ -495,10 +748,11 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
 
   void _showDeviceLostWarning() {
     if (!mounted) return;
-    
+
     _showDialog(
       title: 'Hardware Disconnected',
-      content: 'The Bluetooth connection to your Rikaz device was lost. Please check your device and try reconnecting.',
+      content:
+          'The Bluetooth connection to your Rikaz device was lost. Please check your device and try reconnecting.',
       icon: Icons.bluetooth_disabled_rounded,
       iconColor: errorIndicatorRed,
       cancelText: 'Close',
@@ -506,7 +760,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
       onConfirm: _handleRikazConnect,
       barrierDismissible: false,
     );
-    
+
     debugPrint('⚠️ RIKAZ: Connection lost');
   }
 
@@ -519,23 +773,25 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
 
     if (confirmed == true) {
       print('🔌 Starting disconnect process...');
-      
+
       _connectionCheckTimer?.cancel();
-      await RikazLightService.turnOff(); 
-      await RikazLightService.disconnect(); 
+      await RikazLightService.turnOff();
+      await RikazLightService.disconnect();
       RikazConnectionState.reset();
-      
+
       if (mounted) {
         setState(() {
           isConfigurationOpen = false;
           _connectedDeviceName = null;
           _deviceWasConnected = false;
           _hasShownDisconnectWarning = false;
+          isCameraDetectionEnabled = false;
+          _cameraStatus = 'unknown';
         });
-        
+
         _showSnackBar('Hardware disconnected', Colors.green.shade600);
       }
-      
+
       print('🔌 Rikaz Tools: Disconnected');
     }
   }
@@ -575,17 +831,25 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                 child: Icon(icon, color: iconColor, size: _screenWidth * 0.10),
               ),
               SizedBox(height: _screenHeight * 0.018),
-              Text(title, style: TextStyle(
-                fontSize: _adaptiveFontSize(0.042),
-                fontWeight: FontWeight.bold,
-                color: primaryTextDark,
-              ), textAlign: TextAlign.center),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: _adaptiveFontSize(0.042),
+                  fontWeight: FontWeight.bold,
+                  color: primaryTextDark,
+                ),
+                textAlign: TextAlign.center,
+              ),
               SizedBox(height: mediumGap),
-              Text(content, style: TextStyle(
-                fontSize: _adaptiveFontSize(0.032),
-                color: secondaryTextGrey,
-                height: 1.4,
-              ), textAlign: TextAlign.center),
+              Text(
+                content,
+                style: TextStyle(
+                  fontSize: _adaptiveFontSize(0.032),
+                  color: secondaryTextGrey,
+                  height: 1.4,
+                ),
+                textAlign: TextAlign.center,
+              ),
               SizedBox(height: _screenHeight * 0.022),
               Row(
                 children: [
@@ -599,11 +863,14 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                           side: BorderSide(color: secondaryTextGrey.withOpacity(0.3)),
                         ),
                       ),
-                      child: Text(cancelText, style: TextStyle(
-                        color: secondaryTextGrey,
-                        fontSize: _adaptiveFontSize(0.033),
-                        fontWeight: FontWeight.w600,
-                      )),
+                      child: Text(
+                        cancelText,
+                        style: TextStyle(
+                          color: secondaryTextGrey,
+                          fontSize: _adaptiveFontSize(0.033),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   ),
                   SizedBox(width: _screenWidth * 0.025),
@@ -619,17 +886,22 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         elevation: 2,
                       ),
-                      child: Text(confirmText, style: TextStyle(
-                        color: Colors.white,
-                        fontSize: _adaptiveFontSize(0.033),
-                        fontWeight: FontWeight.bold,
-                      )),
+                      child: Text(
+                        confirmText,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: _adaptiveFontSize(0.033),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
-          ]),
-      )),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -648,23 +920,29 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                 color: errorIndicatorRed.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.power_settings_new_rounded, 
-                color: errorIndicatorRed, 
-                size: _screenWidth * 0.10),
+              child: Icon(Icons.power_settings_new_rounded,
+                  color: errorIndicatorRed, size: _screenWidth * 0.10),
             ),
             SizedBox(height: _screenHeight * 0.018),
-            Text('Disconnect Hardware?', style: TextStyle(
-              fontSize: _adaptiveFontSize(0.042),
-              fontWeight: FontWeight.bold,
-              color: primaryTextDark,
-            ), textAlign: TextAlign.center),
+            Text(
+              'Disconnect Hardware?',
+              style: TextStyle(
+                fontSize: _adaptiveFontSize(0.042),
+                fontWeight: FontWeight.bold,
+                color: primaryTextDark,
+              ),
+              textAlign: TextAlign.center,
+            ),
             SizedBox(height: mediumGap),
-            Text('This will disable hardware features for your sessions. You can reconnect anytime.',
+            Text(
+              'This will disable hardware features for your sessions. You can reconnect anytime.',
               style: TextStyle(
                 fontSize: _adaptiveFontSize(0.032),
                 color: secondaryTextGrey,
                 height: 1.4,
-              ), textAlign: TextAlign.center),
+              ),
+              textAlign: TextAlign.center,
+            ),
             SizedBox(height: _screenHeight * 0.022),
             Row(
               children: [
@@ -678,11 +956,14 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                         side: BorderSide(color: secondaryTextGrey.withOpacity(0.3)),
                       ),
                     ),
-                    child: Text('Cancel', style: TextStyle(
-                      color: secondaryTextGrey,
-                      fontSize: _adaptiveFontSize(0.033),
-                      fontWeight: FontWeight.w600,
-                    )),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: secondaryTextGrey,
+                        fontSize: _adaptiveFontSize(0.033),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
                 SizedBox(width: _screenWidth * 0.025),
@@ -695,16 +976,20 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       elevation: 2,
                     ),
-                    child: Text('Disconnect', style: TextStyle(
-                      color: Colors.white,
-                      fontSize: _adaptiveFontSize(0.033),
-                      fontWeight: FontWeight.bold,
-                    )),
+                    child: Text(
+                      'Disconnect',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: _adaptiveFontSize(0.033),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
               ],
             ),
-        ]),
+          ],
+        ),
       ),
     );
   }
@@ -714,9 +999,25 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
-          children: [
+          children: const [
             Icon(Icons.check_circle, color: Colors.white, size: 20),
             SizedBox(width: 10),
+          ],
+        ),
+        backgroundColor: backgroundColor,
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    // Replace the content with a row that includes the message (keeping your style)
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.white, size: 20),
+            const SizedBox(width: 10),
             Expanded(child: Text(message)),
           ],
         ),
@@ -758,8 +1059,8 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
       ),
       child: IconButton(
         icon: Icon(
-          icon, 
-          color: onPressed != null ? Colors.white : secondaryTextGrey.withOpacity(0.5), 
+          icon,
+          color: onPressed != null ? Colors.white : secondaryTextGrey.withOpacity(0.5),
           size: adjustedSize * 0.42,
         ),
         onPressed: onPressed,
@@ -792,12 +1093,15 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
               Icon(icon, color: Colors.white, size: _adaptiveFontSize(0.055)),
               SizedBox(width: _screenWidth * 0.015),
             ],
-            Text(text, style: TextStyle(
-              color: Colors.white,
-              fontSize: _adaptiveFontSize(0.038),
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.3,
-            )),
+            Text(
+              text,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: _adaptiveFontSize(0.038),
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.3,
+              ),
+            ),
           ],
         ),
       ),
@@ -847,10 +1151,9 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
               decoration: BoxDecoration(
                 color: isSelected ? accentThemeColor : Colors.transparent,
                 shape: BoxShape.circle,
-                border: isSelected ? null : Border.all(
-                  color: secondaryTextGrey.withOpacity(0.35), 
-                  width: 1.8
-                ),
+                border: isSelected
+                    ? null
+                    : Border.all(color: secondaryTextGrey.withOpacity(0.35), width: 1.8),
               ),
               child: isSelected
                   ? Icon(Icons.check_rounded, color: Colors.white, size: _screenWidth * 0.035)
@@ -861,11 +1164,14 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.039),
-                    fontWeight: FontWeight.bold,
-                    color: isSelected ? accentThemeColor : primaryTextDark,
-                  )),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: _adaptiveFontSize(0.039),
+                      fontWeight: FontWeight.bold,
+                      color: isSelected ? accentThemeColor : primaryTextDark,
+                    ),
+                  ),
                   SizedBox(height: _screenHeight * 0.002),
                   Text(breakText, style: captionStyle),
                 ],
@@ -879,7 +1185,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
 
   Widget _buildBlocksCounter() {
     return Column(
-      key: _blocksCounterKey, // Key for scrolling to this widget
+      key: _blocksCounterKey,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildIconLabel(
@@ -891,10 +1197,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
         AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           width: double.infinity,
-          padding: EdgeInsets.symmetric(
-            horizontal: _screenWidth * 0.025, 
-            vertical: _screenHeight * 0.008
-          ),
+          padding: EdgeInsets.symmetric(horizontal: _screenWidth * 0.025, vertical: _screenHeight * 0.008),
           decoration: BoxDecoration(
             color: cardBackground,
             borderRadius: BorderRadius.circular(cardBorderRadius),
@@ -908,36 +1211,36 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
             children: [
               _buildCircularIconButton(
                 icon: Icons.remove_rounded,
-                onPressed: numberOfBlocks > 1 
-                  ? () {
-                      setState(() {
-                        numberOfBlocks--;
-                      });
-                    }
-                  : null,
+                onPressed: numberOfBlocks > 1
+                    ? () {
+                        setState(() {
+                          numberOfBlocks--;
+                        });
+                      }
+                    : null,
                 size: _screenWidth * 0.11,
               ),
               Text(
-                numberOfBlocks == 0 ? '-' : numberOfBlocks.toInt().toString(), 
+                numberOfBlocks == 0 ? '-' : numberOfBlocks.toInt().toString(),
                 style: TextStyle(
                   fontSize: _adaptiveFontSize(0.14),
                   fontWeight: FontWeight.w500,
                   color: _blocksFieldError ? errorIndicatorRed : primaryTextDark,
                   height: 1.1,
-                )
+                ),
               ),
               _buildCircularIconButton(
                 icon: Icons.add_rounded,
-                onPressed: numberOfBlocks < _Constants.maxPomodoroBlocks 
-                  ? () {
-                      setState(() {
-                        numberOfBlocks++;
-                        if (numberOfBlocks > 0) {
-                          _blocksFieldError = false;
-                        }
-                      });
-                    }
-                  : null,
+                onPressed: numberOfBlocks < _Constants.maxPomodoroBlocks
+                    ? () {
+                        setState(() {
+                          numberOfBlocks++;
+                          if (numberOfBlocks > 0) {
+                            _blocksFieldError = false;
+                          }
+                        });
+                      }
+                    : null,
                 size: _screenWidth * 0.11,
               ),
             ],
@@ -949,22 +1252,20 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
           child: Row(
             children: [
               Icon(
-                _blocksFieldError ? Icons.error_outline : Icons.info_outline_rounded, 
-                color: _blocksFieldError ? errorIndicatorRed : accentThemeColor, 
-                size: _adaptiveFontSize(0.035)
+                _blocksFieldError ? Icons.error_outline : Icons.info_outline_rounded,
+                color: _blocksFieldError ? errorIndicatorRed : accentThemeColor,
+                size: _adaptiveFontSize(0.035),
               ),
               SizedBox(width: _screenWidth * 0.012),
               Expanded(
                 child: Text(
-                  _blocksFieldError 
-                      ? 'Please select number of blocks to continue'
-                      : 'One block = focus session + break', 
+                  _blocksFieldError ? 'Please select number of blocks to continue' : 'One block = focus session + break',
                   style: TextStyle(
                     fontSize: _adaptiveFontSize(0.029),
                     color: _blocksFieldError ? errorIndicatorRed : secondaryTextGrey,
                     fontWeight: FontWeight.w500,
-                  )
-                )
+                  ),
+                ),
               ),
             ],
           ),
@@ -985,9 +1286,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                 color: accentThemeColor.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(9),
               ),
-              child: Icon(Icons.schedule_rounded, 
-                color: accentThemeColor, 
-                size: _adaptiveFontSize(0.045)),
+              child: Icon(Icons.schedule_rounded, color: accentThemeColor, size: _adaptiveFontSize(0.045)),
             ),
             SizedBox(width: _screenWidth * 0.025),
             Text('Session Duration', style: subheadingStyle),
@@ -997,28 +1296,31 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
         Center(
           child: Column(
             children: [
-              Text('${customDuration.toInt()}', style: TextStyle(
-                fontSize: _adaptiveFontSize(0.14),
-                fontWeight: FontWeight.w500,
-                color: primaryTextDark,
-                height: 1,
-              )),
+              Text(
+                '${customDuration.toInt()}',
+                style: TextStyle(
+                  fontSize: _adaptiveFontSize(0.14),
+                  fontWeight: FontWeight.w500,
+                  color: primaryTextDark,
+                  height: 1,
+                ),
+              ),
               SizedBox(height: smallGap),
-              Text('minutes', style: TextStyle(
-                fontSize: _adaptiveFontSize(0.035),
-                fontWeight: FontWeight.w500,
-                color: secondaryTextGrey,
-              )),
+              Text(
+                'minutes',
+                style: TextStyle(
+                  fontSize: _adaptiveFontSize(0.035),
+                  fontWeight: FontWeight.w500,
+                  color: secondaryTextGrey,
+                ),
+              ),
             ],
           ),
         ),
         SizedBox(height: mediumGap),
         Center(
           child: Container(
-            padding: EdgeInsets.symmetric(
-              horizontal: _screenWidth * 0.035,
-              vertical: _screenHeight * 0.006,
-            ),
+            padding: EdgeInsets.symmetric(horizontal: _screenWidth * 0.035, vertical: _screenHeight * 0.006),
             decoration: BoxDecoration(
               color: secondaryTextGrey.withOpacity(0.08),
               borderRadius: BorderRadius.circular(18),
@@ -1027,15 +1329,16 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.block_rounded, 
-                  color: secondaryTextGrey, 
-                  size: _adaptiveFontSize(0.032)),
+                Icon(Icons.block_rounded, color: secondaryTextGrey, size: _adaptiveFontSize(0.032)),
                 SizedBox(width: _screenWidth * 0.012),
-                Text('No Breaks', style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.03),
-                  fontWeight: FontWeight.w600,
-                  color: secondaryTextGrey,
-                )),
+                Text(
+                  'No Breaks',
+                  style: TextStyle(
+                    fontSize: _adaptiveFontSize(0.03),
+                    fontWeight: FontWeight.w600,
+                    color: secondaryTextGrey,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1065,25 +1368,15 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('10 min', style: TextStyle(
-                fontSize: _adaptiveFontSize(0.026),
-                color: secondaryTextGrey,
-                fontWeight: FontWeight.w600,
-              )),
-              Text('120 min', style: TextStyle(
-                fontSize: _adaptiveFontSize(0.026),
-                color: secondaryTextGrey,
-                fontWeight: FontWeight.w600,
-              )),
+              Text('10 min', style: TextStyle(fontSize: _adaptiveFontSize(0.026), color: secondaryTextGrey, fontWeight: FontWeight.w600)),
+              Text('120 min', style: TextStyle(fontSize: _adaptiveFontSize(0.026), color: secondaryTextGrey, fontWeight: FontWeight.w600)),
             ],
           ),
         ),
         SizedBox(height: mediumGap),
         Row(
           children: [
-            Icon(Icons.info_outline_rounded, 
-              color: accentThemeColor, 
-              size: _adaptiveFontSize(0.037)),
+            Icon(Icons.info_outline_rounded, color: accentThemeColor, size: _adaptiveFontSize(0.037)),
             SizedBox(width: _screenWidth * 0.015),
             Expanded(child: Text('Continuous focus without interruptions', style: captionStyle)),
           ],
@@ -1128,11 +1421,11 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
               ),
               if (showDisconnectButton)
                 IconButton(
-                  icon: Icon(Icons.power_settings_new, color: errorIndicatorRed, size: 20),
+                  icon: const Icon(Icons.power_settings_new, color: errorIndicatorRed, size: 20),
                   onPressed: _handleRikazDisconnect,
                   tooltip: 'Disconnect',
                   padding: EdgeInsets.zero,
-                  constraints: BoxConstraints(),
+                  constraints: const BoxConstraints(),
                 ),
             ],
           ),
@@ -1151,6 +1444,8 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                 height: 1.3,
               ),
             ),
+            SizedBox(height: largeGap),
+            _buildCameraToggle(),
           ] else ...[
             SizedBox(height: _screenHeight * 0.015),
             SlideAction(
@@ -1164,7 +1459,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
               innerColor: cardBackground,
               outerColor: accentThemeColor,
               sliderButtonIcon: Container(
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: cardBackground,
                   shape: BoxShape.circle,
                 ),
@@ -1177,10 +1472,12 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
               sliderButtonIconPadding: 10,
               height: _screenHeight * 0.058,
               borderRadius: cardBorderRadius,
-              onSubmit: isLoading ? null : () async {
-                await _handleRikazConnect();
-                return null;
-              },
+              onSubmit: isLoading
+                  ? null
+                  : () async {
+                      await _handleRikazConnect();
+                      return null;
+                    },
             ),
           ],
         ],
@@ -1188,25 +1485,375 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
     );
   }
 
+  Widget _buildCameraToggle() {
+    return Container(
+      padding: EdgeInsets.all(_screenWidth * 0.035),
+      decoration: BoxDecoration(
+        color: canEnableCamera ? accentThemeColor.withOpacity(0.08) : secondaryTextGrey.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: canEnableCamera ? accentThemeColor.withOpacity(0.3) : secondaryTextGrey.withOpacity(0.2),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(_screenWidth * 0.02),
+                decoration: BoxDecoration(
+                  color: canEnableCamera ? accentThemeColor.withOpacity(0.15) : secondaryTextGrey.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.videocam_rounded,
+                  color: canEnableCamera ? accentThemeColor : secondaryTextGrey,
+                  size: _adaptiveFontSize(0.045),
+                ),
+              ),
+              SizedBox(width: _screenWidth * 0.025),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Camera Detection',
+                      style: TextStyle(
+                        fontSize: _adaptiveFontSize(0.038),
+                        fontWeight: FontWeight.bold,
+                        color: canEnableCamera ? primaryTextDark : secondaryTextGrey,
+                      ),
+                    ),
+                    if (_cameraStatus == 'connected') ...[
+                      SizedBox(height: _screenHeight * 0.003),
+                      Row(
+                        children: [
+                          Icon(Icons.check_circle, color: Colors.green.shade600, size: _adaptiveFontSize(0.03)),
+                          SizedBox(width: _screenWidth * 0.008),
+                          Text(
+                            'Camera Ready',
+                            style: TextStyle(
+                              fontSize: _adaptiveFontSize(0.028),
+                              color: Colors.green.shade600,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.visibility_rounded, color: canEnableCamera ? accentThemeColor : secondaryTextGrey),
+                onPressed: canEnableCamera ? _showCameraPreview : null,
+                tooltip: 'Preview',
+              ),
+              Switch(
+                value: isCameraDetectionEnabled,
+                onChanged: canEnableCamera ? _toggleCameraDetection : null,
+                activeColor: accentThemeColor,
+                inactiveThumbColor: secondaryTextGrey,
+              ),
+            ],
+          ),
+          if (!canEnableCamera) ...[
+            SizedBox(height: _screenHeight * 0.008),
+            Text(
+              'Connect hardware first to enable camera',
+              style: TextStyle(
+                fontSize: _adaptiveFontSize(0.028),
+                color: secondaryTextGrey,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+          if (isCameraDetectionEnabled && canEnableCamera) ...[
+            SizedBox(height: largeGap),
+            _buildCameraOptions(),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCameraOptions() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Triggers info
+        Container(
+          padding: EdgeInsets.all(_screenWidth * 0.03),
+          decoration: BoxDecoration(
+            color: cardBackground,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: secondaryTextGrey.withOpacity(0.15)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.radar_rounded, color: accentThemeColor, size: _adaptiveFontSize(0.04)),
+              SizedBox(width: _screenWidth * 0.02),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Active Triggers',
+                      style: TextStyle(
+                        fontSize: _adaptiveFontSize(0.033),
+                        fontWeight: FontWeight.bold,
+                        color: primaryTextDark,
+                      ),
+                    ),
+                    SizedBox(height: _screenHeight * 0.003),
+                    Text(
+                      'Monitors: Sleeping detection',
+                      style: TextStyle(
+                        fontSize: _adaptiveFontSize(0.028),
+                        color: secondaryTextGrey,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: largeGap),
+
+        // Sensitivity slider
+        Text(
+          'Sensitivity',
+          style: TextStyle(
+            fontSize: _adaptiveFontSize(0.035),
+            fontWeight: FontWeight.bold,
+            color: primaryTextDark,
+          ),
+        ),
+        SizedBox(height: smallGap),
+        Text(
+          _getSensitivityLabel(),
+          style: TextStyle(
+            fontSize: _adaptiveFontSize(0.032),
+            color: accentThemeColor,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        SizedBox(height: mediumGap),
+        SliderTheme(
+          data: SliderThemeData(
+            activeTrackColor: accentThemeColor,
+            inactiveTrackColor: lightestAccentColor.withOpacity(0.4),
+            thumbColor: accentThemeColor,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10, elevation: 2),
+            overlayColor: accentThemeColor.withOpacity(0.18),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 20),
+            trackHeight: 4,
+          ),
+          child: Slider(
+            value: sensitivity,
+            min: 0.0,
+            max: 1.0,
+            divisions: 2,
+            onChanged: _updateCameraSensitivity,
+          ),
+        ),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: _screenWidth * 0.01),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'High (30s)',
+                style: TextStyle(
+                  fontSize: _adaptiveFontSize(0.026),
+                  color: secondaryTextGrey,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                'Low (90s)',
+                style: TextStyle(
+                  fontSize: _adaptiveFontSize(0.026),
+                  color: secondaryTextGrey,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: largeGap),
+
+        // Notification style
+        Text(
+          'Notification Style',
+          style: TextStyle(
+            fontSize: _adaptiveFontSize(0.035),
+            fontWeight: FontWeight.bold,
+            color: primaryTextDark,
+          ),
+        ),
+        SizedBox(height: mediumGap),
+        Row(
+          children: [
+            Expanded(
+              child: _buildNotificationStyleOption('subtle', Icons.volume_down_rounded, 'Subtle'),
+            ),
+            SizedBox(width: _screenWidth * 0.025),
+            Expanded(
+              child: _buildNotificationStyleOption('strong', Icons.volume_up_rounded, 'Strong'),
+            ),
+          ],
+        ),
+        SizedBox(height: mediumGap),
+
+        // Subtle options
+        if (notificationStyle == 'subtle') ...[
+          Container(
+            padding: EdgeInsets.all(_screenWidth * 0.03),
+            decoration: BoxDecoration(
+              color: cardBackground,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: secondaryTextGrey.withOpacity(0.15)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Subtle Alerts Use',
+                  style: TextStyle(
+                    fontSize: _adaptiveFontSize(0.032),
+                    fontWeight: FontWeight.bold,
+                    color: primaryTextDark,
+                  ),
+                ),
+                SizedBox(height: smallGap),
+                Row(
+                  children: [
+                    Expanded(
+                      child: CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: subtleUseLight,
+                        dense: true,
+                        activeColor: accentThemeColor,
+                        title: Text(
+                          'Light',
+                          style: TextStyle(
+                            fontSize: _adaptiveFontSize(0.03),
+                            color: primaryTextDark,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        onChanged: (v) => setState(() => subtleUseLight = v ?? true),
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
+                    ),
+                    SizedBox(width: _screenWidth * 0.02),
+                    Expanded(
+                      child: CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: subtleUseSound,
+                        dense: true,
+                        activeColor: accentThemeColor,
+                        title: Text(
+                          'Sound',
+                          style: TextStyle(
+                            fontSize: _adaptiveFontSize(0.03),
+                            color: primaryTextDark,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        onChanged: (v) => setState(() => subtleUseSound = v ?? false),
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: smallGap),
+                Text(
+                  'These options are applied during the session.',
+                  style: TextStyle(
+                    fontSize: _adaptiveFontSize(0.028),
+                    color: secondaryTextGrey,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: mediumGap),
+        ],
+
+        Row(
+          children: [
+            Icon(Icons.info_outline_rounded, color: accentThemeColor, size: _adaptiveFontSize(0.033)),
+            SizedBox(width: _screenWidth * 0.012),
+            Expanded(
+              child: Text(
+                notificationStyle == 'subtle'
+                    ? 'Non-intrusive alerts (customizable)'
+                    : 'Combined light + audio alerts',
+                style: TextStyle(
+                  fontSize: _adaptiveFontSize(0.028),
+                  color: secondaryTextGrey,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNotificationStyleOption(String value, IconData icon, String label) {
+    final isSelected = notificationStyle == value;
+    return GestureDetector(
+      onTap: () => _updateNotificationStyle(value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        padding: EdgeInsets.symmetric(horizontal: _screenWidth * 0.03, vertical: _screenHeight * 0.012),
+        decoration: BoxDecoration(
+          color: isSelected ? accentThemeColor.withOpacity(0.15) : cardBackground,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? accentThemeColor : secondaryTextGrey.withOpacity(0.2),
+            width: isSelected ? 1.8 : 1.2,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: isSelected ? accentThemeColor : secondaryTextGrey, size: _adaptiveFontSize(0.042)),
+            SizedBox(width: _screenWidth * 0.015),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: _adaptiveFontSize(0.033),
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? accentThemeColor : secondaryTextGrey,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildHardwareStatusVisual() {
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: horizontalPadding,
-        vertical: _screenHeight * 0.015,
-      ),
+      padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: _screenHeight * 0.015),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: isRikazToolConnected 
+          colors: isRikazToolConnected
               ? [accentThemeColor.withOpacity(0.12), lightestAccentColor.withOpacity(0.08)]
               : [secondaryTextGrey.withOpacity(0.06), secondaryTextGrey.withOpacity(0.04)],
         ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isRikazToolConnected 
-              ? accentThemeColor.withOpacity(0.3)
-              : secondaryTextGrey.withOpacity(0.18),
+          color: isRikazToolConnected ? accentThemeColor.withOpacity(0.3) : secondaryTextGrey.withOpacity(0.18),
           width: 1.2,
         ),
       ),
@@ -1262,7 +1909,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
         builder: (context, value, child) {
           final clampedValue = value.clamp(0.0, 1.0);
           final clampedScale = value.clamp(0.5, 1.2);
-          
+
           return Transform.scale(
             scale: clampedScale,
             child: Opacity(
@@ -1270,15 +1917,16 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.check_circle, 
-                    color: Colors.green.shade600, 
-                    size: _adaptiveFontSize(0.045)),
+                  Icon(Icons.check_circle, color: Colors.green.shade600, size: _adaptiveFontSize(0.045)),
                   SizedBox(width: _screenWidth * 0.02),
-                  Text('Connection Successful!', style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.037),
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green.shade700,
-                  )),
+                  Text(
+                    'Connection Successful!',
+                    style: TextStyle(
+                      fontSize: _adaptiveFontSize(0.037),
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green.shade700,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1312,7 +1960,6 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
         onTap: () {
           setState(() {
             sessionMode = mode;
-            // Reset error state when switching modes
             if (mode == SessionMode.custom) {
               _blocksFieldError = false;
             }
@@ -1324,22 +1971,21 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
           decoration: BoxDecoration(
             color: isSelected ? dfDeepTeal : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
-            boxShadow: isSelected 
-                ? [BoxShadow(color: dfDeepTeal.withOpacity(0.25), blurRadius: 6)]
-                : null,
+            boxShadow: isSelected ? [BoxShadow(color: dfDeepTeal.withOpacity(0.25), blurRadius: 6)] : null,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, 
-                size: _screenWidth * 0.045, 
-                color: isSelected ? Colors.white : secondaryTextGrey),
+              Icon(icon, size: _screenWidth * 0.045, color: isSelected ? Colors.white : secondaryTextGrey),
               SizedBox(width: _screenWidth * 0.015),
-              Text(text, style: TextStyle(
-                fontSize: _adaptiveFontSize(0.033),
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                color: isSelected ? Colors.white : secondaryTextGrey,
-              )),
+              Text(
+                text,
+                style: TextStyle(
+                  fontSize: _adaptiveFontSize(0.033),
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  color: isSelected ? Colors.white : secondaryTextGrey,
+                ),
+              ),
             ],
           ),
         ),
@@ -1370,10 +2016,13 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
             ),
           ),
           SizedBox(height: smallGap),
-          Text('Select a sound to play during your focus session', style: TextStyle(
-            fontSize: _adaptiveFontSize(0.031),
-            color: secondaryTextGrey,
-          )),
+          Text(
+            'Select a sound to play during your focus session',
+            style: TextStyle(
+              fontSize: _adaptiveFontSize(0.031),
+              color: secondaryTextGrey,
+            ),
+          ),
           SizedBox(height: _screenHeight * 0.015),
           if (!_soundsLoaded)
             Center(
@@ -1384,10 +2033,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
             )
           else
             Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: _screenWidth * 0.035,
-                vertical: smallGap,
-              ),
+              padding: EdgeInsets.symmetric(horizontal: _screenWidth * 0.035, vertical: smallGap),
               decoration: BoxDecoration(
                 color: cardBackground,
                 borderRadius: BorderRadius.circular(11),
@@ -1397,9 +2043,7 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                 child: DropdownButton<String>(
                   value: _selectedSound.id,
                   isExpanded: true,
-                  icon: Icon(Icons.keyboard_arrow_down_rounded, 
-                    color: accentThemeColor, 
-                    size: _screenWidth * 0.065),
+                  icon: Icon(Icons.keyboard_arrow_down_rounded, color: accentThemeColor, size: _screenWidth * 0.065),
                   style: TextStyle(
                     fontSize: _adaptiveFontSize(0.037),
                     fontWeight: FontWeight.w600,
@@ -1428,17 +2072,18 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                               color: soundColor.withOpacity(0.12),
                               borderRadius: BorderRadius.circular(7),
                             ),
-                            child: Icon(sound.icon, 
-                              color: soundColor, 
-                              size: _screenWidth * 0.045),
+                            child: Icon(sound.icon, color: soundColor, size: _screenWidth * 0.045),
                           ),
                           SizedBox(width: _screenWidth * 0.025),
                           Expanded(
-                            child: Text(sound.name, style: TextStyle(
-                              fontSize: _adaptiveFontSize(0.037),
-                              fontWeight: FontWeight.w600,
-                              color: primaryTextDark,
-                            )),
+                            child: Text(
+                              sound.name,
+                              style: TextStyle(
+                                fontSize: _adaptiveFontSize(0.037),
+                                fontWeight: FontWeight.w600,
+                                color: primaryTextDark,
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -1452,17 +2097,17 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
               padding: EdgeInsets.only(top: mediumGap),
               child: Row(
                 children: [
-                  Icon(Icons.volume_up_rounded, 
-                    color: accentThemeColor, 
-                    size: _adaptiveFontSize(0.037)),
+                  Icon(Icons.volume_up_rounded, color: accentThemeColor, size: _adaptiveFontSize(0.037)),
                   SizedBox(width: _screenWidth * 0.015),
                   Expanded(
-                    child: Text('5-second preview will play on selection', 
+                    child: Text(
+                      '5-second preview will play on selection',
                       style: TextStyle(
                         fontSize: _adaptiveFontSize(0.028),
                         color: secondaryTextGrey,
                         fontStyle: FontStyle.italic,
-                      )),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -1488,16 +2133,17 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
         backgroundColor: primaryBackground,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, 
-            color: primaryTextDark, 
-            size: _adaptiveFontSize(0.055)),
+          icon: Icon(Icons.arrow_back, color: primaryTextDark, size: _adaptiveFontSize(0.055)),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text('Set Session', style: TextStyle(
-          fontSize: _adaptiveFontSize(0.042),
-          fontWeight: FontWeight.bold,
-          color: primaryTextDark,
-        )),
+        title: Text(
+          'Set Session',
+          style: TextStyle(
+            fontSize: _adaptiveFontSize(0.042),
+            fontWeight: FontWeight.bold,
+            color: primaryTextDark,
+          ),
+        ),
         centerTitle: true,
       ),
       backgroundColor: primaryBackground,
@@ -1591,17 +2237,17 @@ class _SetSessionPageState extends State<SetSessionPage> with SingleTickerProvid
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.lightbulb_outline_rounded, 
-                              color: accentThemeColor, 
-                              size: _adaptiveFontSize(0.04)),
+                            Icon(Icons.lightbulb_outline_rounded, color: accentThemeColor, size: _adaptiveFontSize(0.04)),
                             SizedBox(width: _screenWidth * 0.02),
                             Expanded(
-                              child: Text('Connect hardware for enhanced features', 
+                              child: Text(
+                                'Connect hardware for enhanced features',
                                 style: TextStyle(
                                   fontSize: _adaptiveFontSize(0.03),
                                   color: primaryTextDark,
                                   fontWeight: FontWeight.w600,
-                                )),
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -1664,14 +2310,14 @@ class _AnimatedHardwareIcon extends StatelessWidget {
                 final double glowOpacity = (showConfirmation ? 0.6 : 0.4).clamp(0.0, 1.0);
                 final double glowBlur = showConfirmation ? 16.0 : 12.0;
                 final double glowSpread = showConfirmation ? 2.0 : 1.0;
-                
+
                 return Transform.scale(
                   scale: finalScale,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
                     padding: EdgeInsets.all(screenWidth * 0.025),
                     decoration: BoxDecoration(
-                      gradient: isActive 
+                      gradient: isActive
                           ? LinearGradient(
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
@@ -1683,7 +2329,7 @@ class _AnimatedHardwareIcon extends StatelessWidget {
                           : null,
                       color: isActive ? null : secondaryTextGrey.withOpacity(0.12),
                       shape: BoxShape.circle,
-                      boxShadow: isActive 
+                      boxShadow: isActive
                           ? [
                               BoxShadow(
                                 color: accentThemeColor.withOpacity(glowOpacity),
@@ -1705,11 +2351,14 @@ class _AnimatedHardwareIcon extends StatelessWidget {
           },
         ),
         SizedBox(height: screenHeight * 0.006),
-        Text(label, style: TextStyle(
-          fontSize: adaptiveFontSize(0.026),
-          fontWeight: FontWeight.w600,
-          color: isActive ? accentThemeColor : secondaryTextGrey,
-        )),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: adaptiveFontSize(0.026),
+            fontWeight: FontWeight.w600,
+            color: isActive ? accentThemeColor : secondaryTextGrey,
+          ),
+        ),
       ],
     );
   }

@@ -411,7 +411,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   int? selectedModeIndex;
   
   // -- Selection Mode State --
-  Set<String> _selectedEventsToDelete = {}; 
+  final Set<String> _selectedEventsToDelete = {}; 
   bool _isSelectionMode = false;
   bool _isBulkDeleting = false; 
 
@@ -3025,7 +3025,7 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                           SizedBox(height: screenHeight * 0.015), 
                           
                           DropdownButtonFormField<String>(
-                            value: _selectedImportance,
+                            initialValue: _selectedImportance,
                             decoration: _inputDecoration(label: 'Importance', icon: Icons.flag),
                             items: importanceColors.keys.where((key) => key != 'Info').map((String key) {
                               return DropdownMenuItem<String>(
@@ -3050,7 +3050,7 @@ class __EventManagementOverlayState extends State<_EventManagementOverlay> {
                           
                           // Frequency dropdown - DISABLED when editing
                           DropdownButtonFormField<String>(
-                            value: recurrenceOptions.keys.firstWhere(
+                            initialValue: recurrenceOptions.keys.firstWhere(
                                 (k) => recurrenceOptions[k] == _selectedRecurrence, 
                                 orElse: () => 'One-time'
                             ),

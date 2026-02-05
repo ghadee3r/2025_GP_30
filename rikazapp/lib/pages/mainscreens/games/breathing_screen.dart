@@ -26,8 +26,9 @@ class _BreathingScreenState extends State<BreathingScreen> with SingleTickerProv
 
     _controller.addListener(() {
       final val = _controller.value;
-      if (val < 0.25) setState(() => _status = "Inhale (4s)");
-      else if (val < 0.50) setState(() => _status = "Hold (4s)");
+      if (val < 0.25) {
+        setState(() => _status = "Inhale (4s)");
+      } else if (val < 0.50) setState(() => _status = "Hold (4s)");
       else if (val < 0.75) setState(() => _status = "Exhale (4s)");
       else setState(() => _status = "Hold (4s)");
     });
