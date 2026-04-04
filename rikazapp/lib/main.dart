@@ -12,7 +12,6 @@ import 'pages/subscreens/login.dart';
 import 'pages/subscreens/ForgotPassword.dart';
 import 'pages/subscreens/NewPassword.dart';
 
-
 const Color primaryThemePurple =  Color(0xFF175B73);
 const Color primaryTextDark = Color(0xFF30304D);
 const Color primaryBackground = Color(0xFFFFFFFF);
@@ -120,25 +119,32 @@ class MyApp extends StatelessWidget {
           return SetSessionPage(initialMode: initialMode);
         },
        '/session': (context) {
-  final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>? ?? {};
-  
-  // Debug log to see what's being passed
-  debugPrint('📋 Session Route Args: $args');
-  
-  return SessionPage(
-    sessionType: args['sessionType'] ?? 'pomodoro',
-    duration: args['duration'] ?? '25min',
-    numberOfBlocks: args['numberOfBlocks'],
-    isCameraDetectionEnabled: args['isCameraDetectionEnabled'],
-    sensitivity: args['sensitivity'],
-    notificationStyle: args['notificationStyle'],
-    rikazConnected: args['rikazConnected'] ?? false,
-    // ADDED: Sound parameters
-    selectedSoundId: args['selectedSoundId'],
-    selectedSoundName: args['selectedSoundName'],
-    selectedSoundUrl: args['selectedSoundUrl'],
-  );
-},
+          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>? ?? {};
+          
+          debugPrint('📋 Session Route Args: $args');
+          
+          return SessionPage(
+            sessionType: args['sessionType'] ?? 'pomodoro',
+            duration: args['duration'] ?? '25min',
+            numberOfBlocks: args['numberOfBlocks'],
+            isCameraDetectionEnabled: args['isCameraDetectionEnabled'],
+            sensitivity: args['sensitivity'],
+            notificationStyle: args['notificationStyle'],
+            
+            // --- NEW TRIGGERS ADDED HERE SO THE APP DOESN'T LOSE THEM ---
+            subtleAlertType: args['subtleAlertType'],
+            sleepTrigger: args['sleepTrigger'],
+            presenceTrigger: args['presenceTrigger'],
+            phoneTrigger: args['phoneTrigger'], // <--- ADDED PHONE TRIGGER HERE
+            notificationSoundUrl: args['notificationSoundUrl'],
+            // -------------------------------------------------------------
+            
+            rikazConnected: args['rikazConnected'] ?? false,
+            selectedSoundId: args['selectedSoundId'],
+            selectedSoundName: args['selectedSoundName'],
+            selectedSoundUrl: args['selectedSoundUrl'],
+          );
+        },
       },
       home: const AuthWrapper(),
     );
@@ -187,7 +193,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
         });
       }
       
-      // Reset Rikaz ESP32 hardware connection on logout
       if (event == AuthChangeEvent.signedOut) {
         RikazConnectionState.reset();
       }
@@ -213,7 +218,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       future: Future.value(Supabase.instance.client.auth.currentSession),
       builder: (context, snapshot) {
         if (!_isInitialAuthCheckComplete) {
-          return Scaffold(
+          return const Scaffold(
             body: Center(
               child: CircularProgressIndicator(color: primaryThemePurple),
             ),

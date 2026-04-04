@@ -1,11 +1,11 @@
 // ============================================================================
 // FILE: SetSession.dart
 // PURPOSE: Session configuration page with BLE device connection + Camera
-// NOTES:
-// - Adds: 30s/60s/90s camera sensitivity thresholds
-// - Adds: Camera preview dialog
-// - Adds: Subtle notification options (light/sound checkboxes)
-// - Adds: Pass notificationSoundUrl + subtle settings to Session route args
+// FIXES:
+// - Camera preview removed (no live feed on setup screen)
+// - Camera toggle appears immediately after connection (no delay)
+// - Trigger names consistent: Phone Use / Sleeping / Absence + icons
+// - Sound preview fixed (5 seconds)
 // ============================================================================
 
 import 'dart:async';
@@ -32,7 +32,6 @@ const Color lightestAccentColor = dfLightSeafoam;
 
 const Color primaryBackground = Color(0xFFF7F7F7);
 const Color cardBackground = Color(0xFFFFFFFF);
-
 const Color primaryTextDark = dfNavyIndigo;
 const Color secondaryTextGrey = Color(0xFF6B6B78);
 const Color errorIndicatorRed = Color(0xFFE57373);
@@ -69,6 +68,7 @@ class _Constants {
     'off': secondaryTextGrey,
     'default': Color.fromARGB(255, 48, 139, 117),
     'Rain': Color(0xFF5DADE2),
+    'River': Color(0xFF4FC3F7),
     'White Noise': Color.fromARGB(255, 186, 156, 241),
   };
 }
@@ -144,18 +144,16 @@ class _SetSessionPageState extends State<SetSessionPage>
   double numberOfBlocks = 0;
   double customDuration = 70;
 
-  // Session settings - Camera configuration
+  // Camera configuration
   bool isCameraDetectionEnabled = false;
-
-  // 0.0 = High (30s), 0.5 = Medium (60s), 1.0 = Low (90s)
   double sensitivity = 0.5;
-
-  // 'subtle' or 'strong'
   String notificationStyle = 'subtle';
+  String subtleAlertType = 'light'; // 'light' or 'sound'
 
-  // Subtle notification options
-  bool subtleUseLight = true;
-  bool subtleUseSound = false;
+  // Triggers
+  bool sleepTrigger = true;
+  bool presenceTrigger = false;
+  bool phoneTrigger = false;
 
   bool isConfigurationOpen = false;
   bool _blocksFieldError = false;
@@ -166,6 +164,7 @@ class _SetSessionPageState extends State<SetSessionPage>
   bool _soundsLoaded = false;
   final AudioPlayer _audioPlayer = AudioPlayer();
   Timer? _previewTimer;
+  bool _isPlayingPreview = false;
 
   // Notification sound
   String? _notificationSoundUrl;
@@ -181,7 +180,7 @@ class _SetSessionPageState extends State<SetSessionPage>
   bool _hasShownDisconnectWarning = false;
 
   // Camera status
-  String _cameraStatus = 'unknown'; // 'connected', 'disconnected', 'unknown'
+  String _cameraStatus = 'unknown';
   StreamSubscription? _cameraStatusSubscription;
 
   final GlobalKey<SlideActionState> _slideKey = GlobalKey<SlideActionState>();
@@ -198,10 +197,10 @@ class _SetSessionPageState extends State<SetSessionPage>
 
   // Computed properties
   bool get canStartSession => !isLoading;
-  bool get showDisconnectButton =>
-      isRikazToolConnected && !_showRikazConfirmation;
+  bool get showDisconnectButton => isRikazToolConnected && !_showRikazConfirmation;
   bool get shouldShowHardwareTip => !isRikazToolConnected;
-  bool get canEnableCamera => isRikazToolConnected && !_showRikazConfirmation;
+  // FIX: Camera toggle shows immediately when connected
+  bool get canEnableCamera => isRikazToolConnected;
 
   // Spacing helpers
   double get horizontalPadding => _screenWidth * 0.04;
@@ -264,6 +263,7 @@ class _SetSessionPageState extends State<SetSessionPage>
     _previewTimer?.cancel();
     _audioPlayer.stop();
     _audioPlayer.dispose();
+    _notificationPlayer.stop();
     _notificationPlayer.dispose();
     _pulseController.dispose();
     _scrollController.dispose();
@@ -275,14 +275,46 @@ class _SetSessionPageState extends State<SetSessionPage>
   // =============================================================================
 
   Future<void> _loadSounds() async {
+    final List<SoundOption> fallbackSounds = [
+      SoundOption.off(),
+      SoundOption(
+        id: 'Rain',
+        name: 'Rain',
+        filePathUrl:
+            'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/rain-v2.mp3',
+        iconName: 'water_drop_outlined',
+        colorHex: '#5DADE2',
+      ),
+      SoundOption(
+        id: 'River',
+        name: 'River',
+        filePathUrl:
+            'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/rain-v2.mp3',
+        iconName: 'waves_rounded',
+        colorHex: '#4FC3F7',
+      ),
+      SoundOption(
+        id: 'White Noise',
+        name: 'White Noise',
+        filePathUrl:
+            'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/White-Noise.mp3',
+        iconName: 'waves_rounded',
+        colorHex: '#BA9CF1',
+      ),
+    ];
+
     try {
       final supabase = sb.Supabase.instance.client;
       final response = await supabase
           .from('Sound_Option')
           .select('sound_name, sound_file_path, icon_name, color_hex');
 
-      final List<SoundOption> fetchedSounds = [SoundOption.off()];
+      if (response.isEmpty) {
+        if (mounted) setState(() { _availableSounds = fallbackSounds; _soundsLoaded = true; });
+        return;
+      }
 
+      final List<SoundOption> fetchedSounds = [SoundOption.off()];
       for (var item in response) {
         fetchedSounds.add(SoundOption(
           id: item['sound_name'],
@@ -293,20 +325,10 @@ class _SetSessionPageState extends State<SetSessionPage>
         ));
       }
 
-      if (mounted) {
-        setState(() {
-          _availableSounds = fetchedSounds;
-          _soundsLoaded = true;
-        });
-      }
+      if (mounted) setState(() { _availableSounds = fetchedSounds; _soundsLoaded = true; });
     } catch (e) {
-      print('❌ Error fetching sounds: $e');
-      if (mounted) {
-        setState(() {
-          _availableSounds = [SoundOption.off()];
-          _soundsLoaded = true;
-        });
-      }
+      debugPrint('❌ Error fetching sounds: $e');
+      if (mounted) setState(() { _availableSounds = fallbackSounds; _soundsLoaded = true; });
     }
   }
 
@@ -314,38 +336,83 @@ class _SetSessionPageState extends State<SetSessionPage>
     try {
       final supabase = sb.Supabase.instance.client;
       final url = supabase.storage.from('sounds').getPublicUrl('notify.mp3');
-      setState(() => _notificationSoundUrl = url);
+      if (mounted) setState(() => _notificationSoundUrl = url);
       debugPrint('✅ Notification sound loaded: $url');
     } catch (e) {
       debugPrint('❌ Error loading notification sound: $e');
     }
   }
 
+  // =============================================================================
+  // FIX: SOUND PREVIEW — stop previous, play new, auto-stop after 5s
+  // =============================================================================
+
   Future<void> _playPreview(SoundOption sound) async {
+    // Cancel any existing preview timer first
     _previewTimer?.cancel();
+    _previewTimer = null;
+
+    // Always stop whatever is playing
     await _audioPlayer.stop();
 
-    if (sound.id == 'off' || sound.filePathUrl == null) return;
+    if (sound.id == 'off' || sound.filePathUrl == null) {
+      if (mounted) setState(() => _isPlayingPreview = false);
+      return;
+    }
+
+    String urlToPlay = sound.filePathUrl!;
 
     try {
-      await _audioPlayer.play(UrlSource(sound.filePathUrl!));
-      print('🎵 Playing preview: ${sound.name}');
+      await _audioPlayer.setSourceUrl(urlToPlay);
+      await _audioPlayer.resume();
+      debugPrint('🎵 Playing preview: ${sound.name} — ${sound.filePathUrl}');
 
+      if (mounted) setState(() => _isPlayingPreview = true);
+
+      // Auto-stop after 5 seconds
       _previewTimer = Timer(_Constants.soundPreviewDuration, () async {
         await _audioPlayer.stop();
-        print('⏹️ Preview stopped');
+        if (mounted) setState(() => _isPlayingPreview = false);
+        debugPrint('⏹️ Preview stopped after 5s');
       });
     } catch (e) {
-      print('❌ Error playing sound preview: $e');
+      debugPrint('❌ Error playing sound preview: $e');
+      // Try fallback URL based on sound name
+      String? fallbackUrl;
+      if (sound.name == 'Rain' || sound.name == 'River') {
+        fallbackUrl =
+            'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/rain-v2.mp3';
+      } else if (sound.name == 'White Noise') {
+        fallbackUrl =
+            'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/White-Noise.mp3';
+      }
+
+      if (fallbackUrl != null) {
+        try {
+          await _audioPlayer.setSourceUrl(fallbackUrl);
+          await _audioPlayer.resume();
+          if (mounted) setState(() => _isPlayingPreview = true);
+
+          _previewTimer = Timer(_Constants.soundPreviewDuration, () async {
+            await _audioPlayer.stop();
+            if (mounted) setState(() => _isPlayingPreview = false);
+          });
+        } catch (_) {
+          if (mounted) setState(() => _isPlayingPreview = false);
+        }
+      } else {
+        if (mounted) setState(() => _isPlayingPreview = false);
+      }
     }
   }
 
   Future<void> _playNotificationPreview() async {
-    if (_notificationSoundUrl == null) return;
-
     try {
       await _notificationPlayer.stop();
-      await _notificationPlayer.play(UrlSource(_notificationSoundUrl!));
+      final url = _notificationSoundUrl ??
+          'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/notify.mp3';
+      await _notificationPlayer.setSourceUrl(url);
+      await _notificationPlayer.resume();
       debugPrint('🔔 Playing notification preview');
     } catch (e) {
       debugPrint('❌ Error playing notification preview: $e');
@@ -359,19 +426,27 @@ class _SetSessionPageState extends State<SetSessionPage>
   void _setupCameraStatusListener() {
     RikazLightService.onCameraStatusChanged = (String status) {
       if (mounted) {
-        setState(() {
-          _cameraStatus = status;
-        });
+        setState(() => _cameraStatus = status);
         debugPrint('📷 Camera status updated: $status');
       }
     };
 
-    // Request initial status
     Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted && isRikazToolConnected) {
         RikazLightService.requestCameraStatus();
       }
     });
+  }
+
+  void _updateCameraSettings() async {
+    if (!isCameraDetectionEnabled || !isRikazToolConnected) return;
+    await RikazLightService.enableCameraDetection(
+      sensitivity: _getSensitivityLevel(),
+      notificationStyle: notificationStyle,
+      sleepTrigger: sleepTrigger,
+      presenceTrigger: presenceTrigger,
+      phoneTrigger: phoneTrigger,
+    );
   }
 
   Future<void> _toggleCameraDetection(bool value) async {
@@ -380,14 +455,13 @@ class _SetSessionPageState extends State<SetSessionPage>
     setState(() => isCameraDetectionEnabled = value);
 
     if (value) {
-      // Enable camera detection
-      final String sensitivityLevel = _getSensitivityLevel();
-
       final bool success = await RikazLightService.enableCameraDetection(
-        sensitivity: sensitivityLevel,
+        sensitivity: _getSensitivityLevel(),
         notificationStyle: notificationStyle,
+        sleepTrigger: sleepTrigger,
+        presenceTrigger: presenceTrigger,
+        phoneTrigger: phoneTrigger,
       );
-
       if (success) {
         debugPrint('✅ Camera detection enabled');
         _showSnackBar('Camera detection enabled', Colors.green.shade600);
@@ -396,9 +470,7 @@ class _SetSessionPageState extends State<SetSessionPage>
         _showSnackBar('Failed to enable camera', errorIndicatorRed);
       }
     } else {
-      // Disable camera detection
       final bool success = await RikazLightService.disableCameraDetection();
-
       if (success) {
         debugPrint('📷 Camera detection disabled');
         _showSnackBar('Camera detection disabled', secondaryTextGrey);
@@ -420,128 +492,13 @@ class _SetSessionPageState extends State<SetSessionPage>
 
   Future<void> _updateCameraSensitivity(double value) async {
     setState(() => sensitivity = value);
-
-    if (isCameraDetectionEnabled && isRikazToolConnected) {
-      final String sensitivityLevel = _getSensitivityLevel();
-      await RikazLightService.enableCameraDetection(
-        sensitivity: sensitivityLevel,
-        notificationStyle: notificationStyle,
-      );
-      debugPrint('⚙️ Updated sensitivity to: $sensitivityLevel');
-    }
+    _updateCameraSettings();
   }
 
   Future<void> _updateNotificationStyle(String style) async {
     setState(() => notificationStyle = style);
-
-    if (isCameraDetectionEnabled && isRikazToolConnected) {
-      final String sensitivityLevel = _getSensitivityLevel();
-      await RikazLightService.enableCameraDetection(
-        sensitivity: sensitivityLevel,
-        notificationStyle: style,
-      );
-      debugPrint('⚙️ Updated notification style to: $style');
-    }
-
-    // Play preview for strong style
-    if (style == 'strong' && _notificationSoundUrl != null) {
-      await _playNotificationPreview();
-    }
-  }
-
-  void _showCameraPreview() {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(cardBorderRadius),
-        ),
-        child: Container(
-          padding: EdgeInsets.all(_screenWidth * 0.04),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.videocam_rounded,
-                      color: accentThemeColor,
-                      size: _adaptiveFontSize(0.05)),
-                  SizedBox(width: _screenWidth * 0.02),
-                  Text(
-                    'Camera Preview',
-                    style: TextStyle(
-                      fontSize: _adaptiveFontSize(0.042),
-                      fontWeight: FontWeight.bold,
-                      color: primaryTextDark,
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: secondaryTextGrey),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              SizedBox(height: mediumGap),
-              Container(
-                width: double.infinity,
-                height: _screenHeight * 0.35,
-                decoration: BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: accentThemeColor.withOpacity(0.3),
-                    width: 2,
-                  ),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Icon(
-                        Icons.videocam_off_rounded,
-                        size: _screenWidth * 0.15,
-                        color: Colors.white.withOpacity(0.3),
-                      ),
-                      Positioned(
-                        bottom: 10,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.7),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            _cameraStatus == 'connected'
-                                ? 'Camera Connected - Live preview not available in setup'
-                                : 'Camera Not Connected',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: _adaptiveFontSize(0.028),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              SizedBox(height: mediumGap),
-              Text(
-                'Camera preview will be active during your session when distraction detection is enabled.',
-                style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.03),
-                  color: secondaryTextGrey,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    _updateCameraSettings();
+    if (style == 'strong') await _playNotificationPreview();
   }
 
   // =============================================================================
@@ -555,7 +512,8 @@ class _SetSessionPageState extends State<SetSessionPage>
   }
 
   Color _getSoundColor(String soundName) {
-    return _Constants.soundColors[soundName] ?? _Constants.soundColors['default']!;
+    return _Constants.soundColors[soundName] ??
+        _Constants.soundColors['default']!;
   }
 
   void _scrollToBlocksCounter() {
@@ -575,9 +533,7 @@ class _SetSessionPageState extends State<SetSessionPage>
 
   void handleStartSessionPress() {
     if (sessionMode == SessionMode.pomodoro && numberOfBlocks == 0) {
-      setState(() {
-        _blocksFieldError = true;
-      });
+      setState(() => _blocksFieldError = true);
       _scrollToBlocksCounter();
       return;
     }
@@ -615,10 +571,12 @@ class _SetSessionPageState extends State<SetSessionPage>
   void _navigateToSession() {
     final String sessionType =
         sessionMode == SessionMode.pomodoro ? 'pomodoro' : 'custom';
-    final String durationValue =
-        sessionMode == SessionMode.pomodoro ? pomodoroDuration : customDuration.toInt().toString();
-    final String? blocks =
-        sessionMode == SessionMode.pomodoro ? numberOfBlocks.toInt().toString() : null;
+    final String durationValue = sessionMode == SessionMode.pomodoro
+        ? pomodoroDuration
+        : customDuration.toInt().toString();
+    final String? blocks = sessionMode == SessionMode.pomodoro
+        ? numberOfBlocks.toInt().toString()
+        : null;
 
     _previewTimer?.cancel();
     _audioPlayer.stop();
@@ -633,8 +591,10 @@ class _SetSessionPageState extends State<SetSessionPage>
         'isCameraDetectionEnabled': isCameraDetectionEnabled,
         'sensitivity': sensitivity,
         'notificationStyle': notificationStyle,
-        'subtleUseLight': subtleUseLight,
-        'subtleUseSound': subtleUseSound,
+        'subtleAlertType': subtleAlertType,
+        'sleepTrigger': sleepTrigger,
+        'presenceTrigger': presenceTrigger,
+        'phoneTrigger': phoneTrigger,
         'rikazConnected': RikazConnectionState.isConnected,
         'selectedSoundId': _selectedSound.id,
         'selectedSoundName': _selectedSound.name,
@@ -650,7 +610,6 @@ class _SetSessionPageState extends State<SetSessionPage>
 
   Future<void> _handleRikazConnect() async {
     if (RikazConnectionState.isConnected) return;
-
     setState(() => isLoading = true);
 
     final RikazDevice? selectedDevice = await showDialog<RikazDevice>(
@@ -665,44 +624,34 @@ class _SetSessionPageState extends State<SetSessionPage>
       RikazConnectionState.setConnected(true);
       _connectedDeviceName = selectedDevice.name;
 
+      // FIX: Show confirmation AND camera toggle immediately — no blocking await
       setState(() {
         isLoading = false;
         _showRikazConfirmation = true;
+        isConfigurationOpen = true; // Show camera section immediately
       });
 
-      print('✅ Rikaz Tools: Connected to ${selectedDevice.name}');
+      debugPrint('✅ Rikaz Tools: Connected to ${selectedDevice.name}');
 
-      if (mounted) {
-        try {
-          await _pulseController.forward();
-          await _pulseController.reverse();
-          if (mounted) {
-            await _pulseController.forward();
-            await _pulseController.reverse();
-            await _pulseController.forward();
-            await _pulseController.reverse();
-          }
-        } catch (e) {
-          print('⚠️ Pulse animation error: $e');
-        }
-      }
+      // Run pulse animation without blocking
+      _pulseController.forward().then((_) => _pulseController.reverse()).then((_) {
+        if (mounted) _pulseController.forward().then((_) => _pulseController.reverse());
+      });
 
       _startConnectionMonitoring();
       _setupCameraStatusListener();
 
-      await Future.delayed(_Constants.connectionSuccessDuration);
-
-      if (mounted) {
-        setState(() {
-          _showRikazConfirmation = false;
-          isConfigurationOpen = true;
-        });
-      }
+      // Hide confirmation banner after 2 seconds
+      Future.delayed(_Constants.connectionSuccessDuration, () {
+        if (mounted) setState(() => _showRikazConfirmation = false);
+      });
     } else {
       if (mounted) {
         setState(() => isLoading = false);
         Future.microtask(() {
-          if (mounted && _slideKey.currentState != null && _slideKey.currentContext != null) {
+          if (mounted &&
+              _slideKey.currentState != null &&
+              _slideKey.currentContext != null) {
             _slideKey.currentState!.reset();
           }
         });
@@ -715,14 +664,14 @@ class _SetSessionPageState extends State<SetSessionPage>
     _deviceWasConnected = true;
     _hasShownDisconnectWarning = false;
 
-    _connectionCheckTimer = Timer.periodic(_Constants.connectionCheckInterval, (timer) async {
+    _connectionCheckTimer =
+        Timer.periodic(_Constants.connectionCheckInterval, (timer) async {
       if (!mounted || !RikazConnectionState.isConnected) {
         timer.cancel();
         return;
       }
 
       final bool stillConnected = await RikazLightService.isConnected();
-
       if (!stillConnected) {
         timer.cancel();
         await RikazLightService.disconnect();
@@ -736,9 +685,8 @@ class _SetSessionPageState extends State<SetSessionPage>
             isCameraDetectionEnabled = false;
             _cameraStatus = 'unknown';
           });
+          _showDeviceLostWarning();
         }
-
-        _showDeviceLostWarning();
       } else if (stillConnected && !_deviceWasConnected) {
         _deviceWasConnected = true;
         _showSnackBar('Rikaz device reconnected!', Colors.green.shade600);
@@ -748,7 +696,6 @@ class _SetSessionPageState extends State<SetSessionPage>
 
   void _showDeviceLostWarning() {
     if (!mounted) return;
-
     _showDialog(
       title: 'Hardware Disconnected',
       content:
@@ -760,7 +707,6 @@ class _SetSessionPageState extends State<SetSessionPage>
       onConfirm: _handleRikazConnect,
       barrierDismissible: false,
     );
-
     debugPrint('⚠️ RIKAZ: Connection lost');
   }
 
@@ -772,8 +718,6 @@ class _SetSessionPageState extends State<SetSessionPage>
     );
 
     if (confirmed == true) {
-      print('🔌 Starting disconnect process...');
-
       _connectionCheckTimer?.cancel();
       await RikazLightService.turnOff();
       await RikazLightService.disconnect();
@@ -788,11 +732,9 @@ class _SetSessionPageState extends State<SetSessionPage>
           isCameraDetectionEnabled = false;
           _cameraStatus = 'unknown';
         });
-
         _showSnackBar('Hardware disconnected', Colors.green.shade600);
       }
-
-      print('🔌 Rikaz Tools: Disconnected');
+      debugPrint('🔌 Rikaz Tools: Disconnected');
     }
   }
 
@@ -815,7 +757,8 @@ class _SetSessionPageState extends State<SetSessionPage>
       context: context,
       barrierDismissible: barrierDismissible,
       builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(cardBorderRadius)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(cardBorderRadius)),
         backgroundColor: cardBackground,
         child: Padding(
           padding: EdgeInsets.all(_screenWidth * 0.045),
@@ -825,29 +768,26 @@ class _SetSessionPageState extends State<SetSessionPage>
               Container(
                 padding: EdgeInsets.all(_screenWidth * 0.035),
                 decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: iconColor, size: _screenWidth * 0.10),
+                    color: iconColor.withOpacity(0.1), shape: BoxShape.circle),
+                child:
+                    Icon(icon, color: iconColor, size: _screenWidth * 0.10),
               ),
               SizedBox(height: _screenHeight * 0.018),
               Text(
                 title,
                 style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.042),
-                  fontWeight: FontWeight.bold,
-                  color: primaryTextDark,
-                ),
+                    fontSize: _adaptiveFontSize(0.042),
+                    fontWeight: FontWeight.bold,
+                    color: primaryTextDark),
                 textAlign: TextAlign.center,
               ),
               SizedBox(height: mediumGap),
               Text(
                 content,
                 style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.032),
-                  color: secondaryTextGrey,
-                  height: 1.4,
-                ),
+                    fontSize: _adaptiveFontSize(0.032),
+                    color: secondaryTextGrey,
+                    height: 1.4),
                 textAlign: TextAlign.center,
               ),
               SizedBox(height: _screenHeight * 0.022),
@@ -857,20 +797,19 @@ class _SetSessionPageState extends State<SetSessionPage>
                     child: TextButton(
                       onPressed: onCancel ?? () => Navigator.pop(context),
                       style: TextButton.styleFrom(
-                        padding: EdgeInsets.symmetric(vertical: _screenHeight * 0.013),
+                        padding: EdgeInsets.symmetric(
+                            vertical: _screenHeight * 0.013),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
-                          side: BorderSide(color: secondaryTextGrey.withOpacity(0.3)),
+                          side: BorderSide(
+                              color: secondaryTextGrey.withOpacity(0.3)),
                         ),
                       ),
-                      child: Text(
-                        cancelText,
-                        style: TextStyle(
-                          color: secondaryTextGrey,
-                          fontSize: _adaptiveFontSize(0.033),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      child: Text(cancelText,
+                          style: TextStyle(
+                              color: secondaryTextGrey,
+                              fontSize: _adaptiveFontSize(0.033),
+                              fontWeight: FontWeight.w600)),
                     ),
                   ),
                   SizedBox(width: _screenWidth * 0.025),
@@ -882,18 +821,17 @@ class _SetSessionPageState extends State<SetSessionPage>
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: primaryThemeColor,
-                        padding: EdgeInsets.symmetric(vertical: _screenHeight * 0.013),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: EdgeInsets.symmetric(
+                            vertical: _screenHeight * 0.013),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
                         elevation: 2,
                       ),
-                      child: Text(
-                        confirmText,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: _adaptiveFontSize(0.033),
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      child: Text(confirmText,
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: _adaptiveFontSize(0.033),
+                              fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],
@@ -907,7 +845,8 @@ class _SetSessionPageState extends State<SetSessionPage>
 
   Widget _buildDisconnectDialog(BuildContext dialogContext) {
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(cardBorderRadius)),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(cardBorderRadius)),
       backgroundColor: cardBackground,
       child: Padding(
         padding: EdgeInsets.all(_screenWidth * 0.045),
@@ -917,30 +856,25 @@ class _SetSessionPageState extends State<SetSessionPage>
             Container(
               padding: EdgeInsets.all(_screenWidth * 0.035),
               decoration: BoxDecoration(
-                color: errorIndicatorRed.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
+                  color: errorIndicatorRed.withOpacity(0.1),
+                  shape: BoxShape.circle),
               child: Icon(Icons.power_settings_new_rounded,
                   color: errorIndicatorRed, size: _screenWidth * 0.10),
             ),
             SizedBox(height: _screenHeight * 0.018),
-            Text(
-              'Disconnect Hardware?',
-              style: TextStyle(
-                fontSize: _adaptiveFontSize(0.042),
-                fontWeight: FontWeight.bold,
-                color: primaryTextDark,
-              ),
-              textAlign: TextAlign.center,
-            ),
+            Text('Disconnect Hardware?',
+                style: TextStyle(
+                    fontSize: _adaptiveFontSize(0.042),
+                    fontWeight: FontWeight.bold,
+                    color: primaryTextDark),
+                textAlign: TextAlign.center),
             SizedBox(height: mediumGap),
             Text(
               'This will disable hardware features for your sessions. You can reconnect anytime.',
               style: TextStyle(
-                fontSize: _adaptiveFontSize(0.032),
-                color: secondaryTextGrey,
-                height: 1.4,
-              ),
+                  fontSize: _adaptiveFontSize(0.032),
+                  color: secondaryTextGrey,
+                  height: 1.4),
               textAlign: TextAlign.center,
             ),
             SizedBox(height: _screenHeight * 0.022),
@@ -950,20 +884,19 @@ class _SetSessionPageState extends State<SetSessionPage>
                   child: TextButton(
                     onPressed: () => Navigator.of(dialogContext).pop(false),
                     style: TextButton.styleFrom(
-                      padding: EdgeInsets.symmetric(vertical: _screenHeight * 0.013),
+                      padding:
+                          EdgeInsets.symmetric(vertical: _screenHeight * 0.013),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
-                        side: BorderSide(color: secondaryTextGrey.withOpacity(0.3)),
+                        side: BorderSide(
+                            color: secondaryTextGrey.withOpacity(0.3)),
                       ),
                     ),
-                    child: Text(
-                      'Cancel',
-                      style: TextStyle(
-                        color: secondaryTextGrey,
-                        fontSize: _adaptiveFontSize(0.033),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: Text('Cancel',
+                        style: TextStyle(
+                            color: secondaryTextGrey,
+                            fontSize: _adaptiveFontSize(0.033),
+                            fontWeight: FontWeight.w600)),
                   ),
                 ),
                 SizedBox(width: _screenWidth * 0.025),
@@ -972,18 +905,17 @@ class _SetSessionPageState extends State<SetSessionPage>
                     onPressed: () => Navigator.of(dialogContext).pop(true),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: errorIndicatorRed,
-                      padding: EdgeInsets.symmetric(vertical: _screenHeight * 0.013),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: EdgeInsets.symmetric(
+                          vertical: _screenHeight * 0.013),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
                       elevation: 2,
                     ),
-                    child: Text(
-                      'Disconnect',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: _adaptiveFontSize(0.033),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    child: Text('Disconnect',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: _adaptiveFontSize(0.033),
+                            fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
@@ -996,21 +928,6 @@ class _SetSessionPageState extends State<SetSessionPage>
 
   void _showSnackBar(String message, Color backgroundColor) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: const [
-            Icon(Icons.check_circle, color: Colors.white, size: 20),
-            SizedBox(width: 10),
-          ],
-        ),
-        backgroundColor: backgroundColor,
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-
-    // Replace the content with a row that includes the message (keeping your style)
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -1054,13 +971,17 @@ class _SetSessionPageState extends State<SetSessionPage>
       width: adjustedSize,
       height: adjustedSize,
       decoration: BoxDecoration(
-        color: onPressed != null ? accentThemeColor : secondaryTextGrey.withOpacity(0.2),
+        color: onPressed != null
+            ? accentThemeColor
+            : secondaryTextGrey.withOpacity(0.2),
         shape: BoxShape.circle,
       ),
       child: IconButton(
         icon: Icon(
           icon,
-          color: onPressed != null ? Colors.white : secondaryTextGrey.withOpacity(0.5),
+          color: onPressed != null
+              ? Colors.white
+              : secondaryTextGrey.withOpacity(0.5),
           size: adjustedSize * 0.42,
         ),
         onPressed: onPressed,
@@ -1081,8 +1002,10 @@ class _SetSessionPageState extends State<SetSessionPage>
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: backgroundColor ?? dfDeepTeal,
-          padding: EdgeInsets.symmetric(vertical: _screenHeight * 0.018),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          padding:
+              EdgeInsets.symmetric(vertical: _screenHeight * 0.018),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
           elevation: 4,
           shadowColor: (backgroundColor ?? dfDeepTeal).withOpacity(0.3),
         ),
@@ -1096,11 +1019,10 @@ class _SetSessionPageState extends State<SetSessionPage>
             Text(
               text,
               style: TextStyle(
-                color: Colors.white,
-                fontSize: _adaptiveFontSize(0.038),
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.3,
-              ),
+                  color: Colors.white,
+                  fontSize: _adaptiveFontSize(0.038),
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.3),
             ),
           ],
         ),
@@ -1138,7 +1060,9 @@ class _SetSessionPageState extends State<SetSessionPage>
           color: cardBackground,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? accentThemeColor : secondaryTextGrey.withOpacity(0.2),
+            color: isSelected
+                ? accentThemeColor
+                : secondaryTextGrey.withOpacity(0.2),
             width: isSelected ? 1.8 : 1.2,
           ),
         ),
@@ -1153,10 +1077,12 @@ class _SetSessionPageState extends State<SetSessionPage>
                 shape: BoxShape.circle,
                 border: isSelected
                     ? null
-                    : Border.all(color: secondaryTextGrey.withOpacity(0.35), width: 1.8),
+                    : Border.all(
+                        color: secondaryTextGrey.withOpacity(0.35), width: 1.8),
               ),
               child: isSelected
-                  ? Icon(Icons.check_rounded, color: Colors.white, size: _screenWidth * 0.035)
+                  ? Icon(Icons.check_rounded,
+                      color: Colors.white, size: _screenWidth * 0.035)
                   : null,
             ),
             SizedBox(width: _screenWidth * 0.035),
@@ -1164,14 +1090,11 @@ class _SetSessionPageState extends State<SetSessionPage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: _adaptiveFontSize(0.039),
-                      fontWeight: FontWeight.bold,
-                      color: isSelected ? accentThemeColor : primaryTextDark,
-                    ),
-                  ),
+                  Text(label,
+                      style: TextStyle(
+                          fontSize: _adaptiveFontSize(0.039),
+                          fontWeight: FontWeight.bold,
+                          color: isSelected ? accentThemeColor : primaryTextDark)),
                   SizedBox(height: _screenHeight * 0.002),
                   Text(breakText, style: captionStyle),
                 ],
@@ -1197,12 +1120,16 @@ class _SetSessionPageState extends State<SetSessionPage>
         AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           width: double.infinity,
-          padding: EdgeInsets.symmetric(horizontal: _screenWidth * 0.025, vertical: _screenHeight * 0.008),
+          padding: EdgeInsets.symmetric(
+              horizontal: _screenWidth * 0.025,
+              vertical: _screenHeight * 0.008),
           decoration: BoxDecoration(
             color: cardBackground,
             borderRadius: BorderRadius.circular(cardBorderRadius),
             border: Border.all(
-              color: _blocksFieldError ? errorIndicatorRed : secondaryTextGrey.withOpacity(0.2),
+              color: _blocksFieldError
+                  ? errorIndicatorRed
+                  : secondaryTextGrey.withOpacity(0.2),
               width: _blocksFieldError ? 2.0 : 1.5,
             ),
           ),
@@ -1211,35 +1138,28 @@ class _SetSessionPageState extends State<SetSessionPage>
             children: [
               _buildCircularIconButton(
                 icon: Icons.remove_rounded,
-                onPressed: numberOfBlocks > 1
-                    ? () {
-                        setState(() {
-                          numberOfBlocks--;
-                        });
-                      }
+                onPressed: numberOfBlocks > _Constants.minPomodoroBlocks
+                    ? () => setState(() => numberOfBlocks--)
                     : null,
                 size: _screenWidth * 0.11,
               ),
               Text(
                 numberOfBlocks == 0 ? '-' : numberOfBlocks.toInt().toString(),
                 style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.14),
-                  fontWeight: FontWeight.w500,
-                  color: _blocksFieldError ? errorIndicatorRed : primaryTextDark,
-                  height: 1.1,
-                ),
+                    fontSize: _adaptiveFontSize(0.14),
+                    fontWeight: FontWeight.w500,
+                    color: _blocksFieldError
+                        ? errorIndicatorRed
+                        : primaryTextDark,
+                    height: 1.1),
               ),
               _buildCircularIconButton(
                 icon: Icons.add_rounded,
                 onPressed: numberOfBlocks < _Constants.maxPomodoroBlocks
-                    ? () {
-                        setState(() {
+                    ? () => setState(() {
                           numberOfBlocks++;
-                          if (numberOfBlocks > 0) {
-                            _blocksFieldError = false;
-                          }
-                        });
-                      }
+                          if (numberOfBlocks > 0) _blocksFieldError = false;
+                        })
                     : null,
                 size: _screenWidth * 0.11,
               ),
@@ -1252,19 +1172,24 @@ class _SetSessionPageState extends State<SetSessionPage>
           child: Row(
             children: [
               Icon(
-                _blocksFieldError ? Icons.error_outline : Icons.info_outline_rounded,
+                _blocksFieldError
+                    ? Icons.error_outline
+                    : Icons.info_outline_rounded,
                 color: _blocksFieldError ? errorIndicatorRed : accentThemeColor,
                 size: _adaptiveFontSize(0.035),
               ),
               SizedBox(width: _screenWidth * 0.012),
               Expanded(
                 child: Text(
-                  _blocksFieldError ? 'Please select number of blocks to continue' : 'One block = focus session + break',
+                  _blocksFieldError
+                      ? 'Please select number of blocks to continue'
+                      : 'One block = focus session + break',
                   style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.029),
-                    color: _blocksFieldError ? errorIndicatorRed : secondaryTextGrey,
-                    fontWeight: FontWeight.w500,
-                  ),
+                      fontSize: _adaptiveFontSize(0.029),
+                      color: _blocksFieldError
+                          ? errorIndicatorRed
+                          : secondaryTextGrey,
+                      fontWeight: FontWeight.w500),
                 ),
               ),
             ],
@@ -1283,10 +1208,10 @@ class _SetSessionPageState extends State<SetSessionPage>
             Container(
               padding: EdgeInsets.all(_screenWidth * 0.022),
               decoration: BoxDecoration(
-                color: accentThemeColor.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(9),
-              ),
-              child: Icon(Icons.schedule_rounded, color: accentThemeColor, size: _adaptiveFontSize(0.045)),
+                  color: accentThemeColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(9)),
+              child: Icon(Icons.schedule_rounded,
+                  color: accentThemeColor, size: _adaptiveFontSize(0.045)),
             ),
             SizedBox(width: _screenWidth * 0.025),
             Text('Session Duration', style: subheadingStyle),
@@ -1296,31 +1221,27 @@ class _SetSessionPageState extends State<SetSessionPage>
         Center(
           child: Column(
             children: [
-              Text(
-                '${customDuration.toInt()}',
-                style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.14),
-                  fontWeight: FontWeight.w500,
-                  color: primaryTextDark,
-                  height: 1,
-                ),
-              ),
+              Text('${customDuration.toInt()}',
+                  style: TextStyle(
+                      fontSize: _adaptiveFontSize(0.14),
+                      fontWeight: FontWeight.w500,
+                      color: primaryTextDark,
+                      height: 1)),
               SizedBox(height: smallGap),
-              Text(
-                'minutes',
-                style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.035),
-                  fontWeight: FontWeight.w500,
-                  color: secondaryTextGrey,
-                ),
-              ),
+              Text('minutes',
+                  style: TextStyle(
+                      fontSize: _adaptiveFontSize(0.035),
+                      fontWeight: FontWeight.w500,
+                      color: secondaryTextGrey)),
             ],
           ),
         ),
         SizedBox(height: mediumGap),
         Center(
           child: Container(
-            padding: EdgeInsets.symmetric(horizontal: _screenWidth * 0.035, vertical: _screenHeight * 0.006),
+            padding: EdgeInsets.symmetric(
+                horizontal: _screenWidth * 0.035,
+                vertical: _screenHeight * 0.006),
             decoration: BoxDecoration(
               color: secondaryTextGrey.withOpacity(0.08),
               borderRadius: BorderRadius.circular(18),
@@ -1329,16 +1250,15 @@ class _SetSessionPageState extends State<SetSessionPage>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.block_rounded, color: secondaryTextGrey, size: _adaptiveFontSize(0.032)),
-                SizedBox(width: _screenWidth * 0.012),
-                Text(
-                  'No Breaks',
-                  style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.03),
-                    fontWeight: FontWeight.w600,
+                Icon(Icons.block_rounded,
                     color: secondaryTextGrey,
-                  ),
-                ),
+                    size: _adaptiveFontSize(0.032)),
+                SizedBox(width: _screenWidth * 0.012),
+                Text('No Breaks',
+                    style: TextStyle(
+                        fontSize: _adaptiveFontSize(0.03),
+                        fontWeight: FontWeight.w600,
+                        color: secondaryTextGrey)),
               ],
             ),
           ),
@@ -1349,7 +1269,8 @@ class _SetSessionPageState extends State<SetSessionPage>
             activeTrackColor: accentThemeColor,
             inactiveTrackColor: lightestAccentColor.withOpacity(0.4),
             thumbColor: accentThemeColor,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 12, elevation: 2),
+            thumbShape:
+                const RoundSliderThumbShape(enabledThumbRadius: 12, elevation: 2),
             overlayColor: accentThemeColor.withOpacity(0.18),
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 22),
             trackHeight: 5,
@@ -1358,7 +1279,9 @@ class _SetSessionPageState extends State<SetSessionPage>
             value: customDuration,
             min: _Constants.minCustomDuration,
             max: _Constants.maxCustomDuration,
-            divisions: (_Constants.maxCustomDuration - _Constants.minCustomDuration).toInt(),
+            divisions:
+                (_Constants.maxCustomDuration - _Constants.minCustomDuration)
+                    .toInt(),
             label: '${customDuration.toInt()} min',
             onChanged: (v) => setState(() => customDuration = v),
           ),
@@ -1368,17 +1291,28 @@ class _SetSessionPageState extends State<SetSessionPage>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('10 min', style: TextStyle(fontSize: _adaptiveFontSize(0.026), color: secondaryTextGrey, fontWeight: FontWeight.w600)),
-              Text('120 min', style: TextStyle(fontSize: _adaptiveFontSize(0.026), color: secondaryTextGrey, fontWeight: FontWeight.w600)),
+              Text('10 min',
+                  style: TextStyle(
+                      fontSize: _adaptiveFontSize(0.026),
+                      color: secondaryTextGrey,
+                      fontWeight: FontWeight.w600)),
+              Text('120 min',
+                  style: TextStyle(
+                      fontSize: _adaptiveFontSize(0.026),
+                      color: secondaryTextGrey,
+                      fontWeight: FontWeight.w600)),
             ],
           ),
         ),
         SizedBox(height: mediumGap),
         Row(
           children: [
-            Icon(Icons.info_outline_rounded, color: accentThemeColor, size: _adaptiveFontSize(0.037)),
+            Icon(Icons.info_outline_rounded,
+                color: accentThemeColor, size: _adaptiveFontSize(0.037)),
             SizedBox(width: _screenWidth * 0.015),
-            Expanded(child: Text('Continuous focus without interruptions', style: captionStyle)),
+            Expanded(
+                child: Text('Continuous focus without interruptions',
+                    style: captionStyle)),
           ],
         ),
       ],
@@ -1404,24 +1338,30 @@ class _SetSessionPageState extends State<SetSessionPage>
           Row(
             children: [
               Icon(
-                isRikazToolConnected ? Icons.check_circle : Icons.bluetooth,
-                color: isRikazToolConnected ? Colors.green.shade600 : accentThemeColor,
+                isRikazToolConnected
+                    ? Icons.check_circle
+                    : Icons.bluetooth,
+                color: isRikazToolConnected
+                    ? Colors.green.shade600
+                    : accentThemeColor,
                 size: _adaptiveFontSize(0.05),
               ),
               SizedBox(width: _screenWidth * 0.015),
               Expanded(
                 child: Text(
-                  isRikazToolConnected ? 'Hardware Connected' : 'Connect Hardware',
+                  isRikazToolConnected
+                      ? 'Hardware Connected'
+                      : 'Connect Hardware',
                   style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.04),
-                    fontWeight: FontWeight.bold,
-                    color: primaryTextDark,
-                  ),
+                      fontSize: _adaptiveFontSize(0.04),
+                      fontWeight: FontWeight.bold,
+                      color: primaryTextDark),
                 ),
               ),
               if (showDisconnectButton)
                 IconButton(
-                  icon: const Icon(Icons.power_settings_new, color: errorIndicatorRed, size: 20),
+                  icon: const Icon(Icons.power_settings_new,
+                      color: errorIndicatorRed, size: 20),
                   onPressed: _handleRikazDisconnect,
                   tooltip: 'Disconnect',
                   padding: EdgeInsets.zero,
@@ -1431,20 +1371,24 @@ class _SetSessionPageState extends State<SetSessionPage>
           ),
           SizedBox(height: mediumGap),
           _buildHardwareStatusVisual(),
+
+          // FIX: Success banner and camera section shown together immediately
           if (_showRikazConfirmation) ...[
             SizedBox(height: mediumGap),
             _buildSuccessMessage(),
-          ] else if (isRikazToolConnected) ...[
+          ],
+
+          if (isRikazToolConnected) ...[
             SizedBox(height: mediumGap),
             Text(
-              'Your Rikaz Tools hardware is ready and monitoring your focus session.',
+              'Your Rikaz Tools hardware is ready.',
               style: TextStyle(
-                fontSize: _adaptiveFontSize(0.031),
-                color: secondaryTextGrey,
-                height: 1.3,
-              ),
+                  fontSize: _adaptiveFontSize(0.031),
+                  color: secondaryTextGrey,
+                  height: 1.3),
             ),
             SizedBox(height: largeGap),
+            // FIX: Camera toggle always visible once connected, no delay
             _buildCameraToggle(),
           ] else ...[
             SizedBox(height: _screenHeight * 0.015),
@@ -1452,22 +1396,16 @@ class _SetSessionPageState extends State<SetSessionPage>
               key: _slideKey,
               text: isLoading ? "Scanning..." : "Slide to Connect",
               textStyle: TextStyle(
-                fontSize: _adaptiveFontSize(0.035),
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
+                  fontSize: _adaptiveFontSize(0.035),
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white),
               innerColor: cardBackground,
               outerColor: accentThemeColor,
               sliderButtonIcon: Container(
                 decoration: const BoxDecoration(
-                  color: cardBackground,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.bluetooth_searching,
-                  color: accentThemeColor,
-                  size: _screenWidth * 0.055,
-                ),
+                    color: cardBackground, shape: BoxShape.circle),
+                child: Icon(Icons.bluetooth_searching,
+                    color: accentThemeColor, size: _screenWidth * 0.055),
               ),
               sliderButtonIconPadding: 10,
               height: _screenHeight * 0.058,
@@ -1489,12 +1427,10 @@ class _SetSessionPageState extends State<SetSessionPage>
     return Container(
       padding: EdgeInsets.all(_screenWidth * 0.035),
       decoration: BoxDecoration(
-        color: canEnableCamera ? accentThemeColor.withOpacity(0.08) : secondaryTextGrey.withOpacity(0.05),
+        color: accentThemeColor.withOpacity(0.08),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: canEnableCamera ? accentThemeColor.withOpacity(0.3) : secondaryTextGrey.withOpacity(0.2),
-          width: 1.2,
-        ),
+            color: accentThemeColor.withOpacity(0.3), width: 1.2),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1504,73 +1440,50 @@ class _SetSessionPageState extends State<SetSessionPage>
               Container(
                 padding: EdgeInsets.all(_screenWidth * 0.02),
                 decoration: BoxDecoration(
-                  color: canEnableCamera ? accentThemeColor.withOpacity(0.15) : secondaryTextGrey.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.videocam_rounded,
-                  color: canEnableCamera ? accentThemeColor : secondaryTextGrey,
-                  size: _adaptiveFontSize(0.045),
-                ),
+                    color: accentThemeColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8)),
+                child: Icon(Icons.videocam_rounded,
+                    color: accentThemeColor, size: _adaptiveFontSize(0.045)),
               ),
               SizedBox(width: _screenWidth * 0.025),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Camera Detection',
-                      style: TextStyle(
-                        fontSize: _adaptiveFontSize(0.038),
-                        fontWeight: FontWeight.bold,
-                        color: canEnableCamera ? primaryTextDark : secondaryTextGrey,
-                      ),
-                    ),
+                    Text('Camera Detection',
+                        style: TextStyle(
+                            fontSize: _adaptiveFontSize(0.038),
+                            fontWeight: FontWeight.bold,
+                            color: primaryTextDark)),
                     if (_cameraStatus == 'connected') ...[
                       SizedBox(height: _screenHeight * 0.003),
                       Row(
                         children: [
-                          Icon(Icons.check_circle, color: Colors.green.shade600, size: _adaptiveFontSize(0.03)),
-                          SizedBox(width: _screenWidth * 0.008),
-                          Text(
-                            'Camera Ready',
-                            style: TextStyle(
-                              fontSize: _adaptiveFontSize(0.028),
+                          Icon(Icons.check_circle,
                               color: Colors.green.shade600,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                              size: _adaptiveFontSize(0.03)),
+                          SizedBox(width: _screenWidth * 0.008),
+                          Text('Camera Ready',
+                              style: TextStyle(
+                                  fontSize: _adaptiveFontSize(0.028),
+                                  color: Colors.green.shade600,
+                                  fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ],
                   ],
                 ),
               ),
-              IconButton(
-                icon: Icon(Icons.visibility_rounded, color: canEnableCamera ? accentThemeColor : secondaryTextGrey),
-                onPressed: canEnableCamera ? _showCameraPreview : null,
-                tooltip: 'Preview',
-              ),
+              // FIX: Camera preview button removed entirely
               Switch(
                 value: isCameraDetectionEnabled,
-                onChanged: canEnableCamera ? _toggleCameraDetection : null,
-                activeColor: accentThemeColor,
+                onChanged: _toggleCameraDetection,
+                activeThumbColor: accentThemeColor,
                 inactiveThumbColor: secondaryTextGrey,
               ),
             ],
           ),
-          if (!canEnableCamera) ...[
-            SizedBox(height: _screenHeight * 0.008),
-            Text(
-              'Connect hardware first to enable camera',
-              style: TextStyle(
-                fontSize: _adaptiveFontSize(0.028),
-                color: secondaryTextGrey,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ],
-          if (isCameraDetectionEnabled && canEnableCamera) ...[
+          if (isCameraDetectionEnabled) ...[
             SizedBox(height: largeGap),
             _buildCameraOptions(),
           ],
@@ -1579,11 +1492,15 @@ class _SetSessionPageState extends State<SetSessionPage>
     );
   }
 
+  // =============================================================================
+  // FIX: Trigger names consistent + icons added
+  // =============================================================================
+
   Widget _buildCameraOptions() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Triggers info
+        // Triggers
         Container(
           padding: EdgeInsets.all(_screenWidth * 0.03),
           decoration: BoxDecoration(
@@ -1591,63 +1508,97 @@ class _SetSessionPageState extends State<SetSessionPage>
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: secondaryTextGrey.withOpacity(0.15)),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.radar_rounded, color: accentThemeColor, size: _adaptiveFontSize(0.04)),
-              SizedBox(width: _screenWidth * 0.02),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Active Triggers',
+              Row(
+                children: [
+                  Icon(Icons.radar_rounded,
+                      color: accentThemeColor, size: _adaptiveFontSize(0.04)),
+                  SizedBox(width: _screenWidth * 0.02),
+                  Text('Detection Triggers',
                       style: TextStyle(
-                        fontSize: _adaptiveFontSize(0.033),
-                        fontWeight: FontWeight.bold,
-                        color: primaryTextDark,
-                      ),
-                    ),
-                    SizedBox(height: _screenHeight * 0.003),
-                    Text(
-                      'Monitors: Sleeping detection',
-                      style: TextStyle(
-                        fontSize: _adaptiveFontSize(0.028),
-                        color: secondaryTextGrey,
-                      ),
-                    ),
-                  ],
-                ),
+                          fontSize: _adaptiveFontSize(0.033),
+                          fontWeight: FontWeight.bold,
+                          color: primaryTextDark)),
+                ],
+              ),
+              SizedBox(height: _screenHeight * 0.004),
+              Text('Select at least one trigger',
+                  style: TextStyle(
+                      fontSize: _adaptiveFontSize(0.028),
+                      color: secondaryTextGrey)),
+              SizedBox(height: _screenHeight * 0.008),
+
+              // --- Sleeping ---
+              _buildTriggerTile(
+                icon: Icons.bedtime_rounded,
+                label: 'Sleeping',
+                value: sleepTrigger,
+                onChanged: (val) {
+                  if (val == false && !presenceTrigger && !phoneTrigger) {
+                    _showSnackBar('Select at least one trigger.', errorIndicatorRed);
+                    return;
+                  }
+                  setState(() => sleepTrigger = val ?? true);
+                  _updateCameraSettings();
+                },
+              ),
+
+              // --- Absence ---
+              _buildTriggerTile(
+                icon: Icons.person_off_rounded,
+                label: 'Absence',
+                value: presenceTrigger,
+                onChanged: (val) {
+                  if (val == false && !sleepTrigger && !phoneTrigger) {
+                    _showSnackBar('Select at least one trigger.', errorIndicatorRed);
+                    return;
+                  }
+                  setState(() => presenceTrigger = val ?? false);
+                  _updateCameraSettings();
+                },
+              ),
+
+              // --- Phone Use ---
+              _buildTriggerTile(
+                icon: Icons.smartphone_rounded,
+                label: 'Phone Use',
+                value: phoneTrigger,
+                onChanged: (val) {
+                  if (val == false && !sleepTrigger && !presenceTrigger) {
+                    _showSnackBar('Select at least one trigger.', errorIndicatorRed);
+                    return;
+                  }
+                  setState(() => phoneTrigger = val ?? false);
+                  _updateCameraSettings();
+                },
               ),
             ],
           ),
         ),
         SizedBox(height: largeGap),
 
-        // Sensitivity slider
-        Text(
-          'Sensitivity',
-          style: TextStyle(
-            fontSize: _adaptiveFontSize(0.035),
-            fontWeight: FontWeight.bold,
-            color: primaryTextDark,
-          ),
-        ),
+        // Sensitivity
+        Text('Sensitivity',
+            style: TextStyle(
+                fontSize: _adaptiveFontSize(0.035),
+                fontWeight: FontWeight.bold,
+                color: primaryTextDark)),
         SizedBox(height: smallGap),
-        Text(
-          _getSensitivityLabel(),
-          style: TextStyle(
-            fontSize: _adaptiveFontSize(0.032),
-            color: accentThemeColor,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+        Text(_getSensitivityLabel(),
+            style: TextStyle(
+                fontSize: _adaptiveFontSize(0.032),
+                color: accentThemeColor,
+                fontWeight: FontWeight.w600)),
         SizedBox(height: mediumGap),
         SliderTheme(
           data: SliderThemeData(
             activeTrackColor: accentThemeColor,
             inactiveTrackColor: lightestAccentColor.withOpacity(0.4),
             thumbColor: accentThemeColor,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10, elevation: 2),
+            thumbShape:
+                const RoundSliderThumbShape(enabledThumbRadius: 10, elevation: 2),
             overlayColor: accentThemeColor.withOpacity(0.18),
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 20),
             trackHeight: 4,
@@ -1665,51 +1616,42 @@ class _SetSessionPageState extends State<SetSessionPage>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'High (30s)',
-                style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.026),
-                  color: secondaryTextGrey,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                'Low (90s)',
-                style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.026),
-                  color: secondaryTextGrey,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+              Text('High (30s)',
+                  style: TextStyle(
+                      fontSize: _adaptiveFontSize(0.026),
+                      color: secondaryTextGrey,
+                      fontWeight: FontWeight.w500)),
+              Text('Low (90s)',
+                  style: TextStyle(
+                      fontSize: _adaptiveFontSize(0.026),
+                      color: secondaryTextGrey,
+                      fontWeight: FontWeight.w500)),
             ],
           ),
         ),
         SizedBox(height: largeGap),
 
-        // Notification style
-        Text(
-          'Notification Style',
-          style: TextStyle(
-            fontSize: _adaptiveFontSize(0.035),
-            fontWeight: FontWeight.bold,
-            color: primaryTextDark,
-          ),
-        ),
+        // Notification Style
+        Text('Notification Style',
+            style: TextStyle(
+                fontSize: _adaptiveFontSize(0.035),
+                fontWeight: FontWeight.bold,
+                color: primaryTextDark)),
         SizedBox(height: mediumGap),
         Row(
           children: [
             Expanded(
-              child: _buildNotificationStyleOption('subtle', Icons.volume_down_rounded, 'Subtle'),
-            ),
+                child: _buildNotificationStyleOption(
+                    'subtle', Icons.volume_down_rounded, 'Subtle')),
             SizedBox(width: _screenWidth * 0.025),
             Expanded(
-              child: _buildNotificationStyleOption('strong', Icons.volume_up_rounded, 'Strong'),
-            ),
+                child: _buildNotificationStyleOption(
+                    'strong', Icons.volume_up_rounded, 'Strong')),
           ],
         ),
         SizedBox(height: mediumGap),
 
-        // Subtle options
+        // Subtle sub-options (radio)
         if (notificationStyle == 'subtle') ...[
           Container(
             padding: EdgeInsets.all(_screenWidth * 0.03),
@@ -1721,64 +1663,56 @@ class _SetSessionPageState extends State<SetSessionPage>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Subtle Alerts Use',
-                  style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.032),
-                    fontWeight: FontWeight.bold,
-                    color: primaryTextDark,
-                  ),
-                ),
+                Text('Subtle Alert Type',
+                    style: TextStyle(
+                        fontSize: _adaptiveFontSize(0.032),
+                        fontWeight: FontWeight.bold,
+                        color: primaryTextDark)),
                 SizedBox(height: smallGap),
                 Row(
                   children: [
                     Expanded(
-                      child: CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        value: subtleUseLight,
-                        dense: true,
+                      child: RadioListTile<String>(
+                        title: Text('Light Only',
+                            style: TextStyle(
+                                fontSize: _adaptiveFontSize(0.03),
+                                color: primaryTextDark,
+                                fontWeight: FontWeight.w600)),
+                        value: 'light',
+                        groupValue: subtleAlertType,
                         activeColor: accentThemeColor,
-                        title: Text(
-                          'Light',
-                          style: TextStyle(
-                            fontSize: _adaptiveFontSize(0.03),
-                            color: primaryTextDark,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        onChanged: (v) => setState(() => subtleUseLight = v ?? true),
-                        controlAffinity: ListTileControlAffinity.leading,
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        onChanged: (v) {
+                          setState(() => subtleAlertType = v!);
+                          _updateCameraSettings();
+                        },
                       ),
                     ),
-                    SizedBox(width: _screenWidth * 0.02),
                     Expanded(
-                      child: CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        value: subtleUseSound,
-                        dense: true,
+                      child: RadioListTile<String>(
+                        title: Text('Sound Only',
+                            style: TextStyle(
+                                fontSize: _adaptiveFontSize(0.03),
+                                color: primaryTextDark,
+                                fontWeight: FontWeight.w600)),
+                        value: 'sound',
+                        groupValue: subtleAlertType,
                         activeColor: accentThemeColor,
-                        title: Text(
-                          'Sound',
-                          style: TextStyle(
-                            fontSize: _adaptiveFontSize(0.03),
-                            color: primaryTextDark,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        onChanged: (v) => setState(() => subtleUseSound = v ?? false),
-                        controlAffinity: ListTileControlAffinity.leading,
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                        onChanged: (v) {
+                          setState(() => subtleAlertType = v!);
+                          _updateCameraSettings();
+                        },
                       ),
                     ),
                   ],
                 ),
-                SizedBox(height: smallGap),
-                Text(
-                  'These options are applied during the session.',
-                  style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.028),
-                    color: secondaryTextGrey,
-                  ),
-                ),
+                Text('Applied during the session.',
+                    style: TextStyle(
+                        fontSize: _adaptiveFontSize(0.028),
+                        color: secondaryTextGrey)),
               ],
             ),
           ),
@@ -1787,17 +1721,16 @@ class _SetSessionPageState extends State<SetSessionPage>
 
         Row(
           children: [
-            Icon(Icons.info_outline_rounded, color: accentThemeColor, size: _adaptiveFontSize(0.033)),
+            Icon(Icons.info_outline_rounded,
+                color: accentThemeColor, size: _adaptiveFontSize(0.033)),
             SizedBox(width: _screenWidth * 0.012),
             Expanded(
               child: Text(
                 notificationStyle == 'subtle'
-                    ? 'Non-intrusive alerts (customizable)'
+                    ? 'Non-intrusive alerts (customizable above)'
                     : 'Combined light + audio alerts',
                 style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.028),
-                  color: secondaryTextGrey,
-                ),
+                    fontSize: _adaptiveFontSize(0.028), color: secondaryTextGrey),
               ),
             ),
           ],
@@ -1806,34 +1739,71 @@ class _SetSessionPageState extends State<SetSessionPage>
     );
   }
 
-  Widget _buildNotificationStyleOption(String value, IconData icon, String label) {
+  /// Single trigger row with icon + label + checkbox
+  Widget _buildTriggerTile({
+    required IconData icon,
+    required String label,
+    required bool value,
+    required void Function(bool?) onChanged,
+  }) {
+    return CheckboxListTile(
+      value: value,
+      onChanged: onChanged,
+      activeColor: accentThemeColor,
+      contentPadding: EdgeInsets.zero,
+      controlAffinity: ListTileControlAffinity.leading,
+      dense: true,
+      title: Row(
+        children: [
+          Icon(icon,
+              color: value ? accentThemeColor : secondaryTextGrey,
+              size: _adaptiveFontSize(0.038)),
+          SizedBox(width: _screenWidth * 0.02),
+          Text(
+            label,
+            style: TextStyle(
+                fontSize: _adaptiveFontSize(0.032),
+                color: value ? primaryTextDark : secondaryTextGrey,
+                fontWeight: value ? FontWeight.w600 : FontWeight.normal),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotificationStyleOption(
+      String value, IconData icon, String label) {
     final isSelected = notificationStyle == value;
     return GestureDetector(
       onTap: () => _updateNotificationStyle(value),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
-        padding: EdgeInsets.symmetric(horizontal: _screenWidth * 0.03, vertical: _screenHeight * 0.012),
+        padding: EdgeInsets.symmetric(
+            horizontal: _screenWidth * 0.03, vertical: _screenHeight * 0.012),
         decoration: BoxDecoration(
-          color: isSelected ? accentThemeColor.withOpacity(0.15) : cardBackground,
+          color: isSelected
+              ? accentThemeColor.withOpacity(0.15)
+              : cardBackground,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: isSelected ? accentThemeColor : secondaryTextGrey.withOpacity(0.2),
+            color:
+                isSelected ? accentThemeColor : secondaryTextGrey.withOpacity(0.2),
             width: isSelected ? 1.8 : 1.2,
           ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: isSelected ? accentThemeColor : secondaryTextGrey, size: _adaptiveFontSize(0.042)),
-            SizedBox(width: _screenWidth * 0.015),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: _adaptiveFontSize(0.033),
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            Icon(icon,
                 color: isSelected ? accentThemeColor : secondaryTextGrey,
-              ),
-            ),
+                size: _adaptiveFontSize(0.042)),
+            SizedBox(width: _screenWidth * 0.015),
+            Text(label,
+                style: TextStyle(
+                    fontSize: _adaptiveFontSize(0.033),
+                    fontWeight:
+                        isSelected ? FontWeight.bold : FontWeight.w500,
+                    color: isSelected ? accentThemeColor : secondaryTextGrey)),
           ],
         ),
       ),
@@ -1842,20 +1812,28 @@ class _SetSessionPageState extends State<SetSessionPage>
 
   Widget _buildHardwareStatusVisual() {
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: _screenHeight * 0.015),
+      padding: EdgeInsets.symmetric(
+          horizontal: horizontalPadding, vertical: _screenHeight * 0.015),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: isRikazToolConnected
-              ? [accentThemeColor.withOpacity(0.12), lightestAccentColor.withOpacity(0.08)]
-              : [secondaryTextGrey.withOpacity(0.06), secondaryTextGrey.withOpacity(0.04)],
+              ? [
+                  accentThemeColor.withOpacity(0.12),
+                  lightestAccentColor.withOpacity(0.08)
+                ]
+              : [
+                  secondaryTextGrey.withOpacity(0.06),
+                  secondaryTextGrey.withOpacity(0.04)
+                ],
         ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isRikazToolConnected ? accentThemeColor.withOpacity(0.3) : secondaryTextGrey.withOpacity(0.18),
-          width: 1.2,
-        ),
+            color: isRikazToolConnected
+                ? accentThemeColor.withOpacity(0.3)
+                : secondaryTextGrey.withOpacity(0.18),
+            width: 1.2),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -1909,7 +1887,6 @@ class _SetSessionPageState extends State<SetSessionPage>
         builder: (context, value, child) {
           final clampedValue = value.clamp(0.0, 1.0);
           final clampedScale = value.clamp(0.5, 1.2);
-
           return Transform.scale(
             scale: clampedScale,
             child: Opacity(
@@ -1917,16 +1894,15 @@ class _SetSessionPageState extends State<SetSessionPage>
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.check_circle, color: Colors.green.shade600, size: _adaptiveFontSize(0.045)),
+                  Icon(Icons.check_circle,
+                      color: Colors.green.shade600,
+                      size: _adaptiveFontSize(0.045)),
                   SizedBox(width: _screenWidth * 0.02),
-                  Text(
-                    'Connection Successful!',
-                    style: TextStyle(
-                      fontSize: _adaptiveFontSize(0.037),
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green.shade700,
-                    ),
-                  ),
+                  Text('Connection Successful!',
+                      style: TextStyle(
+                          fontSize: _adaptiveFontSize(0.037),
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green.shade700)),
                 ],
               ),
             ),
@@ -1940,14 +1916,14 @@ class _SetSessionPageState extends State<SetSessionPage>
     return Container(
       padding: EdgeInsets.all(_screenHeight * 0.004),
       decoration: BoxDecoration(
-        color: secondaryTextGrey.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(11),
-      ),
+          color: secondaryTextGrey.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(11)),
       child: Row(
         children: [
           _buildToggleButton(SessionMode.pomodoro, 'Pomodoro', Icons.timer),
           SizedBox(width: _screenWidth * 0.015),
-          _buildToggleButton(SessionMode.custom, 'Custom Focus', Icons.tune),
+          _buildToggleButton(
+              SessionMode.custom, 'Custom Focus', Icons.tune),
         ],
       ),
     );
@@ -1960,32 +1936,39 @@ class _SetSessionPageState extends State<SetSessionPage>
         onTap: () {
           setState(() {
             sessionMode = mode;
-            if (mode == SessionMode.custom) {
-              _blocksFieldError = false;
-            }
+            if (mode == SessionMode.custom) _blocksFieldError = false;
           });
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
-          padding: EdgeInsets.symmetric(vertical: _screenHeight * 0.013),
+          padding:
+              EdgeInsets.symmetric(vertical: _screenHeight * 0.013),
           decoration: BoxDecoration(
             color: isSelected ? dfDeepTeal : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
-            boxShadow: isSelected ? [BoxShadow(color: dfDeepTeal.withOpacity(0.25), blurRadius: 6)] : null,
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                        color: dfDeepTeal.withOpacity(0.25),
+                        blurRadius: 6)
+                  ]
+                : null,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: _screenWidth * 0.045, color: isSelected ? Colors.white : secondaryTextGrey),
+              Icon(icon,
+                  size: _screenWidth * 0.045,
+                  color:
+                      isSelected ? Colors.white : secondaryTextGrey),
               SizedBox(width: _screenWidth * 0.015),
-              Text(
-                text,
-                style: TextStyle(
-                  fontSize: _adaptiveFontSize(0.033),
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                  color: isSelected ? Colors.white : secondaryTextGrey,
-                ),
-              ),
+              Text(text,
+                  style: TextStyle(
+                      fontSize: _adaptiveFontSize(0.033),
+                      fontWeight: isSelected
+                          ? FontWeight.bold
+                          : FontWeight.w500,
+                      color: isSelected ? Colors.white : secondaryTextGrey)),
             ],
           ),
         ),
@@ -1993,14 +1976,17 @@ class _SetSessionPageState extends State<SetSessionPage>
     );
   }
 
+  // =============================================================================
+  // FIX: Sound Selection — preview indicator shown
+  // =============================================================================
+
   Widget _buildSoundSelection() {
     return Container(
       padding: cardPadding,
       decoration: BoxDecoration(
-        color: cardBackground,
-        borderRadius: BorderRadius.circular(cardBorderRadius),
-        boxShadow: subtleShadow,
-      ),
+          color: cardBackground,
+          borderRadius: BorderRadius.circular(cardBorderRadius),
+          boxShadow: subtleShadow),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2010,57 +1996,55 @@ class _SetSessionPageState extends State<SetSessionPage>
             iconColor: accentThemeColor,
             iconSize: _adaptiveFontSize(0.05),
             textStyle: TextStyle(
-              fontSize: _adaptiveFontSize(0.04),
-              fontWeight: FontWeight.bold,
-              color: primaryTextDark,
-            ),
+                fontSize: _adaptiveFontSize(0.04),
+                fontWeight: FontWeight.bold,
+                color: primaryTextDark),
           ),
           SizedBox(height: smallGap),
-          Text(
-            'Select a sound to play during your focus session',
-            style: TextStyle(
-              fontSize: _adaptiveFontSize(0.031),
-              color: secondaryTextGrey,
-            ),
-          ),
+          Text('Select a sound to play during your focus session',
+              style: TextStyle(
+                  fontSize: _adaptiveFontSize(0.031),
+                  color: secondaryTextGrey)),
           SizedBox(height: _screenHeight * 0.015),
           if (!_soundsLoaded)
             Center(
               child: Padding(
                 padding: EdgeInsets.all(_screenHeight * 0.015),
-                child: CircularProgressIndicator(color: accentThemeColor, strokeWidth: 2.5),
+                child: CircularProgressIndicator(
+                    color: accentThemeColor, strokeWidth: 2.5),
               ),
             )
           else
             Container(
-              padding: EdgeInsets.symmetric(horizontal: _screenWidth * 0.035, vertical: smallGap),
+              padding: EdgeInsets.symmetric(
+                  horizontal: _screenWidth * 0.035, vertical: smallGap),
               decoration: BoxDecoration(
-                color: cardBackground,
-                borderRadius: BorderRadius.circular(11),
-                border: Border.all(color: accentThemeColor.withOpacity(0.25), width: 1.3),
-              ),
+                  color: cardBackground,
+                  borderRadius: BorderRadius.circular(11),
+                  border: Border.all(
+                      color: accentThemeColor.withOpacity(0.25), width: 1.3)),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   value: _selectedSound.id,
                   isExpanded: true,
-                  icon: Icon(Icons.keyboard_arrow_down_rounded, color: accentThemeColor, size: _screenWidth * 0.065),
+                  icon: Icon(Icons.keyboard_arrow_down_rounded,
+                      color: accentThemeColor, size: _screenWidth * 0.065),
                   style: TextStyle(
-                    fontSize: _adaptiveFontSize(0.037),
-                    fontWeight: FontWeight.w600,
-                    color: primaryTextDark,
-                  ),
+                      fontSize: _adaptiveFontSize(0.037),
+                      fontWeight: FontWeight.w600,
+                      color: primaryTextDark),
                   dropdownColor: cardBackground,
                   onChanged: (String? newSoundId) {
                     if (newSoundId != null) {
                       final newSound = _availableSounds.firstWhere(
-                        (s) => s.id == newSoundId,
-                        orElse: () => SoundOption.off(),
-                      );
+                          (s) => s.id == newSoundId,
+                          orElse: () => SoundOption.off());
                       setState(() => _selectedSound = newSound);
-                      _playPreview(newSound);
+                      _playPreview(newSound); // FIX: always calls fixed preview
                     }
                   },
-                  items: _availableSounds.map<DropdownMenuItem<String>>((sound) {
+                  items: _availableSounds
+                      .map<DropdownMenuItem<String>>((sound) {
                     final soundColor = _getSoundColor(sound.name);
                     return DropdownMenuItem<String>(
                       value: sound.id,
@@ -2069,22 +2053,19 @@ class _SetSessionPageState extends State<SetSessionPage>
                           Container(
                             padding: EdgeInsets.all(_screenWidth * 0.018),
                             decoration: BoxDecoration(
-                              color: soundColor.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(7),
-                            ),
-                            child: Icon(sound.icon, color: soundColor, size: _screenWidth * 0.045),
+                                color: soundColor.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(7)),
+                            child: Icon(sound.icon,
+                                color: soundColor,
+                                size: _screenWidth * 0.045),
                           ),
                           SizedBox(width: _screenWidth * 0.025),
                           Expanded(
-                            child: Text(
-                              sound.name,
-                              style: TextStyle(
-                                fontSize: _adaptiveFontSize(0.037),
-                                fontWeight: FontWeight.w600,
-                                color: primaryTextDark,
-                              ),
-                            ),
-                          ),
+                              child: Text(sound.name,
+                                  style: TextStyle(
+                                      fontSize: _adaptiveFontSize(0.037),
+                                      fontWeight: FontWeight.w600,
+                                      color: primaryTextDark))),
                         ],
                       ),
                     );
@@ -2092,26 +2073,45 @@ class _SetSessionPageState extends State<SetSessionPage>
                 ),
               ),
             ),
-          if (_soundsLoaded && _selectedSound.id != 'off')
-            Padding(
-              padding: EdgeInsets.only(top: mediumGap),
-              child: Row(
-                children: [
-                  Icon(Icons.volume_up_rounded, color: accentThemeColor, size: _adaptiveFontSize(0.037)),
-                  SizedBox(width: _screenWidth * 0.015),
-                  Expanded(
-                    child: Text(
-                      '5-second preview will play on selection',
-                      style: TextStyle(
-                        fontSize: _adaptiveFontSize(0.028),
-                        color: secondaryTextGrey,
-                        fontStyle: FontStyle.italic,
+          if (_soundsLoaded && _selectedSound.id != 'off') ...[
+            SizedBox(height: mediumGap),
+            Row(
+              children: [
+                // FIX: Show live indicator while preview plays
+                if (_isPlayingPreview)
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                            color: accentThemeColor, strokeWidth: 2),
                       ),
-                    ),
+                      SizedBox(width: _screenWidth * 0.015),
+                      Text('Playing preview...',
+                          style: TextStyle(
+                              fontSize: _adaptiveFontSize(0.028),
+                              color: accentThemeColor,
+                              fontWeight: FontWeight.w600)),
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      Icon(Icons.volume_up_rounded,
+                          color: accentThemeColor,
+                          size: _adaptiveFontSize(0.037)),
+                      SizedBox(width: _screenWidth * 0.015),
+                      Text('5-second preview plays on selection',
+                          style: TextStyle(
+                              fontSize: _adaptiveFontSize(0.028),
+                              color: secondaryTextGrey,
+                              fontStyle: FontStyle.italic)),
+                    ],
                   ),
-                ],
-              ),
+              ],
             ),
+          ],
         ],
       ),
     );
@@ -2133,17 +2133,15 @@ class _SetSessionPageState extends State<SetSessionPage>
         backgroundColor: primaryBackground,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: primaryTextDark, size: _adaptiveFontSize(0.055)),
+          icon: Icon(Icons.arrow_back,
+              color: primaryTextDark, size: _adaptiveFontSize(0.055)),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text(
-          'Set Session',
-          style: TextStyle(
-            fontSize: _adaptiveFontSize(0.042),
-            fontWeight: FontWeight.bold,
-            color: primaryTextDark,
-          ),
-        ),
+        title: Text('Set Session',
+            style: TextStyle(
+                fontSize: _adaptiveFontSize(0.042),
+                fontWeight: FontWeight.bold,
+                color: primaryTextDark)),
         centerTitle: true,
       ),
       backgroundColor: primaryBackground,
@@ -2153,25 +2151,24 @@ class _SetSessionPageState extends State<SetSessionPage>
             SingleChildScrollView(
               controller: _scrollController,
               padding: EdgeInsets.only(
-                left: proportionalHorizontalPadding,
-                right: proportionalHorizontalPadding,
-                top: _screenHeight * 0.015,
-                bottom: _screenHeight * 0.18,
-              ),
+                  left: proportionalHorizontalPadding,
+                  right: proportionalHorizontalPadding,
+                  top: _screenHeight * 0.015,
+                  bottom: _screenHeight * 0.18),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    sessionMode == SessionMode.pomodoro ? 'Pomodoro Session' : 'Custom Session',
-                    style: headingStyle,
-                  ),
+                      sessionMode == SessionMode.pomodoro
+                          ? 'Pomodoro Session'
+                          : 'Custom Session',
+                      style: headingStyle),
                   SizedBox(height: _screenHeight * 0.003),
                   Text(
-                    sessionMode == SessionMode.pomodoro
-                        ? 'Structured focus and break sessions'
-                        : 'Set your own uninterrupted timing',
-                    style: bodyStyle,
-                  ),
+                      sessionMode == SessionMode.pomodoro
+                          ? 'Structured focus and break sessions'
+                          : 'Set your own uninterrupted timing',
+                      style: bodyStyle),
                   SizedBox(height: largeGap),
                   _buildModeToggle(),
                   SizedBox(height: largeGap),
@@ -2181,12 +2178,10 @@ class _SetSessionPageState extends State<SetSessionPage>
                     child: sessionMode == SessionMode.pomodoro
                         ? Column(
                             key: const ValueKey(SessionMode.pomodoro),
-                            children: [_buildPomodoroSettings()],
-                          )
+                            children: [_buildPomodoroSettings()])
                         : Column(
                             key: const ValueKey(SessionMode.custom),
-                            children: [_buildCustomDurationSlider()],
-                          ),
+                            children: [_buildCustomDurationSlider()]),
                   ),
                   SizedBox(height: largeGap),
                   _buildSoundSelection(),
@@ -2200,21 +2195,18 @@ class _SetSessionPageState extends State<SetSessionPage>
               bottom: 0,
               child: Container(
                 decoration: BoxDecoration(
-                  color: primaryBackground,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
-                      blurRadius: 8,
-                      offset: const Offset(0, -3),
-                    ),
-                  ],
-                ),
+                    color: primaryBackground,
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.black.withOpacity(0.06),
+                          blurRadius: 8,
+                          offset: const Offset(0, -3))
+                    ]),
                 padding: EdgeInsets.only(
-                  left: proportionalHorizontalPadding,
-                  right: proportionalHorizontalPadding,
-                  top: _screenHeight * 0.015,
-                  bottom: _screenHeight * 0.025,
-                ),
+                    left: proportionalHorizontalPadding,
+                    right: proportionalHorizontalPadding,
+                    top: _screenHeight * 0.015,
+                    bottom: _screenHeight * 0.025),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -2222,41 +2214,39 @@ class _SetSessionPageState extends State<SetSessionPage>
                       Container(
                         margin: EdgeInsets.only(bottom: mediumGap),
                         padding: EdgeInsets.symmetric(
-                          horizontal: _screenWidth * 0.03,
-                          vertical: _screenHeight * 0.01,
-                        ),
+                            horizontal: _screenWidth * 0.03,
+                            vertical: _screenHeight * 0.01),
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              accentThemeColor.withOpacity(0.08),
-                              lightestAccentColor.withOpacity(0.12),
-                            ],
-                          ),
+                          gradient: LinearGradient(colors: [
+                            accentThemeColor.withOpacity(0.08),
+                            lightestAccentColor.withOpacity(0.12)
+                          ]),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: accentThemeColor.withOpacity(0.25)),
+                          border: Border.all(
+                              color: accentThemeColor.withOpacity(0.25)),
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.lightbulb_outline_rounded, color: accentThemeColor, size: _adaptiveFontSize(0.04)),
+                            Icon(Icons.lightbulb_outline_rounded,
+                                color: accentThemeColor,
+                                size: _adaptiveFontSize(0.04)),
                             SizedBox(width: _screenWidth * 0.02),
                             Expanded(
-                              child: Text(
-                                'Connect hardware for enhanced features',
-                                style: TextStyle(
-                                  fontSize: _adaptiveFontSize(0.03),
-                                  color: primaryTextDark,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
+                                child: Text(
+                                    'Connect hardware for enhanced features',
+                                    style: TextStyle(
+                                        fontSize: _adaptiveFontSize(0.03),
+                                        color: primaryTextDark,
+                                        fontWeight: FontWeight.w600))),
                           ],
                         ),
                       ),
                     _buildPrimaryButton(
-                      text: 'Start Session',
-                      onPressed: canStartSession ? handleStartSessionPress : null,
-                      icon: Icons.play_arrow_rounded,
-                    ),
+                        text: 'Start Session',
+                        onPressed: canStartSession
+                            ? handleStartSessionPress
+                            : null,
+                        icon: Icons.play_arrow_rounded),
                   ],
                 ),
               ),
@@ -2301,13 +2291,19 @@ class _AnimatedHardwareIcon extends StatelessWidget {
           animation: pulseAnimation,
           builder: (context, child) {
             return TweenAnimationBuilder<double>(
-              tween: Tween(begin: showConfirmation ? 0.0 : 1.0, end: 1.0),
-              duration: Duration(milliseconds: showConfirmation ? 600 : 0),
+              tween:
+                  Tween(begin: showConfirmation ? 0.0 : 1.0, end: 1.0),
+              duration:
+                  Duration(milliseconds: showConfirmation ? 600 : 0),
               curve: Curves.elasticOut,
               builder: (context, popScale, child) {
-                final double pulseValue = (showConfirmation ? pulseAnimation.value : 1.0).clamp(1.0, 1.15);
-                final double finalScale = (popScale * pulseValue).clamp(0.8, 1.3);
-                final double glowOpacity = (showConfirmation ? 0.6 : 0.4).clamp(0.0, 1.0);
+                final double pulseValue =
+                    (showConfirmation ? pulseAnimation.value : 1.0)
+                        .clamp(1.0, 1.15);
+                final double finalScale =
+                    (popScale * pulseValue).clamp(0.8, 1.3);
+                final double glowOpacity =
+                    (showConfirmation ? 0.6 : 0.4).clamp(0.0, 1.0);
                 final double glowBlur = showConfirmation ? 16.0 : 12.0;
                 final double glowSpread = showConfirmation ? 2.0 : 1.0;
 
@@ -2327,23 +2323,23 @@ class _AnimatedHardwareIcon extends StatelessWidget {
                               ],
                             )
                           : null,
-                      color: isActive ? null : secondaryTextGrey.withOpacity(0.12),
+                      color: isActive
+                          ? null
+                          : secondaryTextGrey.withOpacity(0.12),
                       shape: BoxShape.circle,
                       boxShadow: isActive
                           ? [
                               BoxShadow(
-                                color: accentThemeColor.withOpacity(glowOpacity),
-                                blurRadius: glowBlur,
-                                spreadRadius: glowSpread,
-                              ),
+                                  color: accentThemeColor
+                                      .withOpacity(glowOpacity),
+                                  blurRadius: glowBlur,
+                                  spreadRadius: glowSpread),
                             ]
                           : null,
                     ),
-                    child: Icon(
-                      icon,
-                      color: isActive ? Colors.white : secondaryTextGrey,
-                      size: screenWidth * 0.052,
-                    ),
+                    child: Icon(icon,
+                        color: isActive ? Colors.white : secondaryTextGrey,
+                        size: screenWidth * 0.052),
                   ),
                 );
               },
@@ -2351,14 +2347,11 @@ class _AnimatedHardwareIcon extends StatelessWidget {
           },
         ),
         SizedBox(height: screenHeight * 0.006),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: adaptiveFontSize(0.026),
-            fontWeight: FontWeight.w600,
-            color: isActive ? accentThemeColor : secondaryTextGrey,
-          ),
-        ),
+        Text(label,
+            style: TextStyle(
+                fontSize: adaptiveFontSize(0.026),
+                fontWeight: FontWeight.w600,
+                color: isActive ? accentThemeColor : secondaryTextGrey)),
       ],
     );
   }

@@ -1,14 +1,13 @@
+// Session.dart
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 import 'package:rikazapp/services/rikaz_light_service.dart';
-import 'package:rikazapp/widgets/rikaz_device_picker.dart';
 import 'package:rikazapp/main.dart';
 import 'package:rikazapp/pages/mainscreens/games/games.dart';
 
@@ -44,9 +43,11 @@ class SessionPage extends StatefulWidget {
   final double? sensitivity;
   final String? notificationStyle;
 
-  // NEW (to match SetSession args)
-  final bool? subtleUseLight;
-  final bool? subtleUseSound;
+  // NEW TRIGGERS & ALERT SETTINGS
+  final String? subtleAlertType; 
+  final bool? sleepTrigger;
+  final bool? presenceTrigger;
+  final bool? phoneTrigger;      // <--- ADDED!
   final String? notificationSoundUrl;
 
   // Hardware + sound
@@ -63,8 +64,10 @@ class SessionPage extends StatefulWidget {
     this.isCameraDetectionEnabled,
     this.sensitivity,
     this.notificationStyle,
-    this.subtleUseLight,
-    this.subtleUseSound,
+    this.subtleAlertType,
+    this.sleepTrigger,
+    this.presenceTrigger,
+    this.phoneTrigger,          // <--- ADDED!
     this.notificationSoundUrl,
     this.rikazConnected,
     this.selectedSoundId,
@@ -88,6 +91,9 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
   String? _currentSessionId;
   DateTime? _sessionStartTime;
   int _totalFocusSeconds = 0;
+  
+  // NEW: Store the exact count coming from hardware
+  int _sessionDistractionCount = 0; 
 
   String mode = 'focus';
   String status = 'running';
@@ -104,6 +110,9 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
   DateTime? _lastLightOffTime;
   static const Duration _lightDebounceDelay = Duration(seconds: 2);
   static const int minimumSessionMinutes = 10;
+
+  final AudioPlayer _alertPlayer = AudioPlayer();
+  bool _isAlertPlaying = false;
 
   // ============================================================================
   // MODERN UI DIALOG FLOW
@@ -401,14 +410,11 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
         await _debouncedLightOff();
       }
 
-      // 1) Ask user
       String? p = await _showProgressLevelDialog();
       String d = await _showDistractionDialog();
 
-      // 2) DB update (no await)
       _endSessionInDB(progress: p, distraction: d);
 
-      // 3) Show summary + motivational
       if (mounted) {
         await _showSummaryDialog(d, p ?? 'partially');
         _showMotivationalPopup(d);
@@ -459,6 +465,7 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
         'actual_duration': actual,
         'progress_level': progress,
         'distraction_level': distraction,
+        'distraction_count': _sessionDistractionCount, 
       }).eq('session_id', _currentSessionId!);
     } catch (e) {
       debugPrint('DB Error: $e');
@@ -483,6 +490,9 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
     timeLeft = focusMinutes * 60;
     _rikazConnected = widget.rikazConnected ?? false;
 
+    _alertPlayer.setReleaseMode(ReleaseMode.loop);
+    _setupDistractionListener();
+
     startTimer();
     _startSessionInDB();
 
@@ -505,6 +515,49 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
       ..repeat(reverse: true);
   }
 
+  // ============================================================================
+  // DISTRACTION AUDIO LOGIC (SUPABASE ONLY FALLBACK)
+  // ============================================================================
+  void _setupDistractionListener() {
+    RikazLightService.onDistractionDetected = (count) {
+      if (!mounted) return;
+      
+      setState(() {
+        _sessionDistractionCount = count;
+      });
+
+      _triggerAudioAlert();
+    };
+  }
+
+  Future<void> _triggerAudioAlert() async {
+    bool shouldPlaySound = widget.notificationStyle == 'strong' ||
+        (widget.notificationStyle == 'subtle' && widget.subtleAlertType == 'sound');
+
+    if (shouldPlaySound) {
+      try {
+        await _alertPlayer.stop(); 
+        await _alertPlayer.setVolume(1.0); 
+        
+        // This is your EXACT Supabase URL from the request.
+        String finalUrl = widget.notificationSoundUrl ?? 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/notify.mp3';
+        
+        await _alertPlayer.play(UrlSource(finalUrl));
+        
+        Future.delayed(const Duration(seconds: 4), () async {
+          if (mounted) await _alertPlayer.stop();
+        });
+      } catch (e) {
+        debugPrint('❌ Error playing alert sound: $e');
+        // Force the absolute direct link if the variable somehow broke
+        await _alertPlayer.play(UrlSource('https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/notify.mp3'));
+        Future.delayed(const Duration(seconds: 4), () async {
+          if (mounted) await _alertPlayer.stop();
+        });
+      }
+    }
+  }
+
   Future<void> _startSessionInDB() async {
     final supabase = Supabase.instance.client;
     final uid = supabase.auth.currentUser?.id;
@@ -518,7 +571,6 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
             'session_type': widget.sessionType,
             'start_time': DateTime.now().toIso8601String(),
             'planned_duration': isPomodoro ? (focusMinutes * totalBlocks) : focusMinutes,
-            // IMPORTANT: store camera monitored correctly
             'camera_monitored': widget.isCameraDetectionEnabled ?? false,
           })
           .select('session_id');
@@ -569,6 +621,7 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
     final prev = status;
     setState(() => status = 'paused');
     pulseController.stop();
+    _sendTimerUpdateToESP32();
 
     showDialog(
       context: context,
@@ -582,6 +635,7 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
               if (!mounted) return;
               setState(() => status = prev);
               if (prev == 'running') pulseController.repeat(reverse: true);
+              _sendTimerUpdateToESP32();
             },
             child: const Text('No'),
           ),
@@ -664,7 +718,7 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
     _lastLightOffTime = now;
 
     try {
-      await RikazLightService.turnOff();
+      await RikazLightService.sendCommand(jsonEncode({"on":false}));
     } catch (_) {}
   }
 
@@ -678,6 +732,10 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
           'seconds': timeLeft % 60,
           'status': status,
           'mode': mode,
+        },
+        'config': {
+          'style': widget.notificationStyle ?? 'strong',
+          'subtleType': widget.subtleAlertType ?? 'light',
         }
       });
       await RikazLightService.sendCommand(cmd);
@@ -834,13 +892,16 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
     _timer?.cancel();
     _connectionCheckTimer?.cancel();
     pulseController.dispose();
+    
+    _alertPlayer.stop();
+    _alertPlayer.dispose();
+    
     super.dispose();
   }
 }
 
 // ============================================================================
-// SOUND CONTROL SECTION
-// - Now auto-starts the preselected sound (if provided)
+// SOUND CONTROL SECTION (SUPABASE ONLY FALLBACK)
 // ============================================================================
 class SoundSection extends StatefulWidget {
   final String? preselectedSoundId;
@@ -870,7 +931,6 @@ class _SoundSectionState extends State<SoundSection> {
 
     _audioPlayer.setReleaseMode(ReleaseMode.loop);
 
-    // Temporary placeholder until DB list loads
     if (widget.preselectedSoundId != null &&
         widget.preselectedSoundId != 'off' &&
         widget.preselectedSoundUrl != null) {
@@ -883,7 +943,6 @@ class _SoundSectionState extends State<SoundSection> {
       );
       _isSoundPlaying = true;
 
-      // Autoplay after first frame
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         try {
           await _audioPlayer.stop();
@@ -898,8 +957,29 @@ class _SoundSectionState extends State<SoundSection> {
   }
 
   Future<List<SoundOption>> _fetchSounds() async {
+    final List<SoundOption> supabaseFallbacks = [
+      SoundOption.off(),
+      SoundOption(
+        id: 'Rain', name: 'Rain', 
+        filePathUrl: 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/rain-v2.mp3', 
+        iconName: 'water_drop_outlined', colorHex: '#5DADE2'
+      ),
+      SoundOption(
+        id: 'River', name: 'River', 
+        filePathUrl: 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/rain-v2.mp3', 
+        iconName: 'waves_rounded', colorHex: '#4FC3F7'
+      ),
+      SoundOption(
+        id: 'White Noise', name: 'White Noise', 
+        filePathUrl: 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/White-Noise.mp3', 
+        iconName: 'waves_rounded', colorHex: '#BA9CF1'
+      ),
+    ];
+
     try {
       final res = await Supabase.instance.client.from('Sound_Option').select();
+      if (res.isEmpty) return supabaseFallbacks;
+
       final list = <SoundOption>[
         SoundOption.off(),
         ...res.map((i) => SoundOption(
@@ -911,7 +991,6 @@ class _SoundSectionState extends State<SoundSection> {
             )),
       ];
 
-      // Replace placeholder with real DB record (icon/color/name)
       final matchId = widget.preselectedSoundId;
       if (matchId != null && matchId != 'off') {
         final match = list.where((s) => s.id == matchId).toList();
@@ -922,7 +1001,7 @@ class _SoundSectionState extends State<SoundSection> {
 
       return list;
     } catch (_) {
-      return [SoundOption.off()];
+      return supabaseFallbacks;
     }
   }
 
@@ -934,19 +1013,28 @@ class _SoundSectionState extends State<SoundSection> {
   }
 
   Future<void> _togglePlayPause() async {
-    if (_currentSound.id == 'off') return;
+    if (_currentSound.id == 'off' || _currentSound.filePathUrl == null) return;
 
     try {
       if (_isSoundPlaying) {
         await _audioPlayer.pause();
       } else {
-        // If nothing loaded (e.g. resumed after stop), try play from URL
-        if (_currentSound.filePathUrl != null) {
-          await _audioPlayer.resume();
-        }
+        await _audioPlayer.play(UrlSource(_currentSound.filePathUrl!));
       }
       if (mounted) setState(() => _isSoundPlaying = !_isSoundPlaying);
-    } catch (_) {}
+    } catch (_) {
+      // IF URL FAILS, FALLBACK TO DIRECT SUPABASE LINK
+      String fallbackUrl = _currentSound.filePathUrl!;
+      if (_currentSound.name == 'Rain' || _currentSound.name == 'River') fallbackUrl = 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/rain-v2.mp3';
+      else if (_currentSound.name == 'White Noise') fallbackUrl = 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/White-Noise.mp3';
+      
+      try {
+        await _audioPlayer.play(UrlSource(fallbackUrl));
+        if (mounted) setState(() => _isSoundPlaying = true); 
+      } catch (e) {
+        debugPrint('X Error playing sound: $e');
+      }
+    }
   }
 
   @override
@@ -994,7 +1082,17 @@ class _SoundSectionState extends State<SoundSection> {
                           if (s.filePathUrl != null) {
                             await _audioPlayer.play(UrlSource(s.filePathUrl!));
                           }
-                        } catch (_) {}
+                        } catch (_) {
+                          String fallbackUrl = s.filePathUrl!;
+                          if (s.name == 'Rain' || s.name == 'River') fallbackUrl = 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/rain-v2.mp3';
+                          else if (s.name == 'White Noise') fallbackUrl = 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/White-Noise.mp3';
+                          
+                          try {
+                            await _audioPlayer.play(UrlSource(fallbackUrl));
+                          } catch (e) {
+                            debugPrint('X Dropdown play error: $e');
+                          }
+                        }
 
                         if (!mounted) return;
                         setState(() {
