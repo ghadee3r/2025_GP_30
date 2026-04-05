@@ -47,7 +47,7 @@ class SessionPage extends StatefulWidget {
   final String? subtleAlertType; 
   final bool? sleepTrigger;
   final bool? presenceTrigger;
-  final bool? phoneTrigger;      // <--- ADDED!
+  final bool? phoneTrigger;      
   final String? notificationSoundUrl;
 
   // Hardware + sound
@@ -67,7 +67,7 @@ class SessionPage extends StatefulWidget {
     this.subtleAlertType,
     this.sleepTrigger,
     this.presenceTrigger,
-    this.phoneTrigger,          // <--- ADDED!
+    this.phoneTrigger,          
     this.notificationSoundUrl,
     this.rikazConnected,
     this.selectedSoundId,
@@ -89,10 +89,8 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
   late int totalBlocks;
 
   String? _currentSessionId;
-  DateTime? _sessionStartTime;
+  DateTime? _sessionStartTime; 
   int _totalFocusSeconds = 0;
-  
-  // NEW: Store the exact count coming from hardware
   int _sessionDistractionCount = 0; 
 
   String mode = 'focus';
@@ -516,7 +514,7 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
   }
 
   // ============================================================================
-  // DISTRACTION AUDIO LOGIC (SUPABASE ONLY FALLBACK)
+  // DISTRACTION AUDIO LOGIC (STRICT SUPABASE ONLY)
   // ============================================================================
   void _setupDistractionListener() {
     RikazLightService.onDistractionDetected = (count) {
@@ -539,7 +537,6 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
         await _alertPlayer.stop(); 
         await _alertPlayer.setVolume(1.0); 
         
-        // This is your EXACT Supabase URL from the request.
         String finalUrl = widget.notificationSoundUrl ?? 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/notify.mp3';
         
         await _alertPlayer.play(UrlSource(finalUrl));
@@ -549,11 +546,12 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
         });
       } catch (e) {
         debugPrint('❌ Error playing alert sound: $e');
-        // Force the absolute direct link if the variable somehow broke
-        await _alertPlayer.play(UrlSource('https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/notify.mp3'));
-        Future.delayed(const Duration(seconds: 4), () async {
-          if (mounted) await _alertPlayer.stop();
-        });
+        try {
+          await _alertPlayer.play(UrlSource('https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/notify.mp3'));
+          Future.delayed(const Duration(seconds: 4), () async {
+            if (mounted) await _alertPlayer.stop();
+          });
+        } catch (_) {}
       }
     }
   }
@@ -862,20 +860,21 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
                   icon: const Icon(Icons.close),
                   label: const Text('End Session'),
                 ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
-                      ),
-                      padding: const EdgeInsets.all(12),
-                      child: SoundSection(
-                        preselectedSoundId: widget.selectedSoundId,
-                        preselectedSoundUrl: widget.selectedSoundUrl,
-                      ),
+                
+                // COMPACT SOUND SECTION AT THE BOTTOM
+                const Spacer(),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20.0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: SoundSection(
+                      preselectedSoundId: widget.selectedSoundId,
+                      preselectedSoundUrl: widget.selectedSoundUrl,
                     ),
                   ),
                 ),
@@ -901,7 +900,7 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
 }
 
 // ============================================================================
-// SOUND CONTROL SECTION (SUPABASE ONLY FALLBACK)
+// COMPACT SOUND CONTROL SECTION
 // ============================================================================
 class SoundSection extends StatefulWidget {
   final String? preselectedSoundId;
@@ -918,18 +917,17 @@ class SoundSection extends StatefulWidget {
 }
 
 class _SoundSectionState extends State<SoundSection> {
-  final AudioPlayer _audioPlayer = AudioPlayer();
+  final AudioPlayer _bgAudioPlayer = AudioPlayer();
   late Future<List<SoundOption>> _soundsFuture;
 
   late SoundOption _currentSound;
   bool _isSoundPlaying = false;
-  bool _isExpanded = false;
 
   @override
   void initState() {
     super.initState();
 
-    _audioPlayer.setReleaseMode(ReleaseMode.loop);
+    _bgAudioPlayer.setReleaseMode(ReleaseMode.loop);
 
     if (widget.preselectedSoundId != null &&
         widget.preselectedSoundId != 'off' &&
@@ -945,8 +943,8 @@ class _SoundSectionState extends State<SoundSection> {
 
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         try {
-          await _audioPlayer.stop();
-          await _audioPlayer.play(UrlSource(widget.preselectedSoundUrl!));
+          await _bgAudioPlayer.stop();
+          await _bgAudioPlayer.play(UrlSource(widget.preselectedSoundUrl!));
         } catch (_) {}
       });
     } else {
@@ -1005,108 +1003,104 @@ class _SoundSectionState extends State<SoundSection> {
     }
   }
 
-  @override
-  void dispose() {
-    _audioPlayer.stop();
-    _audioPlayer.dispose();
-    super.dispose();
+  Future<void> _playSelectedSound(SoundOption sound) async {
+    try {
+      await _bgAudioPlayer.stop();
+      if (sound.id == 'off' || sound.filePathUrl == null) {
+        if (mounted) setState(() => _isSoundPlaying = false);
+        return;
+      }
+      
+      await _bgAudioPlayer.play(UrlSource(sound.filePathUrl!));
+      if (mounted) setState(() => _isSoundPlaying = true);
+    } catch (e) {
+      debugPrint('X Error playing selected sound: $e');
+      
+      String fallbackUrl = sound.filePathUrl!;
+      if (sound.name == 'Rain' || sound.name == 'River') fallbackUrl = 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/rain-v2.mp3';
+      else if (sound.name == 'White Noise') fallbackUrl = 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/White-Noise.mp3';
+      
+      try {
+        await _bgAudioPlayer.play(UrlSource(fallbackUrl));
+        if (mounted) setState(() => _isSoundPlaying = true);
+      } catch (_) {}
+    }
   }
 
   Future<void> _togglePlayPause() async {
     if (_currentSound.id == 'off' || _currentSound.filePathUrl == null) return;
-
     try {
       if (_isSoundPlaying) {
-        await _audioPlayer.pause();
+        await _bgAudioPlayer.pause();
+        if (mounted) setState(() => _isSoundPlaying = false);
       } else {
-        await _audioPlayer.play(UrlSource(_currentSound.filePathUrl!));
+        await _bgAudioPlayer.play(UrlSource(_currentSound.filePathUrl!));
+        if (mounted) setState(() => _isSoundPlaying = true);
       }
-      if (mounted) setState(() => _isSoundPlaying = !_isSoundPlaying);
     } catch (_) {
-      // IF URL FAILS, FALLBACK TO DIRECT SUPABASE LINK
-      String fallbackUrl = _currentSound.filePathUrl!;
-      if (_currentSound.name == 'Rain' || _currentSound.name == 'River') fallbackUrl = 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/rain-v2.mp3';
-      else if (_currentSound.name == 'White Noise') fallbackUrl = 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/White-Noise.mp3';
-      
-      try {
-        await _audioPlayer.play(UrlSource(fallbackUrl));
-        if (mounted) setState(() => _isSoundPlaying = true); 
-      } catch (e) {
-        debugPrint('X Error playing sound: $e');
-      }
+      _playSelectedSound(_currentSound); // Trigger fallback attempt
     }
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: Icon(_currentSound.icon, color: _currentSound.color),
-          title: Text(
-            _currentSound.name,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-            overflow: TextOverflow.ellipsis,
-          ),
-          trailing: IconButton(
-            icon: Icon(
-              _isSoundPlaying ? Icons.pause_circle : Icons.play_circle,
-              color: _currentSound.color,
-              size: 28,
-            ),
-            onPressed: _togglePlayPause,
-          ),
-          onTap: () => setState(() => _isExpanded = !_isExpanded),
-        ),
-        if (_isExpanded)
-          Expanded(
-            child: FutureBuilder<List<SoundOption>>(
-              future: _soundsFuture,
-              builder: (ctx, snap) {
-                if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-                final sounds = snap.data!;
-                return ListView.builder(
-                  shrinkWrap: true,
-                  padding: EdgeInsets.zero,
-                  itemCount: sounds.length,
-                  itemBuilder: (c, i) {
-                    final s = sounds[i];
-                    return ListTile(
-                      dense: true,
-                      leading: Icon(s.icon, color: s.color, size: 20),
-                      title: Text(s.name, style: const TextStyle(fontSize: 13)),
-                      onTap: () async {
-                        try {
-                          await _audioPlayer.stop();
-                          if (s.filePathUrl != null) {
-                            await _audioPlayer.play(UrlSource(s.filePathUrl!));
-                          }
-                        } catch (_) {
-                          String fallbackUrl = s.filePathUrl!;
-                          if (s.name == 'Rain' || s.name == 'River') fallbackUrl = 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/rain-v2.mp3';
-                          else if (s.name == 'White Noise') fallbackUrl = 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/White-Noise.mp3';
-                          
-                          try {
-                            await _audioPlayer.play(UrlSource(fallbackUrl));
-                          } catch (e) {
-                            debugPrint('X Dropdown play error: $e');
-                          }
-                        }
+  void dispose() {
+    _bgAudioPlayer.stop();
+    _bgAudioPlayer.dispose();
+    super.dispose();
+  }
 
-                        if (!mounted) return;
-                        setState(() {
-                          _currentSound = s;
-                          _isSoundPlaying = s.id != 'off';
-                          _isExpanded = false;
-                        });
-                      },
-                    );
-                  },
-                );
-              },
-            ),
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: _currentSound.color.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(8),
           ),
+          child: Icon(_currentSound.icon, color: _currentSound.color, size: 24),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: FutureBuilder<List<SoundOption>>(
+            future: _soundsFuture,
+            builder: (ctx, snap) {
+              if (!snap.hasData) return const Center(child: CircularProgressIndicator(color: dfTealCyan));
+              final sounds = snap.data!;
+              
+              return DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _currentSound.id,
+                  isExpanded: true,
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded, color: dfTealCyan),
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: dfNavyIndigo),
+                  onChanged: (String? newId) {
+                    if (newId != null) {
+                      final newSound = sounds.firstWhere((s) => s.id == newId, orElse: () => SoundOption.off());
+                      setState(() => _currentSound = newSound);
+                      _playSelectedSound(newSound);
+                    }
+                  },
+                  items: sounds.map((s) => DropdownMenuItem<String>(
+                    value: s.id,
+                    child: Text(s.name),
+                  )).toList(),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(width: 12),
+        IconButton(
+          icon: Icon(
+            _isSoundPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
+            color: _currentSound.id == 'off' ? secondaryTextGrey.withOpacity(0.5) : dfTealCyan,
+            size: 40,
+          ),
+          onPressed: _currentSound.id == 'off' ? null : _togglePlayPause,
+          padding: EdgeInsets.zero,
+        ),
       ],
     );
   }
