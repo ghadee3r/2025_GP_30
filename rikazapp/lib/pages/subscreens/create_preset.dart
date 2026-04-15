@@ -102,7 +102,9 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
   }
 
   Future<void> _savePreset() async {
-    if (_nameController.text.trim().isEmpty) {
+    final presetName = _nameController.text.trim();
+    
+    if (presetName.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please give your preset a name.'), backgroundColor: errorIndicatorRed),
       );
@@ -115,9 +117,40 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
       final userId = supabase.auth.currentUser?.id;
       if (userId == null) throw Exception("User not logged in");
 
+      // --- UNIQUE NAME VALIDATION START ---
+      // Search the database for any of this user's presets with the exact same name (case-insensitive)
+      var query = supabase
+          .from('Preset')
+          .select('Preset_id')
+          .eq('user_id', userId)
+          .ilike('preset_name', presetName);
+
+      // If editing, we exclude the current preset from the duplicate check
+      // so it doesn't throw an error if the user keeps the same name
+      if (widget.presetToEdit != null) {
+        query = query.neq('Preset_id', widget.presetToEdit!['Preset_id']);
+      }
+
+      final existingPresets = await query;
+
+      if (existingPresets.isNotEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('A preset named "$presetName" already exists, please choose another name.'),
+              backgroundColor: errorIndicatorRed,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          setState(() => _isSaving = false);
+        }
+        return; // Stop the save process
+      }
+      // --- UNIQUE NAME VALIDATION END ---
+
       final presetData = {
         'user_id': userId,
-        'preset_name': _nameController.text.trim(),
+        'preset_name': presetName,
         'notification_light': _notificationLight,
         'notification_sound': _notificationSound,
         'detection_sensitivity_level': _sensitivityLevel,
@@ -151,7 +184,7 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
       if (mounted) setState(() => _isSaving = false);
     }
   }
-
+  
   @override
   Widget build(BuildContext context) {
     final isEditing = widget.presetToEdit != null;

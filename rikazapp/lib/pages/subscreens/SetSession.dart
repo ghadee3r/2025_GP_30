@@ -16,6 +16,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import '/services/rikaz_light_service.dart';
 import '/widgets/rikaz_device_picker.dart';
 import '/main.dart';
+import 'create_preset.dart';
 
 // =============================================================================
 // THEME CONSTANTS
@@ -158,6 +159,11 @@ class _SetSessionPageState extends State<SetSessionPage>
   bool isConfigurationOpen = false;
   bool _blocksFieldError = false;
 
+// --- Presets State ---
+  List<Map<String, dynamic>> _userPresets = [];
+  bool _isLoadingPresets = true;
+  String? _selectedPresetId;
+
   // Sound selection
   SoundOption _selectedSound = SoundOption.off();
   List<SoundOption> _availableSounds = [];
@@ -237,6 +243,7 @@ class _SetSessionPageState extends State<SetSessionPage>
   void initState() {
     super.initState();
     sessionMode = widget.initialMode ?? SessionMode.pomodoro;
+    _loadUserPresets();
     _loadSounds();
     _loadNotificationSound();
 
@@ -273,6 +280,72 @@ class _SetSessionPageState extends State<SetSessionPage>
   // =============================================================================
   // DATA LOADING
   // =============================================================================
+Future<void> _loadUserPresets() async {
+    try {
+      final userId = sb.Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) return;
+
+      final response = await sb.Supabase.instance.client
+          .from('Preset')
+          .select()
+          .eq('user_id', userId);
+
+      if (mounted) {
+        setState(() {
+          _userPresets = List<Map<String, dynamic>>.from(response);
+          _isLoadingPresets = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingPresets = false);
+    }
+  }
+
+  void _applyPreset(Map<String, dynamic> preset) {
+    setState(() {
+      _selectedPresetId = preset['Preset_id'].toString();
+      
+      // 1. Map Triggers
+      phoneTrigger = preset['trigger_phone_use'] ?? true;
+      presenceTrigger = preset['trigger_absence'] ?? false;
+      sleepTrigger = preset['trigger_sleeping'] ?? false;
+
+      // 2. Map Database String to Local Slider Double
+      String sens = preset['detection_sensitivity_level'] ?? 'Mid';
+      if (sens == 'High') sensitivity = 0.0;
+      else if (sens == 'Mid') sensitivity = 0.5;
+      else sensitivity = 1.0;
+
+      // 3. Map Notification Booleans to Local UI Strings
+      bool light = preset['notification_light'] ?? true;
+      bool sound = preset['notification_sound'] ?? true;
+      if (light && sound) {
+        notificationStyle = 'strong';
+      } else {
+        notificationStyle = 'subtle';
+        subtleAlertType = light ? 'light' : 'sound';
+      }
+    });
+
+    _updateCameraSettings(); // Instantly apply to the hardware
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Preset "${preset['preset_name']}" applied'),
+        backgroundColor: dfDeepTeal,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+ void _handleNewPresetRedirect() {
+    // Redirect immediately without showing a warning dialog
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CreatePresetPage()),
+    ).then((_) => _loadUserPresets());
+  }
 
   Future<void> _loadSounds() async {
     final List<SoundOption> fallbackSounds = [
@@ -490,13 +563,19 @@ class _SetSessionPageState extends State<SetSessionPage>
     return 'Low (90s)';
   }
 
-  Future<void> _updateCameraSensitivity(double value) async {
-    setState(() => sensitivity = value);
+Future<void> _updateCameraSensitivity(double value) async {
+    setState(() { 
+      sensitivity = value;
+      _selectedPresetId = null; // <--- ADDED HERE
+    });
     _updateCameraSettings();
   }
 
-  Future<void> _updateNotificationStyle(String style) async {
-    setState(() => notificationStyle = style);
+Future<void> _updateNotificationStyle(String style) async {
+    setState(() { 
+      notificationStyle = style;
+      _selectedPresetId = null; // <--- ADDED HERE
+    });
     _updateCameraSettings();
     if (style == 'strong') await _playNotificationPreview();
   }
@@ -1033,6 +1112,74 @@ class _SetSessionPageState extends State<SetSessionPage>
   // =============================================================================
   // CONFIGURATION WIDGETS
   // =============================================================================
+Widget _buildPresetRow() {
+    // Only show if Rikaz is connected and camera is enabled
+    if (!isRikazToolConnected || !isCameraDetectionEnabled) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(height: largeGap),
+        Text('Quick Select Preset', style: subheadingStyle),
+        SizedBox(height: mediumGap),
+        SizedBox(
+          height: 45,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              //Disabled at 5 max)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ActionChip(
+                  avatar: Icon(
+                    Icons.add_circle_outline, 
+                    size: 18, 
+                    color: _userPresets.length >= 5 ? secondaryTextGrey : Colors.white
+                  ),
+                  label: Text(
+                    'New', 
+                    style: TextStyle(
+                      color: _userPresets.length >= 5 ? secondaryTextGrey : Colors.white, 
+                      fontWeight: FontWeight.bold
+                    )
+                  ),
+                  backgroundColor: _userPresets.length >= 5 
+                      ? secondaryTextGrey.withOpacity(0.2) 
+                      : dfTealCyan,
+                  // Disable the button entirely if they hit the limit of 5
+                  onPressed: _userPresets.length >= 5 ? null : _handleNewPresetRedirect,
+                ),
+              ),
+              if (_isLoadingPresets)
+                const Center(child: Padding(padding: EdgeInsets.symmetric(horizontal: 20), child: CircularProgressIndicator(strokeWidth: 2)))
+              else
+                ..._userPresets.map((preset) {
+                  final isSelected = _selectedPresetId == preset['Preset_id'].toString();
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(preset['preset_name']),
+                      selected: isSelected,
+                      selectedColor: dfDeepTeal,
+                      backgroundColor: cardBackground,
+                      labelStyle: TextStyle(
+                        color: isSelected ? Colors.white : primaryTextDark,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal
+                      ),
+                      onSelected: (selected) {
+                        if (selected) _applyPreset(preset);
+                      },
+                    ),
+                  );
+                }),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _buildPomodoroSettings() {
     return Column(
@@ -1483,8 +1630,11 @@ class _SetSessionPageState extends State<SetSessionPage>
               ),
             ],
           ),
-          if (isCameraDetectionEnabled) ...[
+            if (isCameraDetectionEnabled) ...[
             SizedBox(height: largeGap),
+            _buildPresetRow(), 
+            SizedBox(height: largeGap),
+            const Divider(height: 32), 
             _buildCameraOptions(),
           ],
         ],
@@ -1540,7 +1690,10 @@ class _SetSessionPageState extends State<SetSessionPage>
                     _showSnackBar('Select at least one trigger.', errorIndicatorRed);
                     return;
                   }
-                  setState(() => sleepTrigger = val ?? true);
+           setState(() { 
+                    sleepTrigger = val ?? true;
+                    _selectedPresetId = null; // <--- ADDED HERE
+                  });
                   _updateCameraSettings();
                 },
               ),
@@ -1554,8 +1707,11 @@ class _SetSessionPageState extends State<SetSessionPage>
                   if (val == false && !sleepTrigger && !phoneTrigger) {
                     _showSnackBar('Select at least one trigger.', errorIndicatorRed);
                     return;
-                  }
-                  setState(() => presenceTrigger = val ?? false);
+       }
+                  setState(() { 
+                    presenceTrigger = val ?? false;
+                    _selectedPresetId = null; // <--- ADDED HERE
+                  });
                   _updateCameraSettings();
                 },
               ),
@@ -1569,8 +1725,11 @@ class _SetSessionPageState extends State<SetSessionPage>
                   if (val == false && !sleepTrigger && !presenceTrigger) {
                     _showSnackBar('Select at least one trigger.', errorIndicatorRed);
                     return;
-                  }
-                  setState(() => phoneTrigger = val ?? false);
+}
+                  setState(() { 
+                    phoneTrigger = val ?? false;
+                    _selectedPresetId = null; // <--- ADDED HERE
+                  });
                   _updateCameraSettings();
                 },
               ),
@@ -1684,7 +1843,10 @@ class _SetSessionPageState extends State<SetSessionPage>
                         contentPadding: EdgeInsets.zero,
                         dense: true,
                         onChanged: (v) {
-                          setState(() => subtleAlertType = v!);
+                          setState(() { 
+                            subtleAlertType = v!;
+                            _selectedPresetId = null; // <--- ADDED HERE
+                          });
                           _updateCameraSettings();
                         },
                       ),
