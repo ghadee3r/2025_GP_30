@@ -367,6 +367,7 @@ class _SessionPageState extends State<SessionPage>
     );
   }
 
+<<<<<<< HEAD
   void _showMotivationalPopup(String distraction) {
     String message = "";
     if (distraction == 'low') {
@@ -417,14 +418,98 @@ class _SessionPageState extends State<SessionPage>
                         color: Colors.white,
                         fontWeight: FontWeight.bold),
                   ),
+=======
+  void _showMotivationalPopup(String distraction, String progress) {
+  String message = "";
+  
+  // ============================================================================
+  // SMART MOTIVATIONAL MESSAGES BASED ON PROGRESS + DISTRACTION
+  // ============================================================================
+  
+  // FULLY + LOW
+  if (progress == 'fully' && distraction == 'low') {
+    message = "Outstanding! You maintained excellent focus and completed everything. This is peak performance! 🌟";
+  }
+  // FULLY + MEDIUM
+  else if (progress == 'fully' && distraction == 'medium') {
+    message = "Great job! You pushed through the distractions and finished strong. That's real determination! 💪";
+  }
+  // FULLY + HIGH
+  else if (progress == 'fully' && distraction == 'high') {
+    message = "Incredible resilience! Despite heavy distractions, you completed your goals. Next time will be even better! 🔥";
+  }
+  
+  // PARTIALLY + LOW
+  else if (progress == 'partially' && distraction == 'low') {
+    message = "Good focus quality! You stayed concentrated even though you didn't finish. Keep building on this momentum! 📈";
+  }
+  // PARTIALLY + MEDIUM
+  else if (progress == 'partially' && distraction == 'medium') {
+    message = "Nice effort! You made solid progress despite some interruptions. You're on the right path! ✨";
+  }
+  // PARTIALLY + HIGH
+  else if (progress == 'partially' && distraction == 'high') {
+    message = "You tried your best in a challenging environment. Every small step counts. Tomorrow is a fresh start! 🌱";
+  }
+  
+  // BARELY + LOW
+  else if (progress == 'barely' && distraction == 'low') {
+    message = "It happens! Even with focus, sometimes tasks are tough. Don't be discouraged—you'll bounce back! 🔄";
+  }
+  // BARELY + MEDIUM
+  else if (progress == 'barely' && distraction == 'medium') {
+    message = "Challenging session, but you showed up! That's what matters. Identify what distracted you and try again! 💫";
+  }
+  // BARELY + HIGH
+  else if (progress == 'barely' && distraction == 'high') {
+    message = "This was a tough one with many interruptions. Learn from it and create a better setup next time. You've got this! 🌟";
+  }
+  
+  // DEFAULT (في حال قيمة غريبة)
+  else {
+    message = "Every session is a learning experience. Reflect and improve for next time. Keep going! 🚀";
+  }
+  
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.emoji_events_rounded, size: 80, color: dfTealCyan),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: dfNavyIndigo),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: dfNavyIndigo,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+>>>>>>> 922fe0b207a7760b64420972544458b0c006e706
                 ),
-              )
-            ],
-          ),
+                onPressed: () => Navigator.pushNamedAndRemoveUntil(context, '/tabs', (route) => false),
+                child: const Text(
+                  'Finish',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
+              ),
+            )
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildOptionCard({
     required String title,
@@ -529,9 +614,14 @@ class _SessionPageState extends State<SessionPage>
       _endSessionInDB(progress: p, distraction: d);
 
       if (mounted) {
+<<<<<<< HEAD
         await _showSummaryDialog(d, p ?? 'partially',
             cameraCalculated: cameraOn);
         _showMotivationalPopup(d);
+=======
+        await _showSummaryDialog(d, p ?? 'partially');
+        _showMotivationalPopup(d, p ?? 'partially');
+>>>>>>> 922fe0b207a7760b64420972544458b0c006e706
       }
       return;
     }
