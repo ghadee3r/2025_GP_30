@@ -113,11 +113,6 @@ class _SessionPageState extends State<SessionPage>
   // PROGRESS LEVEL AUTO-CALCULATION
   // ============================================================================
 
-  /// Mirrors the ESP formula: (count / minutes) × 10
-  /// Thresholds based on Gloria Mark / APA research:
-  ///   < 1.0 → fully    (flow state, ≤ 0 distractions per 10 min)
-  ///   < 2.0 → partially (switching cost, 1 per 10 min)
-  ///   >= 2.0 → barely   (fragmented attention, 2+ per 10 min)
   String _calculateProgressLevel() {
     final double minutes = _totalFocusSeconds / 60.0;
     final double rate =
@@ -293,7 +288,6 @@ class _SessionPageState extends State<SessionPage>
                     _summaryRowUI(Icons.timer_outlined, 'Total Time',
                         '${(_totalFocusSeconds ~/ 60)} min'),
                     const Divider(height: 20),
-                    // Progress row with optional Auto badge
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -303,8 +297,7 @@ class _SessionPageState extends State<SessionPage>
                                 size: 20, color: dfTealCyan),
                             const SizedBox(width: 10),
                             const Text('Progress',
-                                style:
-                                    TextStyle(color: secondaryTextGrey)),
+                                style: TextStyle(color: secondaryTextGrey)),
                             if (cameraCalculated) ...[
                               const SizedBox(width: 6),
                               Container(
@@ -414,8 +407,7 @@ class _SessionPageState extends State<SessionPage>
                   child: const Text(
                     'Finish',
                     style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold),
+                        color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                 ),
               )
@@ -483,8 +475,7 @@ class _SessionPageState extends State<SessionPage>
           children: [
             Icon(icon, size: 20, color: dfTealCyan),
             const SizedBox(width: 10),
-            Text(label,
-                style: const TextStyle(color: secondaryTextGrey)),
+            Text(label, style: const TextStyle(color: secondaryTextGrey)),
           ],
         ),
         Text(value,
@@ -517,11 +508,9 @@ class _SessionPageState extends State<SessionPage>
       final bool cameraOn = widget.isCameraDetectionEnabled ?? false;
 
       if (cameraOn) {
-        // Camera on: auto-calculate progress, skip the manual dialog
         p = _calculateProgressLevel();
         d = await _showDistractionDialog();
       } else {
-        // Camera off: ask the user as before
         p = await _showProgressLevelDialog();
         d = await _showDistractionDialog();
       }
@@ -594,27 +583,18 @@ class _SessionPageState extends State<SessionPage>
     }
   }
 
-  /// Inserts one row into Distraction_Event when a distraction event ends.
-  Future<void> _insertDistractionEvent(
-      String type, int durationSeconds) async {
-    if (_currentSessionId == null) return;
-    try {
-      await Supabase.instance.client.from('Distraction_Event').insert({
-        'session_id': int.parse(_currentSessionId!),
-        'distraction_type': type,
-        'duration_seconds': durationSeconds,
-      });
-      debugPrint(
-          'Distraction_Event inserted: $type — ${durationSeconds}s');
-    } catch (e) {
-      debugPrint('Distraction_Event insert error: $e');
-    }
-  }
-
+  // ─── Pre-create all 3 distraction rows at session start ───────────────────
+  // Rows appear in DB immediately with 0 counts and get incremented as events
+  // come in. CASCADE delete handles cleanup when session is deleted.
   Future<void> _startSessionInDB() async {
     final supabase = Supabase.instance.client;
     final uid = supabase.auth.currentUser?.id;
     if (uid == null) return;
+
+    String? pomodoroType;
+    if (isPomodoro) {
+      pomodoroType = focusMinutes == 25 ? '25-5' : '50-10';
+    }
 
     try {
       final res = await supabase
@@ -628,14 +608,79 @@ class _SessionPageState extends State<SessionPage>
                 : focusMinutes,
             'camera_monitored': widget.isCameraDetectionEnabled ?? false,
             'session_status': 'active',
+            'pomodoro_type': pomodoroType,
           })
           .select('session_id');
 
       if (res.isNotEmpty) {
-        setState(() =>
-            _currentSessionId = res.first['session_id'].toString());
+        final sid = res.first['session_id'] as int;
+        setState(() => _currentSessionId = sid.toString());
+
+        // Pre-create all 3 distraction type rows with 0 counts immediately
+        await supabase.from('Session_Distraction').insert([
+          {
+            'session_id': sid,
+            'distraction_type': 'phone_use',
+            'distraction_count': 0,
+            'total_duration_seconds': 0,
+          },
+          {
+            'session_id': sid,
+            'distraction_type': 'sleeping',
+            'distraction_count': 0,
+            'total_duration_seconds': 0,
+          },
+          {
+            'session_id': sid,
+            'distraction_type': 'absence',
+            'distraction_count': 0,
+            'total_duration_seconds': 0,
+          },
+        ]);
+
+        debugPrint('Session + 3 distraction rows created for session $sid');
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('_startSessionInDB error: $e');
+    }
+  }
+
+  // ─── Increment the pre-existing distraction row ───────────────────────────
+  // Row always exists now so we use single() and only update, never insert.
+  Future<void> _insertDistractionEvent(
+      String type, int durationSeconds) async {
+    debugPrint(
+        '_insertDistractionEvent — sessionId: $_currentSessionId, type: $type, duration: $durationSeconds');
+    if (_currentSessionId == null) {
+      debugPrint('SKIPPED — _currentSessionId is null');
+      return;
+    }
+
+    final sid = int.parse(_currentSessionId!);
+    try {
+      final existing = await Supabase.instance.client
+          .from('Session_Distraction')
+          .select('distraction_count, total_duration_seconds')
+          .eq('session_id', sid)
+          .eq('distraction_type', type)
+          .single();
+
+      await Supabase.instance.client
+          .from('Session_Distraction')
+          .update({
+            'distraction_count':
+                (existing['distraction_count'] as int) + 1,
+            'total_duration_seconds':
+                (existing['total_duration_seconds'] as int) + durationSeconds,
+          })
+          .eq('session_id', sid)
+          .eq('distraction_type', type);
+
+      debugPrint(
+          'Session_Distraction updated: $type +1, +${durationSeconds}s');
+    } catch (e) {
+      debugPrint('Session_Distraction error: $e');
+    }
   }
 
   // ============================================================================
@@ -976,8 +1021,7 @@ class _SessionPageState extends State<SessionPage>
                             : 'Block $currentBlock/$totalBlocks')
                         : 'Focus Session',
                     style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold),
+                        color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                 ),
                 SizedBox(height: screenHeight * 0.04),
@@ -991,8 +1035,7 @@ class _SessionPageState extends State<SessionPage>
                         color: Colors.white,
                         shape: BoxShape.circle,
                         boxShadow: [
-                          BoxShadow(
-                              color: Colors.black12, blurRadius: 30)
+                          BoxShadow(color: Colors.black12, blurRadius: 30)
                         ],
                       ),
                     ),
@@ -1024,8 +1067,8 @@ class _SessionPageState extends State<SessionPage>
                             mode == 'break'
                                 ? 'Take a rest'
                                 : 'Stay focused',
-                            style: const TextStyle(
-                                color: secondaryTextGrey)),
+                            style:
+                                const TextStyle(color: secondaryTextGrey)),
                       ],
                     ),
                   ],
@@ -1262,8 +1305,7 @@ class _SoundSectionState extends State<SoundSection> {
         await _bgAudioPlayer.pause();
         if (mounted) setState(() => _isSoundPlaying = false);
       } else {
-        await _bgAudioPlayer
-            .play(UrlSource(_currentSound.filePathUrl!));
+        await _bgAudioPlayer.play(UrlSource(_currentSound.filePathUrl!));
         if (mounted) setState(() => _isSoundPlaying = true);
       }
     } catch (_) {
@@ -1298,8 +1340,8 @@ class _SoundSectionState extends State<SoundSection> {
             builder: (ctx, snap) {
               if (!snap.hasData) {
                 return const Center(
-                    child: CircularProgressIndicator(
-                        color: dfTealCyan));
+                    child:
+                        CircularProgressIndicator(color: dfTealCyan));
               }
               final sounds = snap.data!;
 
