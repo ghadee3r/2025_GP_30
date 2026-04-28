@@ -38,16 +38,19 @@ class SessionPage extends StatefulWidget {
   final String duration;
   final String? numberOfBlocks;
 
+  // Camera / detection settings
   final bool? isCameraDetectionEnabled;
   final double? sensitivity;
   final String? notificationStyle;
 
-  final String? subtleAlertType;
+  // NEW TRIGGERS & ALERT SETTINGS
+  final String? subtleAlertType; 
   final bool? sleepTrigger;
   final bool? presenceTrigger;
-  final bool? phoneTrigger;
+  final bool? phoneTrigger;      
   final String? notificationSoundUrl;
 
+  // Hardware + sound
   final bool? rikazConnected;
   final String? selectedSoundId;
   final String? selectedSoundName;
@@ -64,7 +67,7 @@ class SessionPage extends StatefulWidget {
     this.subtleAlertType,
     this.sleepTrigger,
     this.presenceTrigger,
-    this.phoneTrigger,
+    this.phoneTrigger,          
     this.notificationSoundUrl,
     this.rikazConnected,
     this.selectedSoundId,
@@ -76,8 +79,7 @@ class SessionPage extends StatefulWidget {
   State<SessionPage> createState() => _SessionPageState();
 }
 
-class _SessionPageState extends State<SessionPage>
-    with SingleTickerProviderStateMixin {
+class _SessionPageState extends State<SessionPage> with SingleTickerProviderStateMixin {
   bool _rikazConnected = false;
   bool _lightInitialized = false;
 
@@ -87,9 +89,9 @@ class _SessionPageState extends State<SessionPage>
   late int totalBlocks;
 
   String? _currentSessionId;
-  DateTime? _sessionStartTime;
+  DateTime? _sessionStartTime; 
   int _totalFocusSeconds = 0;
-  int _sessionDistractionCount = 0;
+  int _sessionDistractionCount = 0; 
 
   String mode = 'focus';
   String status = 'running';
@@ -105,26 +107,13 @@ class _SessionPageState extends State<SessionPage>
 
   DateTime? _lastLightOffTime;
   static const Duration _lightDebounceDelay = Duration(seconds: 2);
-  static const int minimumSessionMinutes = 10;
+static const int minimumSessionMinutes = 0; // TEMPORARY: Set to 0 for demo testing
 
   final AudioPlayer _alertPlayer = AudioPlayer();
+  bool _isAlertPlaying = false;
 
   // ============================================================================
-  // PROGRESS LEVEL AUTO-CALCULATION
-  // ============================================================================
-
-  String _calculateProgressLevel() {
-    final double minutes = _totalFocusSeconds / 60.0;
-    final double rate =
-        minutes < 0.1 ? 0.0 : (_sessionDistractionCount / minutes) * 10.0;
-
-    if (rate < 1.0) return 'fully';
-    if (rate < 2.0) return 'partially';
-    return 'barely';
-  }
-
-  // ============================================================================
-  // DIALOG FLOW
+  // MODERN UI DIALOG FLOW
   // ============================================================================
 
   Future<String?> _showProgressLevelDialog() async {
@@ -133,23 +122,18 @@ class _SessionPageState extends State<SessionPage>
       context: context,
       barrierDismissible: false,
       builder: (context) => Dialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: Container(
           padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.track_changes_rounded,
-                  size: 50, color: dfTealCyan),
+              const Icon(Icons.track_changes_rounded, size: 50, color: dfTealCyan),
               const SizedBox(height: 16),
               const Text(
                 "How much of your goal did you achieve in this session?",
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: dfNavyIndigo),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: dfNavyIndigo),
               ),
               const SizedBox(height: 24),
               _buildOptionCard(
@@ -196,23 +180,18 @@ class _SessionPageState extends State<SessionPage>
       context: context,
       barrierDismissible: false,
       builder: (context) => Dialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: Container(
           padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.psychology_outlined,
-                  size: 50, color: dfTealCyan),
+              const Icon(Icons.psychology_outlined, size: 50, color: dfTealCyan),
               const SizedBox(height: 16),
               const Text(
                 "How distracted were you approximately?",
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: dfNavyIndigo),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: dfNavyIndigo),
               ),
               const SizedBox(height: 24),
               _buildOptionCard(
@@ -253,17 +232,12 @@ class _SessionPageState extends State<SessionPage>
     return selected;
   }
 
-  Future<void> _showSummaryDialog(
-    String distraction,
-    String progress, {
-    bool cameraCalculated = false,
-  }) async {
+  Future<void> _showSummaryDialog(String distraction, String progress) async {
     await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => Dialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: Container(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -271,65 +245,19 @@ class _SessionPageState extends State<SessionPage>
             children: [
               const Text(
                 "Session Summary",
-                style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: dfNavyIndigo),
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: dfNavyIndigo),
               ),
               const SizedBox(height: 20),
               Container(
-                decoration: BoxDecoration(
-                  color: primaryBackground,
-                  borderRadius: BorderRadius.circular(16),
-                ),
+                decoration: BoxDecoration(color: primaryBackground, borderRadius: BorderRadius.circular(16)),
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    _summaryRowUI(Icons.timer_outlined, 'Total Time',
-                        '${(_totalFocusSeconds ~/ 60)} min'),
+                    _summaryRowUI(Icons.timer_outlined, 'Total Time', '${(_totalFocusSeconds ~/ 60)} min'),
                     const Divider(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.auto_graph,
-                                size: 20, color: dfTealCyan),
-                            const SizedBox(width: 10),
-                            const Text('Progress',
-                                style: TextStyle(color: secondaryTextGrey)),
-                            if (cameraCalculated) ...[
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: dfTealCyan.withOpacity(0.12),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: const Text(
-                                  'Auto',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: dfTealCyan,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        Text(
-                          progress.toUpperCase(),
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: dfNavyIndigo),
-                        ),
-                      ],
-                    ),
+                    _summaryRowUI(Icons.auto_graph, 'Progress', progress.toUpperCase()),
                     const Divider(height: 20),
-                    _summaryRowUI(Icons.notifications_off_outlined,
-                        'Distraction', distraction.toUpperCase()),
+                    _summaryRowUI(Icons.notifications_off_outlined, 'Distraction', distraction.toUpperCase()),
                   ],
                 ),
               ),
@@ -340,19 +268,15 @@ class _SessionPageState extends State<SessionPage>
                   style: ElevatedButton.styleFrom(
                     backgroundColor: dfTealCyan,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () => Navigator.pop(context),
                   child: const Text(
                     'Continue',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold),
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
-              ),
+              )
             ],
           ),
         ),
@@ -374,23 +298,18 @@ class _SessionPageState extends State<SessionPage>
       context: context,
       barrierDismissible: false,
       builder: (context) => Dialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: Padding(
           padding: const EdgeInsets.all(24.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.emoji_events_rounded,
-                  size: 80, color: dfTealCyan),
+              const Icon(Icons.emoji_events_rounded, size: 80, color: dfTealCyan),
               const SizedBox(height: 16),
               Text(
                 message,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: dfNavyIndigo),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: dfNavyIndigo),
               ),
               const SizedBox(height: 24),
               SizedBox(
@@ -399,15 +318,12 @@ class _SessionPageState extends State<SessionPage>
                   style: ElevatedButton.styleFrom(
                     backgroundColor: dfNavyIndigo,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  onPressed: () => Navigator.pushNamedAndRemoveUntil(
-                      context, '/tabs', (route) => false),
+                  onPressed: () => Navigator.pushNamedAndRemoveUntil(context, '/tabs', (route) => false),
                   child: const Text(
                     'Finish',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold),
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                 ),
               )
@@ -439,8 +355,7 @@ class _SessionPageState extends State<SessionPage>
           children: [
             Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                  color: color.withOpacity(0.1), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
               child: Icon(icon, color: color, size: 24),
             ),
             const SizedBox(width: 16),
@@ -449,18 +364,12 @@ class _SessionPageState extends State<SessionPage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(title,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: dfNavyIndigo)),
-                  Text(subtitle,
-                      style: const TextStyle(
-                          fontSize: 12, color: secondaryTextGrey)),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: dfNavyIndigo)),
+                  Text(subtitle, style: const TextStyle(fontSize: 12, color: secondaryTextGrey)),
                 ],
               ),
             ),
-            const Icon(Icons.arrow_forward_ios,
-                size: 14, color: secondaryTextGrey),
+            const Icon(Icons.arrow_forward_ios, size: 14, color: secondaryTextGrey),
           ],
         ),
       ),
@@ -478,15 +387,13 @@ class _SessionPageState extends State<SessionPage>
             Text(label, style: const TextStyle(color: secondaryTextGrey)),
           ],
         ),
-        Text(value,
-            style: const TextStyle(
-                fontWeight: FontWeight.bold, color: dfNavyIndigo)),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, color: dfNavyIndigo)),
       ],
     );
   }
 
   // ============================================================================
-  // DATABASE LOGIC
+  // DATABASE & TIMER LOGIC
   // ============================================================================
 
   void onPhaseEnd() async {
@@ -497,29 +404,17 @@ class _SessionPageState extends State<SessionPage>
       setState(() => status = 'idle');
 
       if (_rikazConnected) {
-        await RikazLightService.sendCommand(
-            jsonEncode({'sessionComplete': 'true'}));
+        await RikazLightService.sendCommand(jsonEncode({'sessionComplete': 'true'}));
         await _debouncedLightOff();
       }
 
-      String? p;
-      String d;
-
-      final bool cameraOn = widget.isCameraDetectionEnabled ?? false;
-
-      if (cameraOn) {
-        p = _calculateProgressLevel();
-        d = await _showDistractionDialog();
-      } else {
-        p = await _showProgressLevelDialog();
-        d = await _showDistractionDialog();
-      }
+      String? p = await _showProgressLevelDialog();
+      String d = await _showDistractionDialog();
 
       _endSessionInDB(progress: p, distraction: d);
 
       if (mounted) {
-        await _showSummaryDialog(d, p ?? 'partially',
-            cameraCalculated: cameraOn);
+        await _showSummaryDialog(d, p ?? 'partially');
         _showMotivationalPopup(d);
       }
       return;
@@ -546,11 +441,7 @@ class _SessionPageState extends State<SessionPage>
     startTimer();
   }
 
-  Future<void> _endSessionInDB({
-    String? progress,
-    String? distraction,
-    String sessionStatus = 'completed',
-  }) async {
+  Future<void> _endSessionInDB({String? progress, String? distraction}) async {
     if (_completionHandled) return;
     final supabase = Supabase.instance.client;
     if (_currentSessionId == null) return;
@@ -560,10 +451,7 @@ class _SessionPageState extends State<SessionPage>
     if (actual < minimumSessionMinutes) {
       _completionHandled = true;
       try {
-        await supabase
-            .from('Focus_Session')
-            .delete()
-            .eq('session_id', _currentSessionId!);
+        await supabase.from('Focus_Session').delete().eq('session_id', _currentSessionId!);
       } catch (_) {}
       return;
     }
@@ -575,117 +463,12 @@ class _SessionPageState extends State<SessionPage>
         'actual_duration': actual,
         'progress_level': progress,
         'distraction_level': distraction,
-        'distraction_count': _sessionDistractionCount,
-        'session_status': sessionStatus,
+        'distraction_count': _sessionDistractionCount, 
       }).eq('session_id', _currentSessionId!);
     } catch (e) {
       debugPrint('DB Error: $e');
     }
   }
-
-  // ─── Pre-create all 3 distraction rows at session start ───────────────────
-  // Rows appear in DB immediately with 0 counts and get incremented as events
-  // come in. CASCADE delete handles cleanup when session is deleted.
-  Future<void> _startSessionInDB() async {
-    final supabase = Supabase.instance.client;
-    final uid = supabase.auth.currentUser?.id;
-    if (uid == null) return;
-
-    String? pomodoroType;
-    if (isPomodoro) {
-      pomodoroType = focusMinutes == 25 ? '25-5' : '50-10';
-    }
-
-    try {
-      final res = await supabase
-          .from('Focus_Session')
-          .insert({
-            'user_id': uid,
-            'session_type': widget.sessionType,
-            'start_time': DateTime.now().toIso8601String(),
-            'planned_duration': isPomodoro
-                ? (focusMinutes * totalBlocks)
-                : focusMinutes,
-            'camera_monitored': widget.isCameraDetectionEnabled ?? false,
-            'session_status': 'active',
-            'pomodoro_type': pomodoroType,
-          })
-          .select('session_id');
-
-      if (res.isNotEmpty) {
-        final sid = res.first['session_id'] as int;
-        setState(() => _currentSessionId = sid.toString());
-
-        // Pre-create all 3 distraction type rows with 0 counts immediately
-        await supabase.from('Session_Distraction').insert([
-          {
-            'session_id': sid,
-            'distraction_type': 'phone_use',
-            'distraction_count': 0,
-            'total_duration_seconds': 0,
-          },
-          {
-            'session_id': sid,
-            'distraction_type': 'sleeping',
-            'distraction_count': 0,
-            'total_duration_seconds': 0,
-          },
-          {
-            'session_id': sid,
-            'distraction_type': 'absence',
-            'distraction_count': 0,
-            'total_duration_seconds': 0,
-          },
-        ]);
-
-        debugPrint('Session + 3 distraction rows created for session $sid');
-      }
-    } catch (e) {
-      debugPrint('_startSessionInDB error: $e');
-    }
-  }
-
-  // ─── Increment the pre-existing distraction row ───────────────────────────
-  // Row always exists now so we use single() and only update, never insert.
-  Future<void> _insertDistractionEvent(
-      String type, int durationSeconds) async {
-    debugPrint(
-        '_insertDistractionEvent — sessionId: $_currentSessionId, type: $type, duration: $durationSeconds');
-    if (_currentSessionId == null) {
-      debugPrint('SKIPPED — _currentSessionId is null');
-      return;
-    }
-
-    final sid = int.parse(_currentSessionId!);
-    try {
-      final existing = await Supabase.instance.client
-          .from('Session_Distraction')
-          .select('distraction_count, total_duration_seconds')
-          .eq('session_id', sid)
-          .eq('distraction_type', type)
-          .single();
-
-      await Supabase.instance.client
-          .from('Session_Distraction')
-          .update({
-            'distraction_count':
-                (existing['distraction_count'] as int) + 1,
-            'total_duration_seconds':
-                (existing['total_duration_seconds'] as int) + durationSeconds,
-          })
-          .eq('session_id', sid)
-          .eq('distraction_type', type);
-
-      debugPrint(
-          'Session_Distraction updated: $type +1, +${durationSeconds}s');
-    } catch (e) {
-      debugPrint('Session_Distraction error: $e');
-    }
-  }
-
-  // ============================================================================
-  // TIMER LOGIC
-  // ============================================================================
 
   @override
   void initState() {
@@ -693,15 +476,11 @@ class _SessionPageState extends State<SessionPage>
 
     isPomodoro = widget.sessionType == 'pomodoro';
     if (isPomodoro) {
-      focusMinutes =
-          int.tryParse(widget.duration.replaceAll(RegExp(r'[^0-9]'), '')) ??
-              25;
+      focusMinutes = int.tryParse(widget.duration.replaceAll(RegExp(r'[^0-9]'), '')) ?? 25;
       breakMinutes = (focusMinutes == 25) ? 5 : 10;
       totalBlocks = int.tryParse(widget.numberOfBlocks ?? '4') ?? 4;
     } else {
-      focusMinutes =
-          int.tryParse(widget.duration.replaceAll(RegExp(r'[^0-9]'), '')) ??
-              10;
+      focusMinutes = int.tryParse(widget.duration.replaceAll(RegExp(r'[^0-9]'), '')) ?? 10;
       breakMinutes = 0;
       totalBlocks = 1;
     }
@@ -730,57 +509,74 @@ class _SessionPageState extends State<SessionPage>
       });
     }
 
-    pulseController = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1500))
+    pulseController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))
       ..repeat(reverse: true);
   }
 
   // ============================================================================
-  // DISTRACTION LISTENER
+  // DISTRACTION AUDIO LOGIC (STRICT SUPABASE ONLY)
   // ============================================================================
-
   void _setupDistractionListener() {
     RikazLightService.onDistractionDetected = (count) {
       if (!mounted) return;
-      setState(() => _sessionDistractionCount = count);
-      _triggerAudioAlert();
-    };
+      
+      setState(() {
+        _sessionDistractionCount = count;
+      });
 
-    RikazLightService.onDistractionEvent = (String type, int duration) {
-      if (!mounted) return;
-      _insertDistractionEvent(type, duration);
+      _triggerAudioAlert();
     };
   }
 
   Future<void> _triggerAudioAlert() async {
     bool shouldPlaySound = widget.notificationStyle == 'strong' ||
-        (widget.notificationStyle == 'subtle' &&
-            widget.subtleAlertType == 'sound');
+        (widget.notificationStyle == 'subtle' && widget.subtleAlertType == 'sound');
 
     if (shouldPlaySound) {
       try {
-        await _alertPlayer.stop();
-        await _alertPlayer.setVolume(1.0);
-
-        String finalUrl = widget.notificationSoundUrl ??
-            'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/notify.mp3';
-
+        await _alertPlayer.stop(); 
+        await _alertPlayer.setVolume(1.0); 
+        
+        String finalUrl = widget.notificationSoundUrl ?? 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/notify.mp3';
+        
         await _alertPlayer.play(UrlSource(finalUrl));
-
+        
         Future.delayed(const Duration(seconds: 4), () async {
           if (mounted) await _alertPlayer.stop();
         });
       } catch (e) {
         debugPrint('❌ Error playing alert sound: $e');
         try {
-          await _alertPlayer.play(UrlSource(
-              'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/notify.mp3'));
+          await _alertPlayer.play(UrlSource('https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/notify.mp3'));
           Future.delayed(const Duration(seconds: 4), () async {
             if (mounted) await _alertPlayer.stop();
           });
         } catch (_) {}
       }
     }
+  }
+
+  Future<void> _startSessionInDB() async {
+    final supabase = Supabase.instance.client;
+    final uid = supabase.auth.currentUser?.id;
+    if (uid == null) return;
+
+    try {
+      final res = await supabase
+          .from('Focus_Session')
+          .insert({
+            'user_id': uid,
+            'session_type': widget.sessionType,
+            'start_time': DateTime.now().toIso8601String(),
+            'planned_duration': isPomodoro ? (focusMinutes * totalBlocks) : focusMinutes,
+            'camera_monitored': widget.isCameraDetectionEnabled ?? false,
+          })
+          .select('session_id');
+
+      if (res.isNotEmpty) {
+        setState(() => _currentSessionId = res.first['session_id'].toString());
+      }
+    } catch (_) {}
   }
 
   void startTimer() {
@@ -847,16 +643,9 @@ class _SessionPageState extends State<SessionPage>
               if (_rikazConnected) await _debouncedLightOff();
 
               Navigator.pop(ctx);
-              await _endSessionInDB(
-                progress: null,
-                distraction: 'high',
-                sessionStatus: 'cancelled',
-              );
+              await _endSessionInDB(progress: 'none', distraction: 'high');
 
-              if (mounted) {
-                Navigator.pushNamedAndRemoveUntil(
-                    context, '/tabs', (r) => false);
-              }
+              if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/tabs', (r) => false);
             },
             child: const Text('Yes'),
           ),
@@ -870,8 +659,7 @@ class _SessionPageState extends State<SessionPage>
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-            GamesScreen(breakSecondsRemaining: timeLeft),
+        builder: (context) => GamesScreen(breakSecondsRemaining: timeLeft),
       ),
     );
 
@@ -888,8 +676,7 @@ class _SessionPageState extends State<SessionPage>
 
   void _startConnectionMonitoring() {
     _connectionCheckTimer?.cancel();
-    _connectionCheckTimer =
-        Timer.periodic(const Duration(seconds: 2), (timer) async {
+    _connectionCheckTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
       if (!mounted || !RikazConnectionState.isConnected) {
         timer.cancel();
         return;
@@ -918,20 +705,18 @@ class _SessionPageState extends State<SessionPage>
       setState(() => status = 'paused');
       pulseController.stop();
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Connection lost.')));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Connection lost.')));
   }
 
   Future<void> _debouncedLightOff() async {
     if (!_rikazConnected || !_lightInitialized) return;
 
     final now = DateTime.now();
-    if (_lastLightOffTime != null &&
-        now.difference(_lastLightOffTime!) < _lightDebounceDelay) return;
+    if (_lastLightOffTime != null && now.difference(_lastLightOffTime!) < _lightDebounceDelay) return;
     _lastLightOffTime = now;
 
     try {
-      await RikazLightService.sendCommand(jsonEncode({"on": false}));
+      await RikazLightService.sendCommand(jsonEncode({"on":false}));
     } catch (_) {}
   }
 
@@ -958,20 +743,13 @@ class _SessionPageState extends State<SessionPage>
   Future<void> _sendMotivationalMessage() async {
     if (!_rikazConnected || !_lightInitialized) return;
     try {
-      await RikazLightService.sendCommand(
-          jsonEncode({'motivation': 'show'}));
+      await RikazLightService.sendCommand(jsonEncode({'motivation': 'show'}));
     } catch (_) {}
   }
 
-  String formatTime(int s) =>
-      '${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}';
+  String formatTime(int s) => '${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}';
 
-  double get progressValue =>
-      (1 - (timeLeft / max(focusMinutes * 60, 1))).clamp(0, 1);
-
-  // ============================================================================
-  // BUILD
-  // ============================================================================
+  double get progressValue => (1 - (timeLeft / max(focusMinutes * 60, 1))).clamp(0, 1);
 
   @override
   Widget build(BuildContext context) {
@@ -983,10 +761,7 @@ class _SessionPageState extends State<SessionPage>
     return Scaffold(
       body: Stack(
         children: [
-          Container(
-              color: isPaused
-                  ? pausedBgColor
-                  : (mode == 'break' ? breakBgColor : focusBgColor)),
+          Container(color: isPaused ? pausedBgColor : (mode == 'break' ? breakBgColor : focusBgColor)),
           Positioned(
             top: screenHeight * 0.38,
             left: -screenWidth * 0.5,
@@ -995,11 +770,8 @@ class _SessionPageState extends State<SessionPage>
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.vertical(
-                    top: Radius.circular(screenWidth * 1.5)),
-                boxShadow: const [
-                  BoxShadow(color: Colors.black12, blurRadius: 20)
-                ],
+                borderRadius: BorderRadius.vertical(top: Radius.circular(screenWidth * 1.5)),
+                boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 20)],
               ),
             ),
           ),
@@ -1009,19 +781,13 @@ class _SessionPageState extends State<SessionPage>
               children: [
                 SizedBox(height: screenHeight * 0.05),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 20, vertical: 8),
-                  decoration: BoxDecoration(
-                      color: Colors.white30,
-                      borderRadius: BorderRadius.circular(20)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  decoration: BoxDecoration(color: Colors.white30, borderRadius: BorderRadius.circular(20)),
                   child: Text(
                     isPomodoro
-                        ? (mode == 'break'
-                            ? 'Break'
-                            : 'Block $currentBlock/$totalBlocks')
+                        ? (mode == 'break' ? 'Break' : 'Block $currentBlock/$totalBlocks')
                         : 'Focus Session',
-                    style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold),
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                 ),
                 SizedBox(height: screenHeight * 0.04),
@@ -1034,9 +800,7 @@ class _SessionPageState extends State<SessionPage>
                       decoration: const BoxDecoration(
                         color: Colors.white,
                         shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(color: Colors.black12, blurRadius: 30)
-                        ],
+                        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 30)],
                       ),
                     ),
                     SizedBox(
@@ -1045,11 +809,7 @@ class _SessionPageState extends State<SessionPage>
                       child: CustomPaint(
                         painter: _ProgressRingPainter(
                           progress: progressValue,
-                          color: isPaused
-                              ? pausedBgColor
-                              : (mode == 'break'
-                                  ? Colors.orange
-                                  : accentThemeColor),
+                          color: isPaused ? pausedBgColor : (mode == 'break' ? Colors.orange : accentThemeColor),
                         ),
                       ),
                     ),
@@ -1058,17 +818,9 @@ class _SessionPageState extends State<SessionPage>
                       children: [
                         Text(
                           formatTime(timeLeft),
-                          style: const TextStyle(
-                              fontSize: 50,
-                              fontWeight: FontWeight.bold,
-                              color: primaryTextDark),
+                          style: const TextStyle(fontSize: 50, fontWeight: FontWeight.bold, color: primaryTextDark),
                         ),
-                        Text(
-                            mode == 'break'
-                                ? 'Take a rest'
-                                : 'Stay focused',
-                            style:
-                                const TextStyle(color: secondaryTextGrey)),
+                        Text(mode == 'break' ? 'Take a rest' : 'Stay focused', style: const TextStyle(color: secondaryTextGrey)),
                       ],
                     ),
                   ],
@@ -1079,8 +831,7 @@ class _SessionPageState extends State<SessionPage>
                     style: ElevatedButton.styleFrom(
                       backgroundColor: dfDeepTeal,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 30, vertical: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
                     ),
                     onPressed: _navigateToBreakActivities,
                     icon: const Icon(Icons.videogame_asset_outlined),
@@ -1090,11 +841,9 @@ class _SessionPageState extends State<SessionPage>
                 ],
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor:
-                        isPaused ? pausedBgColor : accentThemeColor,
+                    backgroundColor: isPaused ? pausedBgColor : accentThemeColor,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 30, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
                   ),
                   onPressed: onPauseResume,
                   icon: Icon(isPaused ? Icons.play_arrow : Icons.pause),
@@ -1105,27 +854,24 @@ class _SessionPageState extends State<SessionPage>
                   style: ElevatedButton.styleFrom(
                     backgroundColor: errorIndicatorRed,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 30, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
                   ),
                   onPressed: onQuit,
                   icon: const Icon(Icons.close),
                   label: const Text('End Session'),
                 ),
+                
+                // COMPACT SOUND SECTION AT THE BOTTOM
                 const Spacer(),
                 Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 20.0, vertical: 20.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20.0),
                   child: Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(16),
-                      boxShadow: const [
-                        BoxShadow(color: Colors.black12, blurRadius: 10)
-                      ],
+                      boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
                     ),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     child: SoundSection(
                       preselectedSoundId: widget.selectedSoundId,
                       preselectedSoundUrl: widget.selectedSoundUrl,
@@ -1145,16 +891,17 @@ class _SessionPageState extends State<SessionPage>
     _timer?.cancel();
     _connectionCheckTimer?.cancel();
     pulseController.dispose();
+    
     _alertPlayer.stop();
     _alertPlayer.dispose();
+    
     super.dispose();
   }
 }
 
 // ============================================================================
-// SOUND SECTION
+// COMPACT SOUND CONTROL SECTION
 // ============================================================================
-
 class SoundSection extends StatefulWidget {
   final String? preselectedSoundId;
   final String? preselectedSoundUrl;
@@ -1197,8 +944,7 @@ class _SoundSectionState extends State<SoundSection> {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         try {
           await _bgAudioPlayer.stop();
-          await _bgAudioPlayer
-              .play(UrlSource(widget.preselectedSoundUrl!));
+          await _bgAudioPlayer.play(UrlSource(widget.preselectedSoundUrl!));
         } catch (_) {}
       });
     } else {
@@ -1212,34 +958,24 @@ class _SoundSectionState extends State<SoundSection> {
     final List<SoundOption> supabaseFallbacks = [
       SoundOption.off(),
       SoundOption(
-        id: 'Rain',
-        name: 'Rain',
-        filePathUrl:
-            'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/rain-v2.mp3',
-        iconName: 'water_drop_outlined',
-        colorHex: '#5DADE2',
+        id: 'Rain', name: 'Rain', 
+        filePathUrl: 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/rain-v2.mp3', 
+        iconName: 'water_drop_outlined', colorHex: '#5DADE2'
       ),
       SoundOption(
-        id: 'River',
-        name: 'River',
-        filePathUrl:
-            'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/rain-v2.mp3',
-        iconName: 'waves_rounded',
-        colorHex: '#4FC3F7',
+        id: 'River', name: 'River', 
+        filePathUrl: 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/rain-v2.mp3', 
+        iconName: 'waves_rounded', colorHex: '#4FC3F7'
       ),
       SoundOption(
-        id: 'White Noise',
-        name: 'White Noise',
-        filePathUrl:
-            'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/White-Noise.mp3',
-        iconName: 'waves_rounded',
-        colorHex: '#BA9CF1',
+        id: 'White Noise', name: 'White Noise', 
+        filePathUrl: 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/White-Noise.mp3', 
+        iconName: 'waves_rounded', colorHex: '#BA9CF1'
       ),
     ];
 
     try {
-      final res =
-          await Supabase.instance.client.from('Sound_Option').select();
+      final res = await Supabase.instance.client.from('Sound_Option').select();
       if (res.isEmpty) return supabaseFallbacks;
 
       final list = <SoundOption>[
@@ -1274,21 +1010,16 @@ class _SoundSectionState extends State<SoundSection> {
         if (mounted) setState(() => _isSoundPlaying = false);
         return;
       }
-
+      
       await _bgAudioPlayer.play(UrlSource(sound.filePathUrl!));
       if (mounted) setState(() => _isSoundPlaying = true);
     } catch (e) {
       debugPrint('X Error playing selected sound: $e');
-
+      
       String fallbackUrl = sound.filePathUrl!;
-      if (sound.name == 'Rain' || sound.name == 'River') {
-        fallbackUrl =
-            'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/rain-v2.mp3';
-      } else if (sound.name == 'White Noise') {
-        fallbackUrl =
-            'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/White-Noise.mp3';
-      }
-
+      if (sound.name == 'Rain' || sound.name == 'River') fallbackUrl = 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/rain-v2.mp3';
+      else if (sound.name == 'White Noise') fallbackUrl = 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/White-Noise.mp3';
+      
       try {
         await _bgAudioPlayer.play(UrlSource(fallbackUrl));
         if (mounted) setState(() => _isSoundPlaying = true);
@@ -1297,9 +1028,7 @@ class _SoundSectionState extends State<SoundSection> {
   }
 
   Future<void> _togglePlayPause() async {
-    if (_currentSound.id == 'off' || _currentSound.filePathUrl == null) {
-      return;
-    }
+    if (_currentSound.id == 'off' || _currentSound.filePathUrl == null) return;
     try {
       if (_isSoundPlaying) {
         await _bgAudioPlayer.pause();
@@ -1309,7 +1038,7 @@ class _SoundSectionState extends State<SoundSection> {
         if (mounted) setState(() => _isSoundPlaying = true);
       }
     } catch (_) {
-      _playSelectedSound(_currentSound);
+      _playSelectedSound(_currentSound); // Trigger fallback attempt
     }
   }
 
@@ -1330,46 +1059,33 @@ class _SoundSectionState extends State<SoundSection> {
             color: _currentSound.color.withOpacity(0.12),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(_currentSound.icon,
-              color: _currentSound.color, size: 24),
+          child: Icon(_currentSound.icon, color: _currentSound.color, size: 24),
         ),
         const SizedBox(width: 16),
         Expanded(
           child: FutureBuilder<List<SoundOption>>(
             future: _soundsFuture,
             builder: (ctx, snap) {
-              if (!snap.hasData) {
-                return const Center(
-                    child:
-                        CircularProgressIndicator(color: dfTealCyan));
-              }
+              if (!snap.hasData) return const Center(child: CircularProgressIndicator(color: dfTealCyan));
               final sounds = snap.data!;
-
+              
               return DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   value: _currentSound.id,
                   isExpanded: true,
-                  icon: const Icon(Icons.keyboard_arrow_down_rounded,
-                      color: dfTealCyan),
-                  style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: dfNavyIndigo),
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded, color: dfTealCyan),
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: dfNavyIndigo),
                   onChanged: (String? newId) {
                     if (newId != null) {
-                      final newSound = sounds.firstWhere(
-                          (s) => s.id == newId,
-                          orElse: () => SoundOption.off());
+                      final newSound = sounds.firstWhere((s) => s.id == newId, orElse: () => SoundOption.off());
                       setState(() => _currentSound = newSound);
                       _playSelectedSound(newSound);
                     }
                   },
-                  items: sounds
-                      .map((s) => DropdownMenuItem<String>(
-                            value: s.id,
-                            child: Text(s.name),
-                          ))
-                      .toList(),
+                  items: sounds.map((s) => DropdownMenuItem<String>(
+                    value: s.id,
+                    child: Text(s.name),
+                  )).toList(),
                 ),
               );
             },
@@ -1378,26 +1094,17 @@ class _SoundSectionState extends State<SoundSection> {
         const SizedBox(width: 12),
         IconButton(
           icon: Icon(
-            _isSoundPlaying
-                ? Icons.pause_circle_filled_rounded
-                : Icons.play_circle_fill_rounded,
-            color: _currentSound.id == 'off'
-                ? secondaryTextGrey.withOpacity(0.5)
-                : dfTealCyan,
+            _isSoundPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
+            color: _currentSound.id == 'off' ? secondaryTextGrey.withOpacity(0.5) : dfTealCyan,
             size: 40,
           ),
-          onPressed:
-              _currentSound.id == 'off' ? null : _togglePlayPause,
+          onPressed: _currentSound.id == 'off' ? null : _togglePlayPause,
           padding: EdgeInsets.zero,
         ),
       ],
     );
   }
 }
-
-// ============================================================================
-// MODELS & PAINTER
-// ============================================================================
 
 class SoundOption {
   final String id;
