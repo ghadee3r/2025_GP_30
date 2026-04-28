@@ -28,7 +28,7 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
   // Variables matching your schema
   bool _notificationLight = true;
   bool _notificationSound = true;
-  String _sensitivityLevel = 'Mid'; // Low, Mid, High
+  String _sensitivityLevel = 'Medium'; // Low, Mid, High
   bool _triggerPhoneUse = true;
   bool _triggerAbsence = false;
   bool _triggerSleeping = false;
@@ -40,7 +40,7 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
       _nameController.text = widget.presetToEdit!['preset_name'] ?? '';
       _notificationLight = widget.presetToEdit!['notification_light'] ?? true;
       _notificationSound = widget.presetToEdit!['notification_sound'] ?? true;
-      _sensitivityLevel = widget.presetToEdit!['detection_sensitivity_level'] ?? 'Mid';
+      _sensitivityLevel = widget.presetToEdit!['detection_sensitivity_level'] ?? 'Medium';
       _triggerPhoneUse = widget.presetToEdit!['trigger_phone_use'] ?? true;
       _triggerAbsence = widget.presetToEdit!['trigger_absence'] ?? false;
       _triggerSleeping = widget.presetToEdit!['trigger_sleeping'] ?? false;
@@ -268,7 +268,7 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
                         fillColor: primaryBackground,
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
                       ),
-                      items: ['Low', 'Mid', 'High'].map((String level) {
+                      items: ['Low', 'Medium', 'High'].map((String level) {
                         return DropdownMenuItem<String>(
                           value: level,
                           child: Text(level, style: const TextStyle(fontWeight: FontWeight.w600)),
