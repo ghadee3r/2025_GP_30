@@ -285,9 +285,13 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
   }
 
   void _showMotivationalPopup(String distraction, String progress) {
-  String message = "";
-  
-  // ============================================================================
+    String message = "";
+    
+    // ============================================================================
+    //  positive BASED ON PROGRESS + DISTRACTION
+    // ============================================================================
+    
+      // ============================================================================
   // positive prain
   // ============================================================================
   
@@ -334,46 +338,46 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
   else {
     message = "Every session is a learning experience. Reflect and improve for next time. Keep going! 🚀";
   }
-  
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) => Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.emoji_events_rounded, size: 80, color: dfTealCyan),
-            const SizedBox(height: 16),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: dfNavyIndigo),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: dfNavyIndigo,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: () => Navigator.pushNamedAndRemoveUntil(context, '/tabs', (route) => false),
-                child: const Text(
-                  'Finish',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                ),
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.emoji_events_rounded, size: 80, color: dfTealCyan),
+              const SizedBox(height: 16),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: dfNavyIndigo),
               ),
-            )
-          ],
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: dfNavyIndigo,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () => Navigator.pushNamedAndRemoveUntil(context, '/tabs', (route) => false),
+                  child: const Text(
+                    'Finish',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              )
+            ],
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildOptionCard({
     required String title,
@@ -657,60 +661,60 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
   }
 
   void onQuit() {
-  final prev = status;
-  setState(() => status = 'paused');
-  pulseController.stop();
-  _sendTimerUpdateToESP32();
+    final prev = status;
+    setState(() => status = 'paused');
+    pulseController.stop();
+    _sendTimerUpdateToESP32();
 
-  showDialog(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('End Session?'),
-      content: const Text('Are you sure?'),
-      actions: [
-        TextButton(
-          onPressed: () {
-            Navigator.pop(ctx);
-            if (!mounted) return;
-            setState(() => status = prev);
-            if (prev == 'running') pulseController.repeat(reverse: true);
-            _sendTimerUpdateToESP32();
-          },
-          child: const Text('No'),
-        ),
-        ElevatedButton(
-          onPressed: () async {
-            _timer?.cancel();
-            if (_rikazConnected) await _debouncedLightOff();
-            Navigator.pop(ctx);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('End Session?'),
+        content: const Text('Are you sure?'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              if (!mounted) return;
+              setState(() => status = prev);
+              if (prev == 'running') pulseController.repeat(reverse: true);
+              _sendTimerUpdateToESP32();
+            },
+            child: const Text('No'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              _timer?.cancel();
+              if (_rikazConnected) await _debouncedLightOff();
+              Navigator.pop(ctx);
 
-            // ✅ التعديل هنا: نفس اللوجك زي onPhaseEnd
-            final actual = (_totalFocusSeconds ~/ 60);
-            
-            // إذا أقل من 10 دقايق، امسح السشن وروح home
-            if (actual < minimumSessionMinutes) {
-              await _endSessionInDB(progress: 'none', distraction: 'high');
-              if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/tabs', (r) => false);
-              return;
-            }
+              // ✅ NEW: Check if session is >= 10 minutes
+              final actual = (_totalFocusSeconds ~/ 60);
+              
+              // If less than 10 minutes, delete and go home
+              if (actual < minimumSessionMinutes) {
+                await _endSessionInDB(progress: 'none', distraction: 'high');
+                if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/tabs', (r) => false);
+                return;
+              }
 
-            // ✅ إذا أكثر من 10 دقايق: اسأل الأسئلة!
-            String? p = await _showProgressLevelDialog();
-            String d = await _showDistractionDialog();
+              // ✅ If 10+ minutes: Ask questions like normal completion
+              String? p = await _showProgressLevelDialog();
+              String d = await _showDistractionDialog();
 
-            await _endSessionInDB(progress: p, distraction: d);
+              await _endSessionInDB(progress: p, distraction: d);
 
-            if (mounted) {
-              await _showSummaryDialog(d, p ?? 'partially');
-              _showMotivationalPopup(d, p ?? 'partially');
-            }
-          },
-          child: const Text('Yes'),
-        ),
-      ],
-    ),
-  );
-}
+              if (mounted) {
+                await _showSummaryDialog(d, p ?? 'partially');
+                _showMotivationalPopup(d, p ?? 'partially');
+              }
+            },
+            child: const Text('Yes'),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _navigateToBreakActivities() async {
     _timer?.cancel();

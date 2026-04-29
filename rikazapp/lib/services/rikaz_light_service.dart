@@ -31,6 +31,9 @@ class RikazLightService {
   // Callbacks
   static Function(String status)? onCameraStatusChanged;
   static Function(int count)? onDistractionDetected;
+  // ─── NEW: fired when a distraction event fully resolves ──────────────────────
+  static Function(String type, int durationSeconds)? onDistractionEvent;
+  // ─────────────────────────────────────────────────────────────────────────────
 
   // Rikaz BLE Service UUID
   static final Guid _rikazServiceUuid =
@@ -186,6 +189,19 @@ class RikazLightService {
                 onDistractionDetected!(count);
               }
             }
+
+            // ─── NEW: handle distraction-end event from ESP32 ─────────────────
+            if (data.containsKey('distractionEnd') &&
+                data['distractionEnd'] == true) {
+              String type = data['type'] ?? 'unknown';
+              int duration = data['duration'] ?? 0;
+              debugPrint(" Distraction ended — type: $type, duration: ${duration}s");
+              if (onDistractionEvent != null) {
+                onDistractionEvent!(type, duration);
+              }
+            }
+            // ─────────────────────────────────────────────────────────────────
+
           } catch (e) {
             debugPrint(" Error parsing notification: $e");
           }
@@ -212,6 +228,7 @@ class RikazLightService {
 
       onCameraStatusChanged = null;
       onDistractionDetected = null;
+      onDistractionEvent = null; // ─── NEW: clear the new callback too ─────────
     } catch (e) {
       debugPrint("X Disconnect Error: $e");
     }
@@ -289,7 +306,7 @@ class RikazLightService {
     required String notificationStyle,
     required bool sleepTrigger,
     required bool presenceTrigger,
-    required bool phoneTrigger, // <--- ADDED
+    required bool phoneTrigger,
   }) async {
     final command = jsonEncode({
       "cameraDetection": true,
@@ -297,7 +314,7 @@ class RikazLightService {
       "notificationStyle": notificationStyle,
       "sleepTrig": sleepTrigger,
       "presenceTrig": presenceTrigger,
-      "phoneTrig": phoneTrigger, // <--- ADDED
+      "phoneTrig": phoneTrigger,
     });
 
     bool success = await sendCommand(command);

@@ -626,7 +626,37 @@ Future<void> _updateNotificationStyle(String style) async {
         cancelText: 'Connect Now',
         confirmText: 'Start Anyway',
         onConfirm: _navigateToSession,
+        
       );
+      // =============================================================================
+  // TEMPORARY DEMO FUNCTION (REMOVE AFTER DASHBOARD DEVELOPMENT)
+  // =============================================================================
+  void _startDemoSession() {
+    _previewTimer?.cancel();
+    _audioPlayer.stop();
+
+    Navigator.pushNamed(
+      context,
+      '/session',
+      arguments: {
+        'sessionType': 'custom',
+        'duration': '1', // Forces a 1-minute session
+        'numberOfBlocks': null,
+        'isCameraDetectionEnabled': false, // Turn off camera to skip hardware checks
+        'sensitivity': 0.5,
+        'notificationStyle': 'subtle',
+        'subtleAlertType': 'light',
+        'sleepTrigger': true,
+        'presenceTrigger': false,
+        'phoneTrigger': false,
+        'rikazConnected': RikazConnectionState.isConnected, 
+        'selectedSoundId': 'off',
+        'selectedSoundName': 'No Sound',
+        'selectedSoundUrl': null,
+        'notificationSoundUrl': _notificationSoundUrl,
+      },
+    );
+  }
       return;
     }
 
@@ -2282,7 +2312,35 @@ Widget _buildPresetRow() {
   // =============================================================================
   // MAIN BUILD
   // =============================================================================
+// =============================================================================
+  // TEMPORARY DEMO FUNCTION (REMOVE AFTER DASHBOARD DEVELOPMENT)
+  // =============================================================================
+  void _startDemoSession() {
+    _previewTimer?.cancel();
+    _audioPlayer.stop();
 
+    Navigator.pushNamed(
+      context,
+      '/session',
+      arguments: {
+        'sessionType': 'custom',
+        'duration': '1', 
+        'numberOfBlocks': null,
+        'isCameraDetectionEnabled': false, 
+        'sensitivity': 0.5,
+        'notificationStyle': 'subtle',
+        'subtleAlertType': 'light',
+        'sleepTrigger': true,
+        'presenceTrigger': false,
+        'phoneTrigger': false,
+        'rikazConnected': RikazConnectionState.isConnected, 
+        'selectedSoundId': 'off',
+        'selectedSoundName': 'No Sound',
+        'selectedSoundUrl': null,
+        'notificationSoundUrl': _notificationSoundUrl,
+      },
+    );
+  }
   @override
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
@@ -2305,6 +2363,15 @@ Widget _buildPresetRow() {
                 fontWeight: FontWeight.bold,
                 color: primaryTextDark)),
         centerTitle: true,
+        
+        // DEMO BUTTON
+        actions: [
+          TextButton.icon(
+            onPressed: _startDemoSession,
+            icon: const Icon(Icons.bug_report_rounded, color: Colors.orange),
+            label: const Text('Demo', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
       backgroundColor: primaryBackground,
       body: SafeArea(
