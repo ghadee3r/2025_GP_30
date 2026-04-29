@@ -288,10 +288,10 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
   String message = "";
   
   // ============================================================================
-  // SMART MOTIVATIONAL MESSAGES BASED ON PROGRESS + DISTRACTION
+  // positive prain
   // ============================================================================
   
-    // FULLY + LOW
+// FULLY + LOW
   if (progress == 'fully' && distraction == 'low') {
     message = "Outstanding! You maintained excellent focus and completed everything. This is peak performance! 🌟";
   }
@@ -301,38 +301,38 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
   }
   // FULLY + HIGH
   else if (progress == 'fully' && distraction == 'high') {
-    message = "Impressive resilience! Despite heavy distractions, you completed your goals. Imagine what you can achieve with better focus next time! 🔥";
+    message = "Incredible resilience! Despite heavy distractions, you completed your goals. Next time will be even better! 🔥";
   }
   
   // PARTIALLY + LOW
   else if (progress == 'partially' && distraction == 'low') {
-    message = "Good focus quality! You stayed concentrated and made real progress. Push a little harder next time to complete everything! 📈";
+    message = "Good focus quality! You stayed concentrated even though you didn't finish. Keep building on this momentum! 📈";
   }
   // PARTIALLY + MEDIUM
   else if (progress == 'partially' && distraction == 'medium') {
-    message = "Solid effort! You made progress despite interruptions. Remove those distractions next session and you'll crush your goals! ✨";
+    message = "Nice effort! You made solid progress despite some interruptions. You're on the right path! ✨";
   }
   // PARTIALLY + HIGH
   else if (progress == 'partially' && distraction == 'high') {
-    message = "You tried, but distractions won this round. Set up a better environment next time—silence your phone, close the door, and show what you're really capable of! 💪";
+    message = "You tried your best in a challenging environment. Every small step counts. Tomorrow is a fresh start! 🌱";
   }
   
   // BARELY + LOW
   else if (progress == 'barely' && distraction == 'low') {
-    message = "Your focus was there, but results weren't. This means you need a better strategy or clearer goals. Break your task into smaller steps and attack them one by one! 🎯";
+    message = "It happens! Even with focus, sometimes tasks are tough. Don't be discouraged—you'll bounce back! 🔄";
   }
   // BARELY + MEDIUM
   else if (progress == 'barely' && distraction == 'medium') {
-    message = "Distractions and lack of progress—not a good combo. But you know what? Champions are built in moments like these. Prepare better, eliminate distractions, and come back stronger! 🔥";
+    message = "Challenging session, but you showed up! That's what matters. Identify what distracted you and try again! 💫";
   }
   // BARELY + HIGH
   else if (progress == 'barely' && distraction == 'high') {
-    message = "This session didn't go well, but that's okay—every champion has bad days. The difference? They learn and adapt. Find a quiet space, set clear goals, and prove to yourself what you can really do! 💡";
+    message = "This was a tough one with many interruptions. Learn from it and create a better setup next time. You've got this! 🌟";
   }
   
   // DEFAULT (في حال قيمة غريبة)
   else {
-    message = "Every session teaches you something. Analyze what went wrong, fix it, and come back stronger. Progress isn't always linear, but it's always possible! 🚀";
+    message = "Every session is a learning experience. Reflect and improve for next time. Keep going! 🚀";
   }
   
   showDialog(
@@ -657,43 +657,60 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
   }
 
   void onQuit() {
-    final prev = status;
-    setState(() => status = 'paused');
-    pulseController.stop();
-    _sendTimerUpdateToESP32();
+  final prev = status;
+  setState(() => status = 'paused');
+  pulseController.stop();
+  _sendTimerUpdateToESP32();
 
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('End Session?'),
-        content: const Text('Are you sure?'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              if (!mounted) return;
-              setState(() => status = prev);
-              if (prev == 'running') pulseController.repeat(reverse: true);
-              _sendTimerUpdateToESP32();
-            },
-            child: const Text('No'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              _timer?.cancel();
-              if (_rikazConnected) await _debouncedLightOff();
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('End Session?'),
+      content: const Text('Are you sure?'),
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.pop(ctx);
+            if (!mounted) return;
+            setState(() => status = prev);
+            if (prev == 'running') pulseController.repeat(reverse: true);
+            _sendTimerUpdateToESP32();
+          },
+          child: const Text('No'),
+        ),
+        ElevatedButton(
+          onPressed: () async {
+            _timer?.cancel();
+            if (_rikazConnected) await _debouncedLightOff();
+            Navigator.pop(ctx);
 
-              Navigator.pop(ctx);
+            // ✅ التعديل هنا: نفس اللوجك زي onPhaseEnd
+            final actual = (_totalFocusSeconds ~/ 60);
+            
+            // إذا أقل من 10 دقايق، امسح السشن وروح home
+            if (actual < minimumSessionMinutes) {
               await _endSessionInDB(progress: 'none', distraction: 'high');
-
               if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/tabs', (r) => false);
-            },
-            child: const Text('Yes'),
-          ),
-        ],
-      ),
-    );
-  }
+              return;
+            }
+
+            // ✅ إذا أكثر من 10 دقايق: اسأل الأسئلة!
+            String? p = await _showProgressLevelDialog();
+            String d = await _showDistractionDialog();
+
+            await _endSessionInDB(progress: p, distraction: d);
+
+            if (mounted) {
+              await _showSummaryDialog(d, p ?? 'partially');
+              _showMotivationalPopup(d, p ?? 'partially');
+            }
+          },
+          child: const Text('Yes'),
+        ),
+      ],
+    ),
+  );
+}
 
   Future<void> _navigateToBreakActivities() async {
     _timer?.cancel();
