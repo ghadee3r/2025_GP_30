@@ -291,7 +291,7 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
   // SMART MOTIVATIONAL MESSAGES BASED ON PROGRESS + DISTRACTION
   // ============================================================================
   
-  // FULLY + LOW
+    // FULLY + LOW
   if (progress == 'fully' && distraction == 'low') {
     message = "Outstanding! You maintained excellent focus and completed everything. This is peak performance! 🌟";
   }
@@ -301,38 +301,38 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
   }
   // FULLY + HIGH
   else if (progress == 'fully' && distraction == 'high') {
-    message = "Incredible resilience! Despite heavy distractions, you completed your goals. Next time will be even better! 🔥";
+    message = "Impressive resilience! Despite heavy distractions, you completed your goals. Imagine what you can achieve with better focus next time! 🔥";
   }
   
   // PARTIALLY + LOW
   else if (progress == 'partially' && distraction == 'low') {
-    message = "Good focus quality! You stayed concentrated even though you didn't finish. Keep building on this momentum! 📈";
+    message = "Good focus quality! You stayed concentrated and made real progress. Push a little harder next time to complete everything! 📈";
   }
   // PARTIALLY + MEDIUM
   else if (progress == 'partially' && distraction == 'medium') {
-    message = "Nice effort! You made solid progress despite some interruptions. You're on the right path! ✨";
+    message = "Solid effort! You made progress despite interruptions. Remove those distractions next session and you'll crush your goals! ✨";
   }
   // PARTIALLY + HIGH
   else if (progress == 'partially' && distraction == 'high') {
-    message = "You tried your best in a challenging environment. Every small step counts. Tomorrow is a fresh start! 🌱";
+    message = "You tried, but distractions won this round. Set up a better environment next time—silence your phone, close the door, and show what you're really capable of! 💪";
   }
   
   // BARELY + LOW
   else if (progress == 'barely' && distraction == 'low') {
-    message = "It happens! Even with focus, sometimes tasks are tough. Don't be discouraged—you'll bounce back! 🔄";
+    message = "Your focus was there, but results weren't. This means you need a better strategy or clearer goals. Break your task into smaller steps and attack them one by one! 🎯";
   }
   // BARELY + MEDIUM
   else if (progress == 'barely' && distraction == 'medium') {
-    message = "Challenging session, but you showed up! That's what matters. Identify what distracted you and try again! 💫";
+    message = "Distractions and lack of progress—not a good combo. But you know what? Champions are built in moments like these. Prepare better, eliminate distractions, and come back stronger! 🔥";
   }
   // BARELY + HIGH
   else if (progress == 'barely' && distraction == 'high') {
-    message = "This was a tough one with many interruptions. Learn from it and create a better setup next time. You've got this! 🌟";
+    message = "This session didn't go well, but that's okay—every champion has bad days. The difference? They learn and adapt. Find a quiet space, set clear goals, and prove to yourself what you can really do! 💡";
   }
   
   // DEFAULT (في حال قيمة غريبة)
   else {
-    message = "Every session is a learning experience. Reflect and improve for next time. Keep going! 🚀";
+    message = "Every session teaches you something. Analyze what went wrong, fix it, and come back stronger. Progress isn't always linear, but it's always possible! 🚀";
   }
   
   showDialog(
