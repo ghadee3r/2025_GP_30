@@ -3,11 +3,19 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 
-// Relaxing Theme Colors
-const Color dfNavyIndigo = Color(0xFF0C1446);
-const Color dfDeepTeal = Color(0xFF175B73);
-const Color dfTealCyan = Color(0xFF287C85);
-const Color dfLightSeafoam = Color(0xFF87ACA3);
+// =============================================================================
+// NEW MINIMALIST THEME COLORS
+// =============================================================================
+const Color dfTealCyan = Color(0xFF68C29D);
+const Color customModeColor = Color(0xFF7E84D4); 
+const Color dfNavyIndigo = Color(0xFF1B2536);
+const Color primaryBackground = Color(0xFFF2F6F9);
+const Color secondaryTextGrey = Color(0xFF8B95A5);
+const Color errorIndicatorRed = Color(0xFFE57373);
+
+List<BoxShadow> get subtleShadow => [
+  BoxShadow(color: dfNavyIndigo.withOpacity(0.04), blurRadius: 20, offset: const Offset(0, 8)),
+];
 
 class ReflexScreen extends StatefulWidget {
   const ReflexScreen({super.key});
@@ -131,11 +139,10 @@ class _ReflexScreenState extends State<ReflexScreen> {
       if (!mounted) return;
       _gameInProgress = false; 
       if (_score >= (_targetsPerStage[_currentStage - 1] * 0.60).floor()) {
-        // More encouraging, Rikaz-specific words
         _compliment = _currentStage == 1 ? "You're doing great!" : (_currentStage == 2 ? "Your focus is incredible!" : "Absolutely Brilliant!");
         setState(() => _isStageCleared = true);
       } else {
-        _compliment = "Deep breath... Let's try again!";
+        _compliment = "Deep breath... Let's try again.";
         setState(() => _isStageCleared = true);
       }
     });
@@ -143,20 +150,41 @@ class _ReflexScreenState extends State<ReflexScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: const Color(0xFFF7F7F7),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (_hasWon) _buildFinalWinScreen()
-            else if (_isStageCleared) _buildStagePrompt()
-            else if (!_gameInProgress) _buildStartScreen() 
-            else _buildGameArea(),
-          ],
+    return Scaffold(
+      backgroundColor: Colors.transparent, // Let wrapper background shine through
+      body: Container(
+        width: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter, 
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFF4F7F9), Color(0xFFE5ECEF)],
+          )
+        ),
+        child: SafeArea(
+          child: Center(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 400),
+              switchInCurve: Curves.easeOutBack,
+              transitionBuilder: (Widget child, Animation<double> animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(scale: Tween<double>(begin: 0.95, end: 1.0).animate(animation), child: child),
+                );
+              },
+              child: _buildCurrentState(),
+            ),
+          ),
         ),
       ),
     );
+  }
+
+  Widget _buildCurrentState() {
+    if (_hasWon) return _buildFinalWinScreen();
+    if (_isStageCleared) return _buildStagePrompt();
+    if (!_gameInProgress) return _buildStartScreen();
+    return _buildGameArea();
   }
 
   Widget _buildStartScreen() {
@@ -165,21 +193,32 @@ class _ReflexScreenState extends State<ReflexScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.spa_rounded, size: 80, color: dfLightSeafoam),
-          const SizedBox(height: 20),
-          const Text("Zen Rhythm", style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: dfNavyIndigo, decoration: TextDecoration.none)),
-          const SizedBox(height: 20),
-          // Simple game explanation
-          const Text(
-            "Find your flow. Tap each circle exactly when the outer ring shrinks to fit it. Accuracy and rhythm are key to clearing each stage.",
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 16, color: Colors.grey, height: 1.4, decoration: TextDecoration.none),
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(color: dfTealCyan.withOpacity(0.1), shape: BoxShape.circle),
+            child: const Icon(Icons.ads_click_rounded, size: 64, color: dfTealCyan),
           ),
-          const SizedBox(height: 40),
-          ElevatedButton(
-            onPressed: _startGame,
-            style: ElevatedButton.styleFrom(backgroundColor: dfDeepTeal, padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
-            child: const Text("Begin Session", style: TextStyle(color: Colors.white, fontSize: 18)),
+          const SizedBox(height: 24),
+          const Text("Reflex Popper", style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: dfNavyIndigo, letterSpacing: -0.5)),
+          const SizedBox(height: 16),
+          Text(
+            "Find your flow. Tap each orb exactly when the outer ring shrinks to fit it. Accuracy and rhythm are key.",
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 15, color: secondaryTextGrey, height: 1.5),
+          ),
+          const SizedBox(height: 48),
+          _InteractiveButton(
+            onTap: _startGame,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              decoration: BoxDecoration(
+                color: dfTealCyan,
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [BoxShadow(color: dfTealCyan.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))],
+              ),
+              child: const Center(child: Text("Begin Session", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5))),
+            ),
           ),
         ],
       ),
@@ -188,33 +227,50 @@ class _ReflexScreenState extends State<ReflexScreen> {
 
   Widget _buildStagePrompt() {
     bool passed = _score >= (_targetsPerStage[_currentStage - 1] * 0.60).floor();
-    bool isLastStage = _currentStage == _maxStages; //
+    bool isLastStage = _currentStage == _maxStages; 
+    Color themeColor = passed ? dfTealCyan : errorIndicatorRed;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(_compliment, textAlign: TextAlign.center, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: dfDeepTeal, decoration: TextDecoration.none)),
-        const SizedBox(height: 15),
-        Text("Precision Score: $_score", style: const TextStyle(fontSize: 20, color: dfNavyIndigo, decoration: TextDecoration.none)),
-        const SizedBox(height: 40),
-        ElevatedButton(
-          onPressed: () {
-            if (passed) {
-              if (isLastStage) {
-                setState(() => _hasWon = true);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 40),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(color: themeColor.withOpacity(0.1), shape: BoxShape.circle),
+            child: Icon(passed ? Icons.thumb_up_rounded : Icons.refresh_rounded, size: 48, color: themeColor),
+          ),
+          const SizedBox(height: 24),
+          Text(_compliment, textAlign: TextAlign.center, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: dfNavyIndigo, letterSpacing: -0.5)),
+          const SizedBox(height: 12),
+          Text("Precision Score: $_score / ${_targetsPerStage[_currentStage - 1]}", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: secondaryTextGrey)),
+          const SizedBox(height: 48),
+          _InteractiveButton(
+            onTap: () {
+              if (passed) {
+                if (isLastStage) {
+                  setState(() => _hasWon = true);
+                } else {
+                  setState(() => _currentStage++);
+                  _startGame();
+                }
               } else {
-                setState(() => _currentStage++);
                 _startGame();
               }
-            } else {
-              _startGame();
-            }
-          },
-          style: ElevatedButton.styleFrom(backgroundColor: dfTealCyan, padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
-          // Dynamic button text: No "Next Stage" on stage 3
-          child: Text(passed ? (isLastStage ? "Finish" : "Next Stage") : "Retry Stage", style: const TextStyle(color: Colors.white)),
-        ),
-      ],
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              decoration: BoxDecoration(
+                color: themeColor,
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [BoxShadow(color: themeColor.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))],
+              ),
+              child: Center(child: Text(passed ? (isLastStage ? "Finish" : "Next Stage") : "Retry Stage", style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5))),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -222,8 +278,21 @@ class _ReflexScreenState extends State<ReflexScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text("Stage $_currentStage", style: const TextStyle(fontSize: 18, color: dfTealCyan, fontWeight: FontWeight.bold, decoration: TextDecoration.none)),
-        Text("Points: $_score", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: dfNavyIndigo, decoration: TextDecoration.none)),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          decoration: BoxDecoration(
+            color: dfTealCyan.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: dfTealCyan.withOpacity(0.2), width: 1.5)
+          ),
+          child: Text(
+            "STAGE $_currentStage OF 3", 
+            style: const TextStyle(fontSize: 12, color: dfTealCyan, fontWeight: FontWeight.bold, letterSpacing: 2.0)
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text("$_score", style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w300, color: dfNavyIndigo, letterSpacing: -1.0)),
+        Text("HITS", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: secondaryTextGrey, letterSpacing: 2.0)),
         const SizedBox(height: 30),
         SizedBox(
           height: 450, width: 350, 
@@ -234,7 +303,7 @@ class _ReflexScreenState extends State<ReflexScreen> {
               key: ValueKey(target.id),
               left: 175 + target.x - 40, 
               top: 225 + target.y - 40,
-              child: _buildZenCircle(target),
+              child: _buildZenBubble(target),
             )).toList(),
           ),
         ),
@@ -242,13 +311,14 @@ class _ReflexScreenState extends State<ReflexScreen> {
     );
   }
 
-  Widget _buildZenCircle(TargetModel target) {
+  Widget _buildZenBubble(TargetModel target) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTapDown: (_) => _handleTap(target),
       child: Stack(
         alignment: Alignment.center,
         children: [
+          // Elegant closing-in aura
           TweenAnimationBuilder(
             duration: const Duration(milliseconds: 1500),
             tween: Tween<double>(begin: 1.0, end: 0.0),
@@ -256,13 +326,18 @@ class _ReflexScreenState extends State<ReflexScreen> {
               return Container(
                 width: 80 + (95 * value), 
                 height: 80 + (95 * value),
-                decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: dfLightSeafoam.withOpacity(0.5), width: 2.5)),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle, 
+                  border: Border.all(color: customModeColor.withOpacity(0.4 * value), width: 2.0)
+                ),
               );
             },
           ),
+          // Frosted Glass Bubble
           TweenAnimationBuilder(
             duration: const Duration(milliseconds: 300),
             tween: Tween<double>(begin: 0, end: 1),
+            curve: Curves.easeOutBack,
             builder: (context, double value, child) {
               return Transform.scale(
                 scale: value,
@@ -270,10 +345,19 @@ class _ReflexScreenState extends State<ReflexScreen> {
                   width: 80, height: 80,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [dfLightSeafoam, dfTealCyan]),
-                    boxShadow: [BoxShadow(color: dfLightSeafoam.withOpacity(0.3), blurRadius: 15, spreadRadius: 1)],
+                    gradient: RadialGradient(
+                      colors: [dfTealCyan.withOpacity(0.1), dfTealCyan.withOpacity(0.3)],
+                    ),
+                    border: Border.all(color: Colors.white.withOpacity(0.8), width: 1.5),
+                    boxShadow: [BoxShadow(color: dfTealCyan.withOpacity(0.15), blurRadius: 20, spreadRadius: 2)],
                   ),
-                  child: Center(child: Container(width: 25, height: 25, decoration: const BoxDecoration(color: Colors.white30, shape: BoxShape.circle))),
+                  child: Center(
+                    // Inner highlight core
+                    child: Container(
+                      width: 20, height: 20, 
+                      decoration: BoxDecoration(color: dfTealCyan.withOpacity(0.6), shape: BoxShape.circle)
+                    )
+                  ),
                 ),
               );
             }
@@ -284,19 +368,36 @@ class _ReflexScreenState extends State<ReflexScreen> {
   }
 
   Widget _buildFinalWinScreen() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(Icons.check_circle_rounded, size: 100, color: dfLightSeafoam),
-        const SizedBox(height: 20),
-        const Text("Cognitive Reset Complete", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: dfNavyIndigo, decoration: TextDecoration.none)),
-        const SizedBox(height: 40),
-        ElevatedButton(
-          onPressed: () => Navigator.pop(context), 
-          style: ElevatedButton.styleFrom(backgroundColor: dfDeepTeal, padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
-          child: const Text("Return", style: TextStyle(color: Colors.white)),
-        ),
-      ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 40),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(color: dfTealCyan.withOpacity(0.15), shape: BoxShape.circle),
+            child: const Icon(Icons.check_circle_rounded, size: 80, color: dfTealCyan),
+          ),
+          const SizedBox(height: 24),
+          const Text("Cognitive Reset", style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: dfNavyIndigo, letterSpacing: -0.5)),
+          const SizedBox(height: 12),
+          Text("Excellent rhythm. Your mind is refreshed and ready to focus.", textAlign: TextAlign.center, style: TextStyle(fontSize: 15, color: secondaryTextGrey, height: 1.5)),
+          const SizedBox(height: 48),
+          _InteractiveButton(
+            onTap: () => Navigator.pop(context), 
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              decoration: BoxDecoration(
+                color: dfNavyIndigo,
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [BoxShadow(color: dfNavyIndigo.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))],
+              ),
+              child: const Center(child: Text("Return to Menu", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5))),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -307,4 +408,40 @@ class TargetModel {
   final double y;
   final DateTime spawnTime; 
   TargetModel({required this.id, required this.x, required this.y, required this.spawnTime});
+}
+
+// =============================================================================
+// REUSABLE INTERACTIVE SQUISH COMPONENT
+// =============================================================================
+class _InteractiveButton extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+
+  const _InteractiveButton({required this.child, required this.onTap});
+
+  @override
+  State<_InteractiveButton> createState() => _InteractiveButtonState();
+}
+
+class _InteractiveButtonState extends State<_InteractiveButton> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) {
+        setState(() => _isPressed = false);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _isPressed = false),
+      child: AnimatedScale(
+        scale: _isPressed ? 0.92 : 1.0,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOutBack,
+        child: widget.child,
+      ),
+    );
+  }
 }

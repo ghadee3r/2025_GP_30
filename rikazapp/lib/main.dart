@@ -12,9 +12,12 @@ import 'pages/subscreens/login.dart';
 import 'pages/subscreens/ForgotPassword.dart';
 import 'pages/subscreens/NewPassword.dart';
 
-const Color primaryThemePurple =  Color(0xFF175B73);
-const Color primaryTextDark = Color(0xFF30304D);
-const Color primaryBackground = Color(0xFFFFFFFF);
+// --- NEW THEME COLORS (Matching home.dart) ---
+const Color dfTealCyan = Color(0xFF68C29D);
+const Color customModeColor = Color(0xFF7E84D4);
+const Color primaryTextDark = Color(0xFF1B2536);
+const Color secondaryTextGrey = Color(0xFF8B95A5);
+const Color primaryBackground = Color(0xFFF2F6F9);
 const double cardBorderRadius = 24.0;
 
 const String supabaseUrl = 'https://fbjxvlzhxsxiyxuuvefu.supabase.co';
@@ -51,7 +54,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ColorScheme colorScheme = ColorScheme.fromSeed(
-      seedColor: primaryThemePurple,
+      seedColor: dfTealCyan,
       brightness: Brightness.light,
     );
 
@@ -62,44 +65,40 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: colorScheme.copyWith(
-          primary: primaryThemePurple,
-          secondary: primaryThemePurple,
-          surface: primaryBackground,
+          primary: dfTealCyan,
+          secondary: customModeColor,
+          surface: Colors.white,
           surfaceContainerHighest: primaryBackground,
           onSurface: primaryTextDark,
         ),
         scaffoldBackgroundColor: primaryBackground,
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            foregroundColor: primaryBackground,
-            backgroundColor: primaryThemePurple,
+            foregroundColor: Colors.white,
+            backgroundColor: dfTealCyan,
             padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(cardBorderRadius / 2),
             ),
-            textStyle: const TextStyle(
-                fontWeight: FontWeight.w700, fontSize: 16),
+            textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
             elevation: 4,
-            shadowColor: primaryThemePurple.withOpacity(0.5),
+            shadowColor: dfTealCyan.withOpacity(0.4),
           ),
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: primaryBackground,
+          fillColor: Colors.white,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(cardBorderRadius / 2),
             borderSide: BorderSide.none,
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(cardBorderRadius / 2),
-            borderSide: BorderSide(
-                color: primaryThemePurple.withOpacity(0.3),
-                width: 1.5),
+            borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(cardBorderRadius / 2),
-            borderSide:
-                const BorderSide(color: primaryThemePurple, width: 2.0),
+            borderSide: const BorderSide(color: dfTealCyan, width: 2.0),
           ),
         ),
       ),
@@ -114,8 +113,7 @@ class MyApp extends StatelessWidget {
         },
         '/home': (context) => const HomePage(),
         '/SetSession': (context) {
-          final initialMode =
-              ModalRoute.of(context)!.settings.arguments as SessionMode?;
+          final initialMode = ModalRoute.of(context)!.settings.arguments as SessionMode?;
           return SetSessionPage(initialMode: initialMode);
         },
        '/session': (context) {
@@ -130,15 +128,11 @@ class MyApp extends StatelessWidget {
             isCameraDetectionEnabled: args['isCameraDetectionEnabled'],
             sensitivity: args['sensitivity'],
             notificationStyle: args['notificationStyle'],
-            
-            // --- NEW TRIGGERS ADDED HERE SO THE APP DOESN'T LOSE THEM ---
             subtleAlertType: args['subtleAlertType'],
             sleepTrigger: args['sleepTrigger'],
             presenceTrigger: args['presenceTrigger'],
-            phoneTrigger: args['phoneTrigger'], // <--- ADDED PHONE TRIGGER HERE
+            phoneTrigger: args['phoneTrigger'], 
             notificationSoundUrl: args['notificationSoundUrl'],
-            // -------------------------------------------------------------
-            
             rikazConnected: args['rikazConnected'] ?? false,
             selectedSoundId: args['selectedSoundId'],
             selectedSoundName: args['selectedSoundName'],
@@ -178,16 +172,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
         
         Future.delayed(Duration.zero, () {
           if (navigatorKey.currentState != null) {
-            navigatorKey.currentState!.pushNamedAndRemoveUntil(
-              '/new-password', 
-              (route) => false
-            );
+            navigatorKey.currentState!.pushNamedAndRemoveUntil('/new-password', (route) => false);
           } else {
             if (mounted) {
-              Navigator.of(context).pushNamedAndRemoveUntil(
-                '/new-password', 
-                (route) => false
-              );
+              Navigator.of(context).pushNamedAndRemoveUntil('/new-password', (route) => false);
             }
           }
         });
@@ -220,7 +208,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         if (!_isInitialAuthCheckComplete) {
           return const Scaffold(
             body: Center(
-              child: CircularProgressIndicator(color: primaryThemePurple),
+              child: CircularProgressIndicator(color: dfTealCyan),
             ),
           );
         }
@@ -249,10 +237,10 @@ class MainTabsScreen extends StatefulWidget {
 class _MainTabsScreenState extends State<MainTabsScreen> {
   late int _currentIndex;
   final List<Widget> _tabs = [
-    HomePage(),
-    ProgressScreen(),
-    GamesScreen(),
-    ProfileScreen(),
+    const HomePage(),
+    const ProgressScreen(),
+    const GamesScreen(),
+    const ProfileScreen(),
   ];
 
   @override
@@ -270,32 +258,142 @@ class _MainTabsScreenState extends State<MainTabsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: primaryBackground,
+      extendBody: false, 
       body: _tabs[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: _onTabTapped,
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Home',
+      bottomNavigationBar: SafeArea(
+        child: Container(
+          margin: const EdgeInsets.only(left: 24, right: 24, bottom: 20, top: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          height: 70,
+          decoration: BoxDecoration(
+            color: Colors.white, 
+            borderRadius: BorderRadius.circular(40),
+            boxShadow: [
+              BoxShadow(
+                color: dfTealCyan.withOpacity(0.12),
+                blurRadius: 30,
+                offset: const Offset(0, 10),
+              )
+            ],
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.trending_up),
-            label: 'Progress',
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _NavItem(
+                icon: Icons.home_rounded,
+                outlineIcon: Icons.home_outlined,
+                isSelected: _currentIndex == 0,
+                onTap: () => _onTabTapped(0),
+                activeColor: dfTealCyan,
+              ),
+              _NavItem(
+                icon: Icons.trending_up_rounded,
+                outlineIcon: Icons.show_chart_rounded, // Outline equivalent
+                isSelected: _currentIndex == 1,
+                onTap: () => _onTabTapped(1),
+                activeColor: customModeColor, 
+              ),
+              _NavItem(
+                icon: Icons.sports_esports_rounded,
+                outlineIcon: Icons.sports_esports_outlined,
+                isSelected: _currentIndex == 2,
+                onTap: () => _onTabTapped(2),
+                activeColor: dfTealCyan,
+              ),
+              _NavItem(
+                icon: Icons.person_rounded,
+                outlineIcon: Icons.person_outline_rounded,
+                isSelected: _currentIndex == 3,
+                onTap: () => _onTabTapped(3),
+                activeColor: customModeColor,
+              ),
+            ],
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.sports_esports),
-            label: 'Games',
+        ),
+      ),
+    );
+  }
+}
+
+// ------------------------------------------------------------------
+// HIGHLY INTERACTIVE NAVIGATION ITEM
+// Minimalist Icon + Dot Indicator (Matches Reference Image)
+// ------------------------------------------------------------------
+class _NavItem extends StatefulWidget {
+  final IconData icon;
+  final IconData outlineIcon;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final Color activeColor;
+
+  const _NavItem({
+    required this.icon,
+    required this.outlineIcon,
+    required this.isSelected,
+    required this.onTap,
+    required this.activeColor,
+  });
+
+  @override
+  State<_NavItem> createState() => _NavItemState();
+}
+
+class _NavItemState extends State<_NavItem> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final iconColor = widget.isSelected ? widget.activeColor : secondaryTextGrey.withOpacity(0.6);
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) {
+        setState(() => _isPressed = false);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _isPressed = false),
+      child: AnimatedScale(
+        // Satisfying squish when pressed
+        scale: _isPressed ? 0.85 : 1.0,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOutBack,
+        child: SizedBox(
+          width: 60,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Smoothly transitions between filled and outlined icons
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
+                child: Icon(
+                  widget.isSelected ? widget.icon : widget.outlineIcon,
+                  key: ValueKey<bool>(widget.isSelected),
+                  color: iconColor,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(height: 6),
+              // The elegant dot indicator
+              AnimatedScale(
+                scale: widget.isSelected ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOutBack,
+                child: Container(
+                  width: 5,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: widget.activeColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ],
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'Profile',
-          ),
-        ],
-        selectedItemColor: primaryThemePurple,
-        unselectedItemColor: primaryTextDark.withOpacity(0.5),
-        backgroundColor: primaryBackground,
+        ),
       ),
     );
   }

@@ -1,4 +1,3 @@
-// Session.dart
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -12,26 +11,20 @@ import 'package:rikazapp/main.dart';
 import 'package:rikazapp/pages/mainscreens/games/games.dart';
 
 // ============================================================================
-// THEME COLORS
+// MINIMALIST & ALIVE THEME COLORS
 // ============================================================================
-const Color dfDeepTeal = Color(0xFF175B73);
-const Color dfTealCyan = Color(0xFF287C85);
-const Color dfLightSeafoam = Color(0xFF87ACA3);
-const Color dfDeepBlue = Color(0xFF162893);
-const Color dfNavyIndigo = Color(0xFF0C1446);
-
-const Color primaryThemeColor = dfDeepBlue;
-const Color accentThemeColor = dfTealCyan;
-const Color lightestAccentColor = dfLightSeafoam;
-const Color primaryBackground = Color(0xFFF7F7F7);
-const Color cardBackground = Color(0xFFFFFFFF);
-const Color primaryTextDark = dfNavyIndigo;
-const Color secondaryTextGrey = Color(0xFF6B6B78);
+const Color dfTealCyan = Color(0xFF68C29D);
+const Color customModeColor = Color(0xFF7E84D4);
+const Color dfNavyIndigo = Color(0xFF1B2536);
+const Color primaryBackground = Color(0xFFF2F6F9);
+const Color secondaryTextGrey = Color(0xFF8B95A5);
 const Color errorIndicatorRed = Color(0xFFE57373);
+const Color breakColor = Color(0xFFF4A261); 
+const Color pausedColor = Color(0xFF9E9E9E); 
 
-const Color focusBgColor = lightestAccentColor;
-const Color breakBgColor = Color(0xFFE6B400);
-const Color pausedBgColor = Color(0xFF9E9E9E);
+List<BoxShadow> get subtleShadow => [
+  BoxShadow(color: dfNavyIndigo.withOpacity(0.04), blurRadius: 30, offset: const Offset(0, 10)),
+];
 
 class SessionPage extends StatefulWidget {
   final String sessionType;
@@ -43,7 +36,7 @@ class SessionPage extends StatefulWidget {
   final double? sensitivity;
   final String? notificationStyle;
 
-  // NEW TRIGGERS & ALERT SETTINGS
+  // TRIGGERS & ALERT SETTINGS
   final String? subtleAlertType; 
   final bool? sleepTrigger;
   final bool? presenceTrigger;
@@ -79,7 +72,7 @@ class SessionPage extends StatefulWidget {
   State<SessionPage> createState() => _SessionPageState();
 }
 
-class _SessionPageState extends State<SessionPage> with SingleTickerProviderStateMixin {
+class _SessionPageState extends State<SessionPage> with TickerProviderStateMixin {
   bool _rikazConnected = false;
   bool _lightInitialized = false;
 
@@ -100,8 +93,6 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
   List<int> completedBlocks = [];
 
   Timer? _timer;
-  late AnimationController pulseController;
-
   Timer? _connectionCheckTimer;
   bool _completionHandled = false;
 
@@ -110,12 +101,13 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
   static const int minimumSessionMinutes = 10;
 
   final AudioPlayer _alertPlayer = AudioPlayer();
-  bool _isAlertPlaying = false;
 
-  // ============================================================================
-  // MODERN UI DIALOG FLOW
-  // ============================================================================
+  // Animation Controllers for Breathing UI & Liquid Background
+  late AnimationController pulseController;
+  late Animation<double> pulseAnimation;
+  late Animation<double> bgShiftAnimation;
 
+<<<<<<< Updated upstream
   Future<String?> _showProgressLevelDialog() async {
     String? selected;
     await showDialog(
@@ -526,6 +518,129 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
   // DATABASE & TIMER LOGIC
   // ============================================================================
 
+=======
+  @override
+  void initState() {
+    super.initState();
+
+    isPomodoro = widget.sessionType == 'pomodoro';
+    if (isPomodoro) {
+      focusMinutes = int.tryParse(widget.duration.replaceAll(RegExp(r'[^0-9]'), '')) ?? 25;
+      breakMinutes = (focusMinutes == 25) ? 5 : 10;
+      totalBlocks = int.tryParse(widget.numberOfBlocks ?? '4') ?? 4;
+    } else {
+      focusMinutes = int.tryParse(widget.duration.replaceAll(RegExp(r'[^0-9]'), '')) ?? 10;
+      breakMinutes = 0;
+      totalBlocks = 1;
+    }
+
+    timeLeft = focusMinutes * 60;
+    _rikazConnected = widget.rikazConnected ?? false;
+
+    _alertPlayer.setReleaseMode(ReleaseMode.loop);
+    _setupDistractionListener();
+
+    startTimer();
+    _startSessionInDB();
+
+    if (_rikazConnected) {
+      Future.delayed(const Duration(milliseconds: 500), () async {
+        if (!mounted || status != 'running') return;
+        final ok = await RikazLightService.setFocusLight();
+        if (ok) {
+          _lightInitialized = true;
+          _startConnectionMonitoring();
+          _sendTimerUpdateToESP32();
+        } else {
+          _handleLightCommandFailure();
+        }
+      });
+    }
+
+    // Set up ultra-smooth, slow breathing animation for the background aura
+    pulseController = AnimationController(vsync: this, duration: const Duration(milliseconds: 4000))..repeat(reverse: true);
+    pulseAnimation = Tween<double>(begin: 0.85, end: 1.15).animate(CurvedAnimation(parent: pulseController, curve: Curves.easeInOutSine));
+    bgShiftAnimation = Tween<double>(begin: -0.5, end: 0.5).animate(CurvedAnimation(parent: pulseController, curve: Curves.easeInOutSine));
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _connectionCheckTimer?.cancel();
+    pulseController.dispose();
+    _alertPlayer.stop();
+    _alertPlayer.dispose();
+    super.dispose();
+  }
+  void _setupDistractionListener() {
+    RikazLightService.onDistractionDetected = (count) {
+      if (!mounted) return;
+      setState(() => _sessionDistractionCount = count);
+      _triggerAudioAlert();
+    };
+  }
+
+  Future<void> _triggerAudioAlert() async {
+    bool shouldPlaySound = widget.notificationStyle == 'strong' ||
+        (widget.notificationStyle == 'subtle' && widget.subtleAlertType == 'sound');
+
+    if (shouldPlaySound) {
+      try {
+        await _alertPlayer.stop(); 
+        await _alertPlayer.setVolume(1.0); 
+        String finalUrl = widget.notificationSoundUrl ?? 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/notify.mp3';
+        await _alertPlayer.play(UrlSource(finalUrl));
+        Future.delayed(const Duration(seconds: 4), () async {
+          if (mounted) await _alertPlayer.stop();
+        });
+      } catch (e) {
+        try {
+          await _alertPlayer.play(UrlSource('https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/notify.mp3'));
+          Future.delayed(const Duration(seconds: 4), () async {
+            if (mounted) await _alertPlayer.stop();
+          });
+        } catch (_) {}
+      }
+    }
+  }
+
+  Future<void> _startSessionInDB() async {
+    final supabase = Supabase.instance.client;
+    final uid = supabase.auth.currentUser?.id;
+    if (uid == null) return;
+    try {
+      final res = await supabase.from('Focus_Session').insert({
+        'user_id': uid,
+        'session_type': widget.sessionType,
+        'start_time': DateTime.now().toIso8601String(),
+        'planned_duration': isPomodoro ? (focusMinutes * totalBlocks) : focusMinutes,
+        'camera_monitored': widget.isCameraDetectionEnabled ?? false,
+      }).select('session_id');
+
+      if (res.isNotEmpty) setState(() => _currentSessionId = res.first['session_id'].toString());
+    } catch (_) {}
+  }
+
+  void startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (status != 'running') return;
+      if (!mounted) {
+        _timer?.cancel();
+        return;
+      }
+      setState(() {
+        if (timeLeft > 0) {
+          timeLeft--;
+          if (mode == 'focus') _totalFocusSeconds++;
+        }
+      });
+      _sendTimerUpdateToESP32();
+      if (timeLeft <= 0) onPhaseEnd();
+    });
+  }
+
+>>>>>>> Stashed changes
   void onPhaseEnd() async {
     if (!mounted || _completionHandled) return;
 
@@ -596,9 +711,7 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
 
     if (actual < minimumSessionMinutes) {
       _completionHandled = true;
-      try {
-        await supabase.from('Focus_Session').delete().eq('session_id', _currentSessionId!);
-      } catch (_) {}
+      try { await supabase.from('Focus_Session').delete().eq('session_id', _currentSessionId!); } catch (_) {}
       return;
     }
 
@@ -616,140 +729,8 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
     }
   }
 
-  @override
-  void initState() {
-    super.initState();
-
-    isPomodoro = widget.sessionType == 'pomodoro';
-    if (isPomodoro) {
-      focusMinutes = int.tryParse(widget.duration.replaceAll(RegExp(r'[^0-9]'), '')) ?? 25;
-      breakMinutes = (focusMinutes == 25) ? 5 : 10;
-      totalBlocks = int.tryParse(widget.numberOfBlocks ?? '4') ?? 4;
-    } else {
-      focusMinutes = int.tryParse(widget.duration.replaceAll(RegExp(r'[^0-9]'), '')) ?? 10;
-      breakMinutes = 0;
-      totalBlocks = 1;
-    }
-
-    timeLeft = focusMinutes * 60;
-    _rikazConnected = widget.rikazConnected ?? false;
-
-    _alertPlayer.setReleaseMode(ReleaseMode.loop);
-    _setupDistractionListener();
-
-    startTimer();
-    _startSessionInDB();
-
-    if (_rikazConnected) {
-      Future.delayed(const Duration(milliseconds: 500), () async {
-        if (!mounted || status != 'running') return;
-
-        final ok = await RikazLightService.setFocusLight();
-        if (ok) {
-          _lightInitialized = true;
-          _startConnectionMonitoring();
-          _sendTimerUpdateToESP32();
-        } else {
-          _handleLightCommandFailure();
-        }
-      });
-    }
-
-    pulseController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))
-      ..repeat(reverse: true);
-  }
-
-  // ============================================================================
-  // DISTRACTION AUDIO LOGIC (STRICT SUPABASE ONLY)
-  // ============================================================================
-  void _setupDistractionListener() {
-    RikazLightService.onDistractionDetected = (count) {
-      if (!mounted) return;
-      
-      setState(() {
-        _sessionDistractionCount = count;
-      });
-
-      _triggerAudioAlert();
-    };
-  }
-
-  Future<void> _triggerAudioAlert() async {
-    bool shouldPlaySound = widget.notificationStyle == 'strong' ||
-        (widget.notificationStyle == 'subtle' && widget.subtleAlertType == 'sound');
-
-    if (shouldPlaySound) {
-      try {
-        await _alertPlayer.stop(); 
-        await _alertPlayer.setVolume(1.0); 
-        
-        String finalUrl = widget.notificationSoundUrl ?? 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/notify.mp3';
-        
-        await _alertPlayer.play(UrlSource(finalUrl));
-        
-        Future.delayed(const Duration(seconds: 4), () async {
-          if (mounted) await _alertPlayer.stop();
-        });
-      } catch (e) {
-        debugPrint('❌ Error playing alert sound: $e');
-        try {
-          await _alertPlayer.play(UrlSource('https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/notify.mp3'));
-          Future.delayed(const Duration(seconds: 4), () async {
-            if (mounted) await _alertPlayer.stop();
-          });
-        } catch (_) {}
-      }
-    }
-  }
-
-  Future<void> _startSessionInDB() async {
-    final supabase = Supabase.instance.client;
-    final uid = supabase.auth.currentUser?.id;
-    if (uid == null) return;
-
-    try {
-      final res = await supabase
-          .from('Focus_Session')
-          .insert({
-            'user_id': uid,
-            'session_type': widget.sessionType,
-            'start_time': DateTime.now().toIso8601String(),
-            'planned_duration': isPomodoro ? (focusMinutes * totalBlocks) : focusMinutes,
-            'camera_monitored': widget.isCameraDetectionEnabled ?? false,
-          })
-          .select('session_id');
-
-      if (res.isNotEmpty) {
-        setState(() => _currentSessionId = res.first['session_id'].toString());
-      }
-    } catch (_) {}
-  }
-
-  void startTimer() {
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (status != 'running') return;
-      if (!mounted) {
-        _timer?.cancel();
-        return;
-      }
-
-      setState(() {
-        if (timeLeft > 0) {
-          timeLeft--;
-          if (mode == 'focus') _totalFocusSeconds++;
-        }
-      });
-
-      _sendTimerUpdateToESP32();
-
-      if (timeLeft <= 0) onPhaseEnd();
-    });
-  }
-
   void onPauseResume() async {
     if (!mounted) return;
-
     if (status == 'paused') {
       setState(() => status = 'running');
       pulseController.repeat(reverse: true);
@@ -767,22 +748,80 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
     pulseController.stop();
     _sendTimerUpdateToESP32();
 
-    showDialog(
+    _showAnimatedDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('End Session?'),
-        content: const Text('Are you sure?'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              if (!mounted) return;
-              setState(() => status = prev);
-              if (prev == 'running') pulseController.repeat(reverse: true);
-              _sendTimerUpdateToESP32();
-            },
-            child: const Text('No'),
+      child: Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(28.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: errorIndicatorRed.withOpacity(0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.exit_to_app_rounded, color: errorIndicatorRed, size: 36),
+              ),
+              const SizedBox(height: 20),
+              const Text('End Session?', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: dfNavyIndigo, letterSpacing: -0.5)),
+              const SizedBox(height: 8),
+              const Text('Are you sure you want to quit early?', textAlign: TextAlign.center, style: TextStyle(color: secondaryTextGrey, fontSize: 15)),
+              const SizedBox(height: 32),
+              Row(
+                children: [
+                  Expanded(
+                    child: _InteractivePill(
+                      onTap: () {
+                        Navigator.pop(context);
+                        if (!mounted) return;
+                        setState(() => status = prev);
+                        if (prev == 'running') pulseController.repeat(reverse: true);
+                        _sendTimerUpdateToESP32();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(16)),
+                        child: const Center(child: Text('Cancel', style: TextStyle(color: secondaryTextGrey, fontWeight: FontWeight.bold, fontSize: 16))),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _InteractivePill(
+                      onTap: () async {
+                        _timer?.cancel();
+                        if (_rikazConnected) await _debouncedLightOff();
+                        if (mounted) Navigator.pop(context);
+
+                        final actual = (_totalFocusSeconds ~/ 60);
+                        if (actual < minimumSessionMinutes) {
+                          await _endSessionInDB(progress: 'none', distraction: 'high');
+                          if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/tabs', (r) => false);
+                          return;
+                        }
+
+                        String? p = await _showProgressLevelDialog();
+                        String d = await _showDistractionDialog();
+                        await _endSessionInDB(progress: p, distraction: d);
+
+                        if (mounted) {
+                          await _showSummaryDialog(d, p ?? 'partially');
+                          _showMotivationalPopup(d, p ?? 'partially');
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        decoration: BoxDecoration(color: errorIndicatorRed, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: errorIndicatorRed.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))]),
+                        child: const Center(child: Text('End', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16))),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
+<<<<<<< Updated upstream
           ElevatedButton(
             onPressed: () async {
               _timer?.cancel();
@@ -820,28 +859,20 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
             child: const Text('Yes'),
           ),
         ],
+=======
+        ),
+>>>>>>> Stashed changes
       ),
     );
   }
 
   Future<void> _navigateToBreakActivities() async {
     _timer?.cancel();
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => GamesScreen(breakSecondsRemaining: timeLeft),
-      ),
-    );
-
+    final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => GamesScreen(breakSecondsRemaining: timeLeft)));
     if (!mounted) return;
-
     if (result is int) setState(() => timeLeft = result);
-
-    if (timeLeft <= 0 && mode == 'break') {
-      onPhaseEnd();
-    } else {
-      startTimer();
-    }
+    if (timeLeft <= 0 && mode == 'break') onPhaseEnd();
+    else startTimer();
   }
 
   void _startConnectionMonitoring() {
@@ -851,19 +882,16 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
         timer.cancel();
         return;
       }
-
       if (!await RikazLightService.isConnected()) {
         timer.cancel();
         await RikazLightService.disconnect();
         RikazConnectionState.isConnected = false;
-
         if (mounted) {
           setState(() {
             _rikazConnected = false;
             _lightInitialized = false;
           });
         }
-
         _handleLightCommandFailure();
       }
     });
@@ -880,31 +908,18 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
 
   Future<void> _debouncedLightOff() async {
     if (!_rikazConnected || !_lightInitialized) return;
-
     final now = DateTime.now();
     if (_lastLightOffTime != null && now.difference(_lastLightOffTime!) < _lightDebounceDelay) return;
     _lastLightOffTime = now;
-
-    try {
-      await RikazLightService.sendCommand(jsonEncode({"on":false}));
-    } catch (_) {}
+    try { await RikazLightService.sendCommand(jsonEncode({"on":false})); } catch (_) {}
   }
 
   Future<void> _sendTimerUpdateToESP32() async {
     if (!_rikazConnected || !_lightInitialized) return;
-
     try {
       final cmd = jsonEncode({
-        'timer': {
-          'minutes': timeLeft ~/ 60,
-          'seconds': timeLeft % 60,
-          'status': status,
-          'mode': mode,
-        },
-        'config': {
-          'style': widget.notificationStyle ?? 'strong',
-          'subtleType': widget.subtleAlertType ?? 'light',
-        }
+        'timer': {'minutes': timeLeft ~/ 60, 'seconds': timeLeft % 60, 'status': status, 'mode': mode},
+        'config': {'style': widget.notificationStyle ?? 'strong', 'subtleType': widget.subtleAlertType ?? 'light'}
       });
       await RikazLightService.sendCommand(cmd);
     } catch (_) {}
@@ -912,14 +927,230 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
 
   Future<void> _sendMotivationalMessage() async {
     if (!_rikazConnected || !_lightInitialized) return;
-    try {
-      await RikazLightService.sendCommand(jsonEncode({'motivation': 'show'}));
-    } catch (_) {}
+    try { await RikazLightService.sendCommand(jsonEncode({'motivation': 'show'})); } catch (_) {}
   }
 
-  String formatTime(int s) => '${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}';
-
+  String formatTime(int s) {
+    final minutes = (s ~/ 60).toString().padLeft(2, '0');
+    final seconds = (s % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+  
   double get progressValue => (1 - (timeLeft / max(focusMinutes * 60, 1))).clamp(0, 1);
+  // Central function for springy, animated dialogs
+  Future<T?> _showAnimatedDialog<T>({required BuildContext context, required Widget child}) {
+    return showGeneralDialog<T>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: dfNavyIndigo.withOpacity(0.4),
+      transitionDuration: const Duration(milliseconds: 400),
+      pageBuilder: (context, animation, secondaryAnimation) => child,
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return Transform.scale(
+          scale: Curves.easeOutBack.transform(animation.value),
+          child: Opacity(opacity: animation.value, child: child),
+        );
+      },
+    );
+  }
+
+  Future<String?> _showProgressLevelDialog() async {
+    String? selected;
+    await _showAnimatedDialog<String>(
+      context: context,
+      child: Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(color: dfTealCyan.withOpacity(0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.track_changes_rounded, size: 44, color: dfTealCyan),
+              ),
+              const SizedBox(height: 20),
+              const Text("Goal Progress", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: dfNavyIndigo, letterSpacing: -0.5)),
+              const SizedBox(height: 8),
+              const Text("How much did you achieve?", textAlign: TextAlign.center, style: TextStyle(fontSize: 15, color: secondaryTextGrey)),
+              const SizedBox(height: 28),
+              _buildOptionCard(title: "Fully", subtitle: "Accomplished everything", icon: Icons.check_circle, color: dfTealCyan, onTap: () async { selected = 'fully'; await Future.delayed(const Duration(milliseconds: 200)); if(mounted) Navigator.pop(context); }),
+              _buildOptionCard(title: "Partially", subtitle: "Made good progress", icon: Icons.trending_up, color: breakColor, onTap: () async { selected = 'partially'; await Future.delayed(const Duration(milliseconds: 200)); if(mounted) Navigator.pop(context); }),
+              _buildOptionCard(title: "Barely", subtitle: "Struggled to stay focused", icon: Icons.sentiment_dissatisfied, color: errorIndicatorRed, onTap: () async { selected = 'barely'; await Future.delayed(const Duration(milliseconds: 200)); if(mounted) Navigator.pop(context); }),
+            ],
+          ),
+        ),
+      ),
+    );
+    return selected;
+  }
+
+  Future<String> _showDistractionDialog() async {
+    String selected = 'low';
+    await _showAnimatedDialog<String>(
+      context: context,
+      child: Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(color: customModeColor.withOpacity(0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.psychology_outlined, size: 44, color: customModeColor),
+              ),
+              const SizedBox(height: 20),
+              const Text("Distractions", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: dfNavyIndigo, letterSpacing: -0.5)),
+              const SizedBox(height: 8),
+              const Text("How distracted were you?", textAlign: TextAlign.center, style: TextStyle(fontSize: 15, color: secondaryTextGrey)),
+              const SizedBox(height: 28),
+              _buildOptionCard(title: "Low", subtitle: "Highly focused", icon: Icons.battery_full, color: dfTealCyan, onTap: () async { selected = 'low'; await Future.delayed(const Duration(milliseconds: 200)); if(mounted) Navigator.pop(context); }),
+              _buildOptionCard(title: "Medium", subtitle: "A few interruptions", icon: Icons.battery_charging_full, color: breakColor, onTap: () async { selected = 'medium'; await Future.delayed(const Duration(milliseconds: 200)); if(mounted) Navigator.pop(context); }),
+              _buildOptionCard(title: "High", subtitle: "Hard to ignore", icon: Icons.battery_alert, color: errorIndicatorRed, onTap: () async { selected = 'high'; await Future.delayed(const Duration(milliseconds: 200)); if(mounted) Navigator.pop(context); }),
+            ],
+          ),
+        ),
+      ),
+    );
+    return selected;
+  }
+
+  Future<void> _showSummaryDialog(String distraction, String progress) async {
+    await _showAnimatedDialog(
+      context: context,
+      child: Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text("Session Summary", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: dfNavyIndigo, letterSpacing: -0.5)),
+              const SizedBox(height: 28),
+              Container(
+                decoration: BoxDecoration(color: primaryBackground, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.white, width: 2), boxShadow: subtleShadow),
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    _summaryRowUI(Icons.timer_outlined, 'Total Time', '${(_totalFocusSeconds ~/ 60)} min', dfTealCyan),
+                    const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Divider(height: 1, color: Colors.black12)),
+                    _summaryRowUI(Icons.auto_graph_rounded, 'Progress', progress.toUpperCase(), customModeColor),
+                    const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Divider(height: 1, color: Colors.black12)),
+                    _summaryRowUI(Icons.notifications_off_outlined, 'Distractions', distraction.toUpperCase(), breakColor),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                child: _InteractivePill(
+                  onTap: () { Navigator.pop(context); },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    decoration: BoxDecoration(color: dfNavyIndigo, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: dfNavyIndigo.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))]),
+                    child: const Center(child: Text('Continue', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5))),
+                  ),
+                ),
+              )
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showMotivationalPopup(String distraction, String progress) {
+    String message = "Every session is a learning experience. Keep going! 🚀";
+    if (progress == 'fully' && distraction == 'low') message = "Outstanding! You maintained excellent focus and completed everything. 🌟";
+    else if (progress == 'fully' && distraction == 'medium') message = "Great job! You pushed through the distractions and finished strong. 💪";
+    else if (progress == 'fully' && distraction == 'high') message = "Incredible resilience! Despite heavy distractions, you completed your goals. 🔥";
+    else if (progress == 'partially' && distraction == 'low') message = "Good focus quality! You stayed concentrated even though you didn't finish. 📈";
+    else if (progress == 'partially' && distraction == 'medium') message = "Nice effort! You made solid progress despite some interruptions. ✨";
+    else if (progress == 'partially' && distraction == 'high') message = "You tried your best in a challenging environment. Every small step counts. 🌱";
+    else if (progress == 'barely' && distraction == 'low') message = "It happens! Even with focus, sometimes tasks are tough. You'll bounce back! 🔄";
+    else if (progress == 'barely' && distraction == 'medium') message = "Challenging session, but you showed up! Identify what distracted you and try again! 💫";
+    else if (progress == 'barely' && distraction == 'high') message = "This was a tough one. Learn from it and create a better setup next time. You've got this! 🌟";
+    
+    _showAnimatedDialog(
+      context: context,
+      child: Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(color: dfTealCyan.withOpacity(0.15), shape: BoxShape.circle),
+                child: const Icon(Icons.emoji_events_rounded, size: 64, color: dfTealCyan),
+              ),
+              const SizedBox(height: 28),
+              Text(message, textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, height: 1.5, fontWeight: FontWeight.w600, color: dfNavyIndigo, letterSpacing: -0.2)),
+              const SizedBox(height: 36),
+              SizedBox(
+                width: double.infinity,
+                child: _InteractivePill(
+                  onTap: () => Navigator.pushNamedAndRemoveUntil(context, '/tabs', (route) => false),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    decoration: BoxDecoration(color: dfTealCyan, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: dfTealCyan.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))]),
+                    child: const Center(child: Text('Finish', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5))),
+                  ),
+                ),
+              )
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOptionCard({required String title, required String subtitle, required IconData icon, required Color color, required VoidCallback onTap}) {
+    return _InteractivePill(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          border: Border.all(color: color.withOpacity(0.3), width: 1.5),
+          borderRadius: BorderRadius.circular(20),
+          color: color.withOpacity(0.05),
+        ),
+        child: Row(
+          children: [
+            Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withOpacity(0.15), shape: BoxShape.circle), child: Icon(icon, color: color, size: 24)),
+            const SizedBox(width: 16),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: dfNavyIndigo)), const SizedBox(height: 4), Text(subtitle, style: const TextStyle(fontSize: 13, color: secondaryTextGrey))])),
+            const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: secondaryTextGrey),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _summaryRowUI(IconData icon, String label, String value, Color iconColor) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
+          children: [
+            Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: iconColor.withOpacity(0.15), borderRadius: BorderRadius.circular(12)), child: Icon(icon, size: 20, color: iconColor)),
+            const SizedBox(width: 14),
+            Text(label, style: const TextStyle(color: secondaryTextGrey, fontWeight: FontWeight.w600, fontSize: 15)),
+          ],
+        ),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: dfNavyIndigo)),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -928,87 +1159,118 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
     final bool isPaused = status == 'paused';
     final timerDiameter = screenWidth * 0.75;
 
+    Color activeRingColor = isPaused ? pausedColor : (mode == 'break' ? breakColor : dfTealCyan);
+
     return Scaffold(
-      body: Stack(
-        children: [
-          Container(color: isPaused ? pausedBgColor : (mode == 'break' ? breakBgColor : focusBgColor)),
-          Positioned(
-            top: screenHeight * 0.38,
-            left: -screenWidth * 0.5,
-            right: -screenWidth * 0.5,
-            bottom: 0,
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(screenWidth * 1.5)),
-                boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 20)],
-              ),
-            ),
-          ),
-          SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                SizedBox(height: screenHeight * 0.05),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                  decoration: BoxDecoration(color: Colors.white30, borderRadius: BorderRadius.circular(20)),
-                  child: Text(
-                    isPomodoro
-                        ? (mode == 'break' ? 'Break' : 'Block $currentBlock/$totalBlocks')
-                        : 'Focus Session',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+      body: AnimatedBuilder(
+        animation: pulseAnimation,
+        builder: (context, child) {
+          // Liquid shifting gradient logic
+          final double shift = isPaused ? 0 : bgShiftAnimation.value;
+          final Alignment beginAlign = Alignment(-1.0 + shift, -1.0 - shift);
+          final Alignment endAlign = Alignment(1.0 - shift, 1.0 + shift);
+
+          Color topColor = isPaused ? pausedColor.withOpacity(0.3) : (mode == 'break' ? breakColor.withOpacity(0.3) : dfTealCyan.withOpacity(0.3));
+          
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 800),
+            decoration: BoxDecoration(gradient: LinearGradient(begin: beginAlign, end: endAlign, colors: [topColor, primaryBackground, primaryBackground])),
+            child: SafeArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  SizedBox(height: screenHeight * 0.03),
+                  // Delicate Top Pill
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                    decoration: BoxDecoration(color: activeRingColor.withOpacity(0.08), borderRadius: BorderRadius.circular(30), border: Border.all(color: activeRingColor.withOpacity(0.2), width: 1.5)),
+                    child: Text(isPomodoro ? (mode == 'break' ? 'BREAK TIME' : 'BLOCK $currentBlock / $totalBlocks') : 'FOCUS SESSION', style: TextStyle(color: activeRingColor, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 2.5)),
                   ),
-                ),
-                SizedBox(height: screenHeight * 0.04),
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Container(
-                      width: timerDiameter,
-                      height: timerDiameter,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 30)],
-                      ),
-                    ),
-                    SizedBox(
-                      width: timerDiameter * 0.92,
-                      height: timerDiameter * 0.92,
-                      child: CustomPaint(
-                        painter: _ProgressRingPainter(
-                          progress: progressValue,
-                          color: isPaused ? pausedBgColor : (mode == 'break' ? Colors.orange : accentThemeColor),
+                  SizedBox(height: screenHeight * 0.06),
+                  
+                  // The Minimalist "Breathing" Timer
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Transform.scale(
+                        scale: isPaused ? 1.0 : pulseAnimation.value,
+                        child: Container(
+                          width: timerDiameter, height: timerDiameter,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [activeRingColor.withOpacity(isPaused ? 0.05 : 0.15), activeRingColor.withOpacity(0.0)],
+                              stops: const [0.4, 1.0],
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          formatTime(timeLeft),
-                          style: const TextStyle(fontSize: 50, fontWeight: FontWeight.bold, color: primaryTextDark),
+                      SizedBox(
+                        width: timerDiameter * 0.85, height: timerDiameter * 0.85,
+                        child: CustomPaint(painter: _ProgressRingPainter(progress: progressValue, color: activeRingColor)),
+                      ),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(formatTime(timeLeft), style: const TextStyle(fontSize: 76, fontWeight: FontWeight.w300, color: dfNavyIndigo, letterSpacing: 2.0)),
+                          const SizedBox(height: 8),
+                          Text(mode == 'break' ? 'TAKE A BREATH' : 'STAY FOCUSED', style: TextStyle(color: secondaryTextGrey.withOpacity(0.8), fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 3.0)),
+                        ],
+                      ),
+                    ],
+                  ),
+                  
+                  SizedBox(height: screenHeight * 0.08),
+                  
+                  // Floating Glass Control Actions
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _InteractivePill(
+                        onTap: onPauseResume,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                          decoration: BoxDecoration(color: isPaused ? activeRingColor : Colors.white.withOpacity(0.6), borderRadius: BorderRadius.circular(30), border: Border.all(color: isPaused ? Colors.transparent : Colors.white, width: 1.5), boxShadow: isPaused ? [BoxShadow(color: activeRingColor.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 8))] : subtleShadow),
+                          child: Row(children: [Icon(isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded, color: isPaused ? Colors.white : dfNavyIndigo, size: 22), const SizedBox(width: 8), Text(isPaused ? 'Resume' : 'Pause', style: TextStyle(color: isPaused ? Colors.white : dfNavyIndigo, fontWeight: FontWeight.w600, fontSize: 16))]),
                         ),
-                        Text(mode == 'break' ? 'Take a rest' : 'Stay focused', style: const TextStyle(color: secondaryTextGrey)),
-                      ],
+                      ),
+                      const SizedBox(width: 16),
+                      _InteractivePill(
+                        onTap: onQuit,
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(color: Colors.white.withOpacity(0.6), shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 1.5)),
+                          child: const Icon(Icons.stop_rounded, color: dfNavyIndigo, size: 22),
+                        ),
+                      ),
+                    ],
+                  ),
+                  
+                  if (mode == 'break') ...[
+                    const SizedBox(height: 20),
+                    _InteractivePill(
+                      onTap: _navigateToBreakActivities,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        decoration: BoxDecoration(color: customModeColor.withOpacity(0.15), borderRadius: BorderRadius.circular(30), border: Border.all(color: customModeColor.withOpacity(0.3))),
+                        child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.videogame_asset_outlined, color: customModeColor, size: 20), SizedBox(width: 8), Text('Play Activity', style: TextStyle(color: customModeColor, fontWeight: FontWeight.bold))]),
+                      ),
                     ),
                   ],
-                ),
-                SizedBox(height: screenHeight * 0.04),
-                if (mode == 'break') ...[
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: dfDeepTeal,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                  
+                  const Spacer(),
+                  
+                  // Minimalist Sound Section
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
+                    child: Container(
+                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.5), borderRadius: BorderRadius.circular(30), border: Border.all(color: Colors.white, width: 1.5)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: SoundSection(preselectedSoundId: widget.selectedSoundId, preselectedSoundUrl: widget.selectedSoundUrl),
                     ),
-                    onPressed: _navigateToBreakActivities,
-                    icon: const Icon(Icons.videogame_asset_outlined),
-                    label: const Text('Play Activity'),
                   ),
-                  const SizedBox(height: 10),
                 ],
+<<<<<<< Updated upstream
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: isPaused ? pausedBgColor : accentThemeColor,
@@ -1048,29 +1310,50 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
                   ),
                 ),
               ],
+=======
+              ),
+>>>>>>> Stashed changes
             ),
-          ),
-        ],
+          );
+        }
       ),
     );
   }
-
+}
+// Reusable Highly Interactive Squish Component
+class _InteractivePill extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+  const _InteractivePill({required this.child, required this.onTap});
   @override
-  void dispose() {
-    _timer?.cancel();
-    _connectionCheckTimer?.cancel();
-    pulseController.dispose();
-    
-    _alertPlayer.stop();
-    _alertPlayer.dispose();
-    
-    super.dispose();
+  State<_InteractivePill> createState() => _InteractivePillState();
+}
+
+class _InteractivePillState extends State<_InteractivePill> {
+  bool _isPressed = false;
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) { setState(() => _isPressed = false); widget.onTap(); },
+      onTapCancel: () => setState(() => _isPressed = false),
+      child: AnimatedScale(
+        scale: _isPressed ? 0.90 : 1.0,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOutBack,
+        child: widget.child,
+      ),
+    );
   }
 }
 
+<<<<<<< Updated upstream
 // ============================================================================
 // SOUND SECTION (unchanged)
 // ============================================================================
+=======
+>>>>>>> Stashed changes
 class SoundSection extends StatefulWidget {
   final String? preselectedSoundId;
   final String? preselectedSoundUrl;
@@ -1106,7 +1389,7 @@ class _SoundSectionState extends State<SoundSection> {
         name: widget.preselectedSoundId!,
         filePathUrl: widget.preselectedSoundUrl,
         iconName: 'music_note_rounded',
-        colorHex: '#287C85',
+        colorHex: '#68C29D', // Default to teal
       );
       _isSoundPlaying = true;
 
@@ -1184,11 +1467,9 @@ class _SoundSectionState extends State<SoundSection> {
       if (mounted) setState(() => _isSoundPlaying = true);
     } catch (e) {
       debugPrint('X Error playing selected sound: $e');
-      
       String fallbackUrl = sound.filePathUrl!;
       if (sound.name == 'Rain' || sound.name == 'River') fallbackUrl = 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/rain-v2.mp3';
       else if (sound.name == 'White Noise') fallbackUrl = 'https://fbjxvlzhxsxiyxuuvefu.supabase.co/storage/v1/object/public/sounds/White-Noise.mp3';
-      
       try {
         await _bgAudioPlayer.play(UrlSource(fallbackUrl));
         if (mounted) setState(() => _isSoundPlaying = true);
@@ -1225,12 +1506,12 @@ class _SoundSectionState extends State<SoundSection> {
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: _currentSound.color.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(8),
+            color: _currentSound.id == 'off' ? Colors.transparent : _currentSound.color.withOpacity(0.12),
+            shape: BoxShape.circle,
           ),
-          child: Icon(_currentSound.icon, color: _currentSound.color, size: 24),
+          child: Icon(_currentSound.icon, color: _currentSound.id == 'off' ? secondaryTextGrey : _currentSound.color, size: 20),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 12),
         Expanded(
           child: FutureBuilder<List<SoundOption>>(
             future: _soundsFuture,
@@ -1242,8 +1523,8 @@ class _SoundSectionState extends State<SoundSection> {
                 child: DropdownButton<String>(
                   value: _currentSound.id,
                   isExpanded: true,
-                  icon: const Icon(Icons.keyboard_arrow_down_rounded, color: dfTealCyan),
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: dfNavyIndigo),
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded, color: secondaryTextGrey),
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: dfNavyIndigo),
                   onChanged: (String? newId) {
                     if (newId != null) {
                       final newSound = sounds.firstWhere((s) => s.id == newId, orElse: () => SoundOption.off());
@@ -1261,14 +1542,20 @@ class _SoundSectionState extends State<SoundSection> {
           ),
         ),
         const SizedBox(width: 12),
-        IconButton(
-          icon: Icon(
-            _isSoundPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
-            color: _currentSound.id == 'off' ? secondaryTextGrey.withOpacity(0.5) : dfTealCyan,
-            size: 40,
+        _InteractivePill(
+          onTap: _currentSound.id == 'off' ? () {} : _togglePlayPause,
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _currentSound.id == 'off' ? Colors.transparent : _currentSound.color.withOpacity(0.15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              _isSoundPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+              color: _currentSound.id == 'off' ? secondaryTextGrey.withOpacity(0.4) : _currentSound.color,
+              size: 26,
+            ),
           ),
-          onPressed: _currentSound.id == 'off' ? null : _togglePlayPause,
-          padding: EdgeInsets.zero,
         ),
       ],
     );
@@ -1295,7 +1582,7 @@ class SoundOption {
         name: 'No Sound',
         filePathUrl: null,
         iconName: 'volume_off_rounded',
-        colorHex: '#64748B',
+        colorHex: '#8B95A5',
       );
 
   IconData get icon {
@@ -1323,28 +1610,35 @@ class _ProgressRingPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Ultra-minimal thin ring
     final ringPaint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 12
+      ..strokeWidth = 3.0 
       ..strokeCap = StrokeCap.round;
 
+    // Barely visible background track
     final bgPaint = Paint()
-      ..color = Colors.grey[200]!
+      ..color = color.withOpacity(0.05) 
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 12;
+      ..strokeWidth = 1.0; 
 
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = (size.width - 12) / 2;
+    final radius = (size.width - 4) / 2;
 
     canvas.drawCircle(center, radius, bgPaint);
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      -pi / 2,
-      2 * pi * progress,
-      false,
-      ringPaint,
-    );
+    
+    // FIX: Only draw the arc if progress is greater than 0
+    // This prevents the tiny "dot" artifact when the timer hasn't moved yet!
+    if (progress > 0) {
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        -pi / 2,
+        2 * pi * progress,
+        false,
+        ringPaint,
+      );
+    }
   }
 
   @override
