@@ -123,24 +123,32 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
       barrierDismissible: false,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: Colors.white,
         child: Container(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.track_changes_rounded, size: 50, color: dfTealCyan),
-              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: dfTealCyan.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.track_changes_rounded, size: 40, color: dfTealCyan),
+              ),
+              const SizedBox(height: 20),
               const Text(
                 "How much of your goal did you achieve in this session?",
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: dfNavyIndigo),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: dfNavyIndigo),
               ),
               const SizedBox(height: 24),
               _buildOptionCard(
                 title: "Fully",
                 subtitle: "I accomplished everything I set out to do",
-                icon: Icons.check_circle,
-                color: Colors.green,
+                icon: Icons.check_circle_rounded,
+                color: Color(0xFF4CAF50),
                 onTap: () {
                   selected = 'fully';
                   Navigator.pop(context);
@@ -149,8 +157,8 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
               _buildOptionCard(
                 title: "Partially",
                 subtitle: "I made good progress but didn't finish",
-                icon: Icons.trending_up,
-                color: Colors.orange,
+                icon: Icons.trending_up_rounded,
+                color: Color(0xFFFF9800),
                 onTap: () {
                   selected = 'partially';
                   Navigator.pop(context);
@@ -159,8 +167,8 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
               _buildOptionCard(
                 title: "Barely",
                 subtitle: "I struggled to stay focused",
-                icon: Icons.sentiment_dissatisfied,
-                color: Colors.redAccent,
+                icon: Icons.sentiment_dissatisfied_rounded,
+                color: Color(0xFFF44336),
                 onTap: () {
                   selected = 'barely';
                   Navigator.pop(context);
@@ -181,24 +189,32 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
       barrierDismissible: false,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: Colors.white,
         child: Container(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.psychology_outlined, size: 50, color: dfTealCyan),
-              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: dfTealCyan.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.psychology_outlined, size: 40, color: dfTealCyan),
+              ),
+              const SizedBox(height: 20),
               const Text(
                 "How distracted were you approximately?",
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: dfNavyIndigo),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: dfNavyIndigo),
               ),
               const SizedBox(height: 24),
               _buildOptionCard(
                 title: "Low",
                 subtitle: "I was highly focused",
-                icon: Icons.battery_full,
-                color: dfTealCyan,
+                icon: Icons.battery_full_rounded,
+                color: Color(0xFF4CAF50),
                 onTap: () {
                   selected = 'low';
                   Navigator.pop(context);
@@ -207,8 +223,8 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
               _buildOptionCard(
                 title: "Medium",
                 subtitle: "A few interruptions happened",
-                icon: Icons.battery_charging_full,
-                color: Colors.blueGrey,
+                icon: Icons.battery_charging_full_rounded,
+                color: Color(0xFFFF9800),
                 onTap: () {
                   selected = 'medium';
                   Navigator.pop(context);
@@ -217,8 +233,8 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
               _buildOptionCard(
                 title: "High",
                 subtitle: "I found it hard to ignore distractions",
-                icon: Icons.battery_alert,
-                color: Colors.redAccent,
+                icon: Icons.battery_alert_rounded,
+                color: Color(0xFFF44336),
                 onTap: () {
                   selected = 'high';
                   Navigator.pop(context);
@@ -238,25 +254,38 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
       barrierDismissible: false,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: Colors.white,
         child: Container(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: dfTealCyan.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.summarize_rounded, size: 40, color: dfTealCyan),
+              ),
+              const SizedBox(height: 16),
               const Text(
                 "Session Summary",
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: dfNavyIndigo),
               ),
               const SizedBox(height: 20),
               Container(
-                decoration: BoxDecoration(color: primaryBackground, borderRadius: BorderRadius.circular(16)),
+                decoration: BoxDecoration(
+                  color: primaryBackground,
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
                     _summaryRowUI(Icons.timer_outlined, 'Total Time', '${(_totalFocusSeconds ~/ 60)} min'),
-                    const Divider(height: 20),
-                    _summaryRowUI(Icons.auto_graph, 'Progress', progress.toUpperCase()),
-                    const Divider(height: 20),
+                    const Divider(height: 24, color: secondaryTextGrey),
+                    _summaryRowUI(Icons.auto_graph_rounded, 'Progress', progress.toUpperCase()),
+                    const Divider(height: 24, color: secondaryTextGrey),
                     _summaryRowUI(Icons.notifications_off_outlined, 'Distraction', distraction.toUpperCase()),
                   ],
                 ),
@@ -267,13 +296,15 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: dfTealCyan,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
                   ),
                   onPressed: () => Navigator.pop(context),
                   child: const Text(
                     'Continue',
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ),
               )
@@ -287,88 +318,94 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
   void _showMotivationalPopup(String distraction, String progress) {
     String message = "";
     
-    // ============================================================================
-    //  positive BASED ON PROGRESS + DISTRACTION
-    // ============================================================================
+    // FULLY + LOW
+    if (progress == 'fully' && distraction == 'low') {
+      message = "Outstanding! You maintained excellent focus and completed everything. This is peak performance! ";
+    }
+    // FULLY + MEDIUM
+    else if (progress == 'fully' && distraction == 'medium') {
+      message = "Great job! You pushed through the distractions and finished strong. That's real determination! ";
+    }
+    // FULLY + HIGH
+    else if (progress == 'fully' && distraction == 'high') {
+      message = "Impressive resilience! Despite heavy distractions, you completed your goals. Imagine what you can achieve with better focus next time! ";
+    }
     
-      // ============================================================================
-  // positive prain
-  // ============================================================================
-  
-// FULLY + LOW
-  if (progress == 'fully' && distraction == 'low') {
-    message = "Outstanding! You maintained excellent focus and completed everything. This is peak performance! 🌟";
-  }
-  // FULLY + MEDIUM
-  else if (progress == 'fully' && distraction == 'medium') {
-    message = "Great job! You pushed through the distractions and finished strong. That's real determination! 💪";
-  }
-  // FULLY + HIGH
-  else if (progress == 'fully' && distraction == 'high') {
-    message = "Incredible resilience! Despite heavy distractions, you completed your goals. Next time will be even better! 🔥";
-  }
-  
-  // PARTIALLY + LOW
-  else if (progress == 'partially' && distraction == 'low') {
-    message = "Good focus quality! You stayed concentrated even though you didn't finish. Keep building on this momentum! 📈";
-  }
-  // PARTIALLY + MEDIUM
-  else if (progress == 'partially' && distraction == 'medium') {
-    message = "Nice effort! You made solid progress despite some interruptions. You're on the right path! ✨";
-  }
-  // PARTIALLY + HIGH
-  else if (progress == 'partially' && distraction == 'high') {
-    message = "You tried your best in a challenging environment. Every small step counts. Tomorrow is a fresh start! 🌱";
-  }
-  
-  // BARELY + LOW
-  else if (progress == 'barely' && distraction == 'low') {
-    message = "It happens! Even with focus, sometimes tasks are tough. Don't be discouraged—you'll bounce back! 🔄";
-  }
-  // BARELY + MEDIUM
-  else if (progress == 'barely' && distraction == 'medium') {
-    message = "Challenging session, but you showed up! That's what matters. Identify what distracted you and try again! 💫";
-  }
-  // BARELY + HIGH
-  else if (progress == 'barely' && distraction == 'high') {
-    message = "This was a tough one with many interruptions. Learn from it and create a better setup next time. You've got this! 🌟";
-  }
-  
-  // DEFAULT (في حال قيمة غريبة)
-  else {
-    message = "Every session is a learning experience. Reflect and improve for next time. Keep going! 🚀";
-  }
+    // PARTIALLY + LOW
+    else if (progress == 'partially' && distraction == 'low') {
+      message = "Good focus quality! You stayed concentrated and made real progress. Push a little harder next time to complete everything! ";
+    }
+    // PARTIALLY + MEDIUM
+    else if (progress == 'partially' && distraction == 'medium') {
+      message = "Solid effort! You made progress despite interruptions. Remove those distractions next session and you'll crush your goals! ";
+    }
+    // PARTIALLY + HIGH
+    else if (progress == 'partially' && distraction == 'high') {
+      message = "You tried, but distractions won this round. Set up a better environment next time—silence your phone, close the door, and show what you're really capable of! ";
+    }
+    
+    // BARELY + LOW
+    else if (progress == 'barely' && distraction == 'low') {
+      message = "Your focus was there, but results weren't. This means you need a better strategy or clearer goals. Break your task into smaller steps and attack them one by one! ";
+    }
+    // BARELY + MEDIUM
+    else if (progress == 'barely' && distraction == 'medium') {
+      message = "Distractions and lack of progress—not a good combo. But you know what? Champions are built in moments like these. Prepare better, eliminate distractions, and come back stronger! ";
+    }
+    // BARELY + HIGH
+    else if (progress == 'barely' && distraction == 'high') {
+      message = "This session didn't go well, but that's okay—every champion has bad days. The difference? They learn and adapt. Find a quiet space, set clear goals, and prove to yourself what you can really do! ";
+    }
+    
+    // DEFAULT
+    else {
+      message = "Every session teaches you something. Analyze what went wrong, fix it, and come back stronger. Progress isn't always linear, but it's always possible! ";
+    }
     
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: Colors.white,
         child: Padding(
           padding: const EdgeInsets.all(24.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.emoji_events_rounded, size: 80, color: dfTealCyan),
-              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [dfTealCyan.withOpacity(0.2), dfTealCyan.withOpacity(0.2)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.emoji_events_rounded, size: 50, color: dfTealCyan),
+              ),
+              const SizedBox(height: 20),
               Text(
                 message,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: dfNavyIndigo),
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: dfNavyIndigo, height: 1.5),
               ),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: dfNavyIndigo,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    backgroundColor: dfTealCyan,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
                   ),
                   onPressed: () => Navigator.pushNamedAndRemoveUntil(context, '/tabs', (route) => false),
                   child: const Text(
                     'Finish',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ),
               )
@@ -390,17 +427,27 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          border: Border.all(color: color.withOpacity(0.3)),
+          color: Colors.white,
+          border: Border.all(color: color.withOpacity(0.3), width: 2),
           borderRadius: BorderRadius.circular(16),
-          color: color.withOpacity(0.05),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: Icon(icon, color: color, size: 24),
             ),
             const SizedBox(width: 16),
@@ -408,13 +455,16 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: dfNavyIndigo)),
-                  Text(subtitle, style: const TextStyle(fontSize: 12, color: secondaryTextGrey)),
+                  Text(
+                    title,
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: color),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: const TextStyle(fontSize: 13, color: secondaryTextGrey)),
                 ],
               ),
             ),
-            const Icon(Icons.arrow_forward_ios, size: 14, color: secondaryTextGrey),
+            Icon(Icons.arrow_forward_ios_rounded, size: 18, color: color.withOpacity(0.5)),
           ],
         ),
       ),
@@ -427,14 +477,49 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
       children: [
         Row(
           children: [
-            Icon(icon, size: 20, color: dfTealCyan),
-            const SizedBox(width: 10),
-            Text(label, style: const TextStyle(color: secondaryTextGrey)),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: dfTealCyan.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, size: 20, color: dfTealCyan),
+            ),
+            const SizedBox(width: 12),
+            Text(label, style: const TextStyle(color: secondaryTextGrey, fontSize: 14)),
           ],
         ),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, color: dfNavyIndigo)),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, color: dfNavyIndigo, fontSize: 14)),
       ],
     );
+  }
+
+  // ============================================================================
+  // SMART DISTRACTION CALCULATION FROM CAMERA
+  // ============================================================================
+
+  String _calculateDistractionLevel() {
+    // إذا ما فيه كاميرا، نرجع 'manual' عشان يسأله يدوياً
+    if (widget.isCameraDetectionEnabled != true) {
+      return 'manual';
+    }
+
+    final int count = _sessionDistractionCount;
+    final int totalMinutes = _totalFocusSeconds ~/ 60;
+    
+    if (totalMinutes == 0) return 'low';
+    
+    final double distractionsPerMinute = count / totalMinutes;
+    
+    if (distractionsPerMinute < 0.5) {
+      return 'low';
+    }
+    else if (distractionsPerMinute < 1.5) {
+      return 'medium';
+    }
+    else {
+      return 'high';
+    }
   }
 
   // ============================================================================
@@ -453,14 +538,30 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
         await _debouncedLightOff();
       }
 
+      //  Ask for Progress Level
       String? p = await _showProgressLevelDialog();
-      String d = await _showDistractionDialog();
+      if (p == null) p = 'partially'; // Default if dismissed
+      
+      //  Get Distraction Level (Camera or Manual)
+      String d;
+      String calculatedDistraction = _calculateDistractionLevel();
+      
+      if (calculatedDistraction == 'manual') {
+        // الكاميرا مطفية - اسأل 
+        d = await _showDistractionDialog();
+      } else {
+        
+        d = calculatedDistraction;
+      }
 
+      // Save to Database
       _endSessionInDB(progress: p, distraction: d);
 
+      //  Show Summary
       if (mounted) {
-        await _showSummaryDialog(d, p ?? 'partially');
-        _showMotivationalPopup(d, p ?? 'partially');
+        await _showSummaryDialog(d, p);
+        //  Show Positive Reinforcement
+        _showMotivationalPopup(d, p);
       }
       return;
     }
@@ -688,25 +789,32 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
               if (_rikazConnected) await _debouncedLightOff();
               Navigator.pop(ctx);
 
-              // ✅ NEW: Check if session is >= 10 minutes
               final actual = (_totalFocusSeconds ~/ 60);
               
-              // If less than 10 minutes, delete and go home
               if (actual < minimumSessionMinutes) {
                 await _endSessionInDB(progress: 'none', distraction: 'high');
                 if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/tabs', (r) => false);
                 return;
               }
 
-              // ✅ If 10+ minutes: Ask questions like normal completion
+              // ✅ Same flow as normal completion
               String? p = await _showProgressLevelDialog();
-              String d = await _showDistractionDialog();
+              if (p == null) p = 'partially';
+              
+              String d;
+              String calculatedDistraction = _calculateDistractionLevel();
+              
+              if (calculatedDistraction == 'manual') {
+                d = await _showDistractionDialog();
+              } else {
+                d = calculatedDistraction;
+              }
 
               await _endSessionInDB(progress: p, distraction: d);
 
               if (mounted) {
-                await _showSummaryDialog(d, p ?? 'partially');
-                _showMotivationalPopup(d, p ?? 'partially');
+                await _showSummaryDialog(d, p);
+                _showMotivationalPopup(d, p);
               }
             },
             child: const Text('Yes'),
@@ -923,7 +1031,6 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
                   label: const Text('End Session'),
                 ),
                 
-                // COMPACT SOUND SECTION AT THE BOTTOM
                 const Spacer(),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20.0),
@@ -962,7 +1069,7 @@ class _SessionPageState extends State<SessionPage> with SingleTickerProviderStat
 }
 
 // ============================================================================
-// COMPACT SOUND CONTROL SECTION
+// SOUND SECTION (unchanged)
 // ============================================================================
 class SoundSection extends StatefulWidget {
   final String? preselectedSoundId;
@@ -1100,7 +1207,7 @@ class _SoundSectionState extends State<SoundSection> {
         if (mounted) setState(() => _isSoundPlaying = true);
       }
     } catch (_) {
-      _playSelectedSound(_currentSound); // Trigger fallback attempt
+      _playSelectedSound(_currentSound);
     }
   }
 
