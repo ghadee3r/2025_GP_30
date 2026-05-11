@@ -1,55 +1,30 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 // =============================================================================
-// THEME COLORS
+// NEW MINIMALIST THEME COLORS
 // =============================================================================
-const Color dfDeepTeal = Color(0xFF175B73); 
-const Color dfTealCyan = Color(0xFF287C85); 
-const Color dfLightSeafoam = Color(0xFF87ACA3); 
-const Color dfDeepBlue = Color(0xFF162893); 
-const Color dfNavyIndigo = Color(0xFF0C1446); 
+const Color dfTealCyan = Color(0xFF68C29D);
+const Color dfNavyIndigo = Color(0xFF1B2536);
+const Color primaryBackground = Color(0xFFF2F6F9);
+const Color secondaryTextGrey = Color(0xFF8B95A5);
+const Color errorIndicatorRed = Color(0xFFE57373);
 
-const Color primaryThemeColor = dfDeepBlue;      
-const Color accentThemeColor = dfTealCyan;       
-const Color lightestAccentColor = dfLightSeafoam; 
-
-const Color primaryBackground = Color(0xFFF7F7F7); 
-const Color cardBackground = Color(0xFFFFFFFF);  
-
-const Color primaryTextDark = dfNavyIndigo;      
-const Color secondaryTextGrey = Color(0xFF6B6B78); 
-
-const Color errorIndicatorRed = Color(0xFFE57373); 
+List<BoxShadow> get subtleShadow => [
+  BoxShadow(
+    color: dfNavyIndigo.withOpacity(0.04),
+    blurRadius: 20,
+    offset: const Offset(0, 8),
+  ),
+];
 
 // ========= Constants =========
 const String _rikazLogoPath = "assets/images/RikazLogo.png";
 final supabase = sb.Supabase.instance.client;
-
-// ========= Helpers =========
 final RegExp _emailRegex = RegExp(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$");
 
-void _showAlert(BuildContext context, String title, String message) {
-  showDialog(
-    context: context,
-    builder: (BuildContext context) {
-      return AlertDialog(
-        backgroundColor: cardBackground,
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: primaryTextDark)),
-        content: Text(message, style: const TextStyle(color: primaryTextDark)),
-        actions: <Widget>[
-          TextButton(
-            child: const Text("OK", style: TextStyle(color: dfDeepTeal)),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ],
-      );
-    },
-  );
-}
-
-// ========= Widget =========
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
 
@@ -63,13 +38,12 @@ class _SignupScreenState extends State<SignupScreen> {
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController(); 
 
-  // UX State: Track which fields have errors to change border color
-  bool _emailHasError = false;
-  bool _passwordHasError = false;
-  bool _confirmPasswordHasError = false;
-
-  // UX State: Specific error message strings
-  String _passwordErrorMessage = '';
+  // Inline Validation States
+  String? _nameError;
+  String? _emailError;
+  String? _passwordError;
+  String? _confirmPasswordError;
+  
   String _postSignupMessage = ''; 
   bool _isSuccessMessage = true; 
   bool _isSubmitting = false;
@@ -97,74 +71,92 @@ class _SignupScreenState extends State<SignupScreen> {
     });
   }
 
-  void _showVerifiedSuccessDialog() {
-    showDialog(
+  // --- PREMIUM BLURRED DIALOG (For Success & Checking Email) ---
+  void _showBlurDialog({required String title, required String message, required IconData icon, Color iconColor = dfNavyIndigo}) {
+    showGeneralDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: cardBackground,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          contentPadding: const EdgeInsets.all(24),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
+      barrierDismissible: true,
+      barrierLabel: '',
+      barrierColor: Colors.transparent, 
+      transitionDuration: const Duration(milliseconds: 400),
+      pageBuilder: (context, anim1, anim2) {
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Stack(
+            fit: StackFit.expand,
             children: [
-              const Icon(Icons.check_circle_rounded, color: accentThemeColor, size: 70),
-              const SizedBox(height: 20),
-              const Text("Account Verified!", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: primaryTextDark)),
-              const SizedBox(height: 12),
-              const Text("Your email has been successfully verified.\nPlease log in to continue.", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, color: secondaryTextGrey)),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop(); 
-                    Navigator.of(context).pushReplacementNamed('/login');
-                  },
-                  style: ElevatedButton.styleFrom(backgroundColor: dfDeepTeal, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                  child: const Text("Back to Login", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+                child: Container(color: dfNavyIndigo.withOpacity(0.3)),
+              ),
+              Center(
+                child: Container(
+                  width: MediaQuery.of(context).size.width * 0.85,
+                  padding: const EdgeInsets.all(32.0),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.95), 
+                    borderRadius: BorderRadius.circular(32),
+                    border: Border.all(color: Colors.white, width: 2),
+                    boxShadow: [BoxShadow(color: dfNavyIndigo.withOpacity(0.15), blurRadius: 40, spreadRadius: 5)],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(color: iconColor.withOpacity(0.1), shape: BoxShape.circle),
+                        child: Icon(icon, color: iconColor, size: 44),
+                      ),
+                      const SizedBox(height: 24),
+                      Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: dfNavyIndigo, letterSpacing: -0.5)),
+                      const SizedBox(height: 12),
+                      Text(message, textAlign: TextAlign.center, style: const TextStyle(color: secondaryTextGrey, fontSize: 15, height: 1.5)),
+                      const SizedBox(height: 36),
+                      SizedBox(
+                        width: double.infinity,
+                        child: _InteractivePill(
+                          onTap: () {
+                            Navigator.pop(context); 
+                            if (title == "Account Verified!") {
+                              Navigator.of(context).pushReplacementNamed('/login');
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            decoration: BoxDecoration(color: dfNavyIndigo, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: dfNavyIndigo.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))]),
+                            child: Center(child: Text(title == "Account Verified!" ? 'Back to Login' : 'OK', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 0.5))),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
           ),
         );
+      },
+      transitionBuilder: (context, anim, secondaryAnim, child) {
+        return Transform.scale(scale: Curves.easeOutBack.transform(anim.value), child: Opacity(opacity: anim.value, child: child));
       },
     );
   }
 
-  // ➕ NEW: Dialog to show when email is sent (replaces the low green text)
+  void _showVerifiedSuccessDialog() {
+    _showBlurDialog(
+      title: "Account Verified!", 
+      message: "Your email has been successfully verified.\nPlease log in to continue.", 
+      icon: Icons.check_circle_rounded, 
+      iconColor: dfTealCyan
+    );
+  }
+
   void _showEmailSentDialog(String email) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: cardBackground,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          contentPadding: const EdgeInsets.all(24),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.mark_email_read_outlined, color: dfDeepTeal, size: 70),
-              const SizedBox(height: 20),
-              const Text("Check Your Email", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: primaryTextDark)),
-              const SizedBox(height: 12),
-              Text("We have sent a verification link to:\n$email", textAlign: TextAlign.center, style: const TextStyle(fontSize: 16, color: secondaryTextGrey)),
-              const SizedBox(height: 8),
-              const Text("Please check your inbox (and spam) to activate your account.", textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: secondaryTextGrey)),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  style: ElevatedButton.styleFrom(backgroundColor: dfDeepTeal, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                  child: const Text("OK", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+    _showBlurDialog(
+      title: "Check Your Email", 
+      message: "We have sent a verification link to:\n$email\n\nPlease check your inbox (and spam) to activate your account.", 
+      icon: Icons.mark_email_read_rounded, 
+      iconColor: dfNavyIndigo
     );
   }
 
@@ -194,40 +186,49 @@ class _SignupScreenState extends State<SignupScreen> {
     final confirmPassword = _confirmPasswordController.text;
 
     setState(() {
-      _emailHasError = false;
-      _passwordHasError = false;
-      _confirmPasswordHasError = false;
-      _passwordErrorMessage = '';
+      _nameError = null;
+      _emailError = null;
+      _passwordError = null;
+      _confirmPasswordError = null;
       _postSignupMessage = '';
     });
 
-    if (name.isEmpty || email.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
-      _showAlert(context, "Missing Info", "Please fill in all fields.");
-      return;
+    bool hasValidationErrors = false;
+
+    if (name.isEmpty) {
+      _nameError = "Full name is required.";
+      hasValidationErrors = true;
     }
 
-    if (!_emailRegex.hasMatch(email)) {
-      setState(() => _emailHasError = true);
-      _showAlert(context, "Invalid Email", "Please enter a valid email address.");
-      return;
-    }
-    
-    if (password != confirmPassword) {
-      setState(() {
-        _passwordHasError = true;
-        _confirmPasswordHasError = true;
-        _passwordErrorMessage = "Passwords do not match.";
-      });
-      return;
+    if (email.isEmpty) {
+      _emailError = "Email address is required.";
+      hasValidationErrors = true;
+    } else if (!_emailRegex.hasMatch(email)) {
+      _emailError = "Please enter a valid email address.";
+      hasValidationErrors = true;
     }
 
-    String? requirementError = _validatePasswordRequirements(password);
-    if (requirementError != null) {
-      setState(() {
-        _passwordHasError = true;
-        _passwordErrorMessage = requirementError;
-      });
-      return;
+    if (password.isEmpty) {
+      _passwordError = "Password is required.";
+      hasValidationErrors = true;
+    } else {
+      String? requirementError = _validatePasswordRequirements(password);
+      if (requirementError != null) {
+        _passwordError = requirementError;
+        hasValidationErrors = true;
+      }
+    }
+
+    if (confirmPassword.isEmpty) {
+      _confirmPasswordError = "Please confirm your password.";
+      hasValidationErrors = true;
+    } else if (password != confirmPassword) {
+      _confirmPasswordError = "Passwords do not match.";
+      hasValidationErrors = true;
+    }
+
+    if (hasValidationErrors) {
+      return; 
     }
 
     setState(() => _isSubmitting = true);
@@ -242,23 +243,14 @@ class _SignupScreenState extends State<SignupScreen> {
 
       if (!mounted) return;
       
-      // --- IDENTITIES LOGIC ---
       if (response.user != null && (response.user!.identities == null || response.user!.identities!.isEmpty)) {
-        // User already exists
         setState(() {
-          _emailHasError = true; 
-          _postSignupMessage = "This email is already registered. Please log in instead.";
-          _isSuccessMessage = false; 
+          _emailError = "This email is already registered. Please log in.";
         });
-
       } else if (response.user != null) {
-        // Success
-        // 🌟 UPDATED: Instead of setting text, show the beautiful dialog
         _passwordController.clear();
         _confirmPasswordController.clear();
-        
         _showEmailSentDialog(email); 
-
       } else {
         setState(() {
           _postSignupMessage = 'An error occurred. Please try again.';
@@ -270,65 +262,104 @@ class _SignupScreenState extends State<SignupScreen> {
       if (!mounted) return;
       
       String errorMessage = e.message;
-      if (errorMessage.contains('User already registered') || 
-          errorMessage.contains('already has an account')) {
+      if (errorMessage.contains('User already registered') || errorMessage.contains('already has an account')) {
         setState(() {
-          _emailHasError = true; 
-          _postSignupMessage = "This email is in use. Please log in.";
-          _isSuccessMessage = false;
+          _emailError = "This email is already registered. Please log in.";
         });
       } else {
-         _showAlert(context, "Signup Error", errorMessage);
+         setState(() {
+           _postSignupMessage = errorMessage;
+           _isSuccessMessage = false;
+         });
       }
       
     } catch (e) {
       if (!mounted) return;
-      _showAlert(context, "Signup Error", "An unexpected error occurred.");
+      setState(() {
+        _postSignupMessage = "An unexpected network error occurred.";
+        _isSuccessMessage = false;
+      });
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
-  Widget _buildTextInput({
+  // --- GLASSMORPHIC INPUT FIELD WITH NO "UGLY LIGHT" BORDERS ---
+  Widget _buildGlassInput({
     required TextEditingController controller,
     required String hintText,
+    required IconData icon,
     required TextInputType keyboardType,
     bool obscureText = false,
-    bool autocorrect = true,
-    bool hasError = false, 
-    VoidCallback? onToggleVisibility, 
+    String? errorText,
+    VoidCallback? onToggleVisibility,
   }) {
-    return TextField(
-      controller: controller,
-      keyboardType: keyboardType,
-      obscureText: obscureText,
-      autocorrect: autocorrect,
-      cursorColor: dfDeepTeal,
-      style: const TextStyle(fontSize: 16, color: primaryTextDark),
-      decoration: InputDecoration(
-        hintText: hintText,
-        hintStyle: const TextStyle(color: secondaryTextGrey),
-        contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-        enabledBorder: UnderlineInputBorder(
-          borderSide: BorderSide(
-            color: hasError ? errorIndicatorRed : secondaryTextGrey, 
-            width: hasError ? 2.0 : 1.0
+    final bool hasError = errorText != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          margin: const EdgeInsets.only(bottom: 4), 
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.6), 
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white, width: 2), // ALWAYS WHITE
+            boxShadow: subtleShadow,
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: hasError ? errorIndicatorRed : secondaryTextGrey.withOpacity(0.7), size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  keyboardType: keyboardType,
+                  obscureText: obscureText,
+                  autocorrect: false,
+                  cursorColor: dfTealCyan,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: dfNavyIndigo),
+                  decoration: InputDecoration(
+                    hintText: hintText,
+                    hintStyle: TextStyle(color: secondaryTextGrey.withOpacity(0.6), fontWeight: FontWeight.w500),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                  ),
+                  onChanged: (val) {
+                    if (hasError) {
+                      setState(() {
+                        if (controller == _nameController) _nameError = null;
+                        if (controller == _emailController) _emailError = null;
+                        if (controller == _passwordController) _passwordError = null;
+                        if (controller == _confirmPasswordController) _confirmPasswordError = null;
+                      });
+                    }
+                  },
+                ),
+              ),
+              if (onToggleVisibility != null)
+                IconButton(
+                  icon: Icon(obscureText ? Icons.visibility_off_rounded : Icons.visibility_rounded, color: secondaryTextGrey.withOpacity(0.7), size: 20),
+                  onPressed: onToggleVisibility,
+                  splashColor: Colors.transparent,
+                  highlightColor: Colors.transparent,
+                ),
+            ],
           ),
         ),
-        focusedBorder: UnderlineInputBorder(
-          borderSide: BorderSide(
-            color: hasError ? errorIndicatorRed : dfDeepTeal, 
-            width: 2
+        AnimatedOpacity(
+          opacity: hasError ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 200),
+          child: Container(
+            height: 22, 
+            padding: const EdgeInsets.only(left: 16),
+            child: Text(errorText ?? '', style: const TextStyle(color: errorIndicatorRed, fontSize: 12, fontWeight: FontWeight.w600)),
           ),
         ),
-        suffixIcon: onToggleVisibility != null ? IconButton(
-          icon: Icon(
-            obscureText ? Icons.visibility : Icons.visibility_off,
-            color: hasError ? errorIndicatorRed : secondaryTextGrey,
-          ),
-          onPressed: onToggleVisibility,
-        ) : null,
-      ),
+      ],
     );
   }
 
@@ -336,120 +367,161 @@ class _SignupScreenState extends State<SignupScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: primaryBackground,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              Image.asset(_rikazLogoPath, height: 150, width: 150),
-              const SizedBox(height: 10),
+      body: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                colors: [Color(0xFFF4F7F9), Color(0xFFE5ECEF)],
+              )
+            ),
+          ),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 40.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Hero(
+                      tag: 'rikaz_logo',
+                      child: Image.asset(
+                        _rikazLogoPath, 
+                        height: 100, 
+                        width: 100,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
 
-              const Text(
-                'Create Account',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: primaryTextDark),
-              ),
-              const SizedBox(height: 24),
+                    const Text('Create Account', textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: dfNavyIndigo, letterSpacing: -0.5)),
+                    const SizedBox(height: 8),
+                    const Text('Join us and reclaim your depth.', textAlign: TextAlign.center, style: TextStyle(fontSize: 15, color: secondaryTextGrey)),
+                    const SizedBox(height: 40),
 
-              _buildTextInput(
-                controller: _nameController,
-                hintText: "Full Name",
-                keyboardType: TextInputType.text,
-              ),
-              const SizedBox(height: 12),
-              
-              _buildTextInput(
-                controller: _emailController,
-                hintText: "Email",
-                keyboardType: TextInputType.emailAddress,
-                autocorrect: false,
-                hasError: _emailHasError, 
-              ),
-              const SizedBox(height: 12),
-              
-              _buildTextInput(
-                controller: _passwordController,
-                hintText: "Password",
-                keyboardType: TextInputType.visiblePassword,
-                obscureText: _obscurePassword,
-                autocorrect: false,
-                hasError: _passwordHasError, 
-                onToggleVisibility: () => setState(() => _obscurePassword = !_obscurePassword),
-              ),
-              const SizedBox(height: 12),
-              
-              _buildTextInput(
-                controller: _confirmPasswordController,
-                hintText: "Confirm Password",
-                keyboardType: TextInputType.visiblePassword,
-                obscureText: _obscureConfirmPassword,
-                autocorrect: false,
-                hasError: _confirmPasswordHasError, 
-                onToggleVisibility: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
-              ),
+                    _buildGlassInput(
+                      controller: _nameController,
+                      hintText: "Full Name",
+                      icon: Icons.person_outline_rounded,
+                      keyboardType: TextInputType.text,
+                      errorText: _nameError,
+                    ),
+                    
+                    _buildGlassInput(
+                      controller: _emailController,
+                      hintText: "Email address",
+                      icon: Icons.email_outlined,
+                      keyboardType: TextInputType.emailAddress,
+                      errorText: _emailError, 
+                    ),
+                    
+                    _buildGlassInput(
+                      controller: _passwordController,
+                      hintText: "Password",
+                      icon: Icons.lock_outline_rounded,
+                      keyboardType: TextInputType.visiblePassword,
+                      obscureText: _obscurePassword,
+                      errorText: _passwordError, 
+                      onToggleVisibility: () => setState(() => _obscurePassword = !_obscurePassword),
+                    ),
+                    
+                    _buildGlassInput(
+                      controller: _confirmPasswordController,
+                      hintText: "Confirm Password",
+                      icon: Icons.lock_reset_rounded,
+                      keyboardType: TextInputType.visiblePassword,
+                      obscureText: _obscureConfirmPassword,
+                      errorText: _confirmPasswordError, 
+                      onToggleVisibility: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                    ),
 
-              if (_passwordErrorMessage.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.info_outline, color: errorIndicatorRed, size: 16),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          _passwordErrorMessage,
-                          style: const TextStyle(fontSize: 12, color: errorIndicatorRed, fontWeight: FontWeight.w500),
+                    const SizedBox(height: 16), 
+
+                    _InteractivePill(
+                      onTap: _isSubmitting ? () {} : _handleSignup,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        decoration: BoxDecoration(color: dfNavyIndigo, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: dfNavyIndigo.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))]),
+                        child: Center(
+                          child: _isSubmitting 
+                            ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                            : const Text("Sign Up", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
                         ),
                       ),
-                    ],
-                  ),
-                )
-              else 
-                const SizedBox(height: 24), 
-
-              ElevatedButton(
-                onPressed: _isSubmitting ? null : _handleSignup,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: dfDeepTeal,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-                child: Text(
-                  _isSubmitting ? "Creating..." : "Sign Up",
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // Only show this for ERRORS now. Success uses the Dialog.
-              if (_postSignupMessage.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 20),
-                  child: Text(
-                    _postSignupMessage,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14, 
-                      fontWeight: FontWeight.w500,
-                      color: _isSuccessMessage ? accentThemeColor : errorIndicatorRed, 
                     ),
-                  ),
-                ),
-                
-              GestureDetector(
-                onTap: _isSubmitting ? null : () => Navigator.of(context).pushReplacementNamed('/login'),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 10, horizontal: 20),
-                  child: Text(
-                    'Already have an account? Log in',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: primaryThemeColor, fontSize: 15),
-                  ),
+                    const SizedBox(height: 24),
+
+                    if (_postSignupMessage.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 20),
+                        child: Text(
+                          _postSignupMessage,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 13, 
+                            fontWeight: FontWeight.w600,
+                            color: _isSuccessMessage ? dfTealCyan : errorIndicatorRed, 
+                          ),
+                        ),
+                      ),
+                      
+                    GestureDetector(
+                      onTap: _isSubmitting ? null : () => Navigator.of(context).pushReplacementNamed('/login'),
+                      child: const Center(
+                        child: Text.rich(
+                          TextSpan(
+                            text: 'Already have an account? ',
+                            style: TextStyle(color: secondaryTextGrey, fontSize: 14),
+                            children: [
+                              TextSpan(text: 'Log in', style: TextStyle(color: dfTealCyan, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// REUSABLE INTERACTIVE SQUISH COMPONENT
+// =============================================================================
+class _InteractivePill extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+
+  const _InteractivePill({required this.child, required this.onTap});
+
+  @override
+  State<_InteractivePill> createState() => _InteractivePillState();
+}
+
+class _InteractivePillState extends State<_InteractivePill> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) {
+        setState(() => _isPressed = false);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _isPressed = false),
+      child: AnimatedScale(
+        scale: _isPressed ? 0.94 : 1.0,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOutCubic,
+        child: widget.child,
       ),
     );
   }

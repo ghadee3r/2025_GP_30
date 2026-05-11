@@ -1,26 +1,23 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 // =============================================================================
-// THEME COLORS
+// NEW MINIMALIST THEME COLORS
 // =============================================================================
-const Color dfDeepTeal = Color(0xFF175B73); 
-const Color dfTealCyan = Color(0xFF287C85); 
-const Color dfLightSeafoam = Color(0xFF87ACA3); 
-const Color dfDeepBlue = Color(0xFF162893); 
-const Color dfNavyIndigo = Color(0xFF0C1446); 
+const Color dfTealCyan = Color(0xFF68C29D);
+const Color dfNavyIndigo = Color(0xFF1B2536);
+const Color primaryBackground = Color(0xFFF2F6F9);
+const Color secondaryTextGrey = Color(0xFF8B95A5);
+const Color errorIndicatorRed = Color(0xFFE57373);
 
-const Color primaryThemeColor = dfDeepBlue;      
-const Color accentThemeColor = dfTealCyan;       
-const Color lightestAccentColor = dfLightSeafoam; 
-
-const Color primaryBackground = Color(0xFFF7F7F7); 
-const Color cardBackground = Color(0xFFFFFFFF);  
-
-const Color primaryTextDark = dfNavyIndigo;      
-const Color secondaryTextGrey = Color(0xFF6B6B78); 
-
-const Color errorIndicatorRed = Color(0xFFE57373); 
+List<BoxShadow> get subtleShadow => [
+  BoxShadow(
+    color: dfNavyIndigo.withOpacity(0.04),
+    blurRadius: 20,
+    offset: const Offset(0, 8),
+  ),
+];
 
 final supabase = sb.Supabase.instance.client;
 
@@ -41,10 +38,9 @@ class _NewPasswordState extends State<NewPassword> {
   String? _currentUserEmail;
   bool _sessionChecked = false;
 
-  // UX State for validation errors
-  bool _passwordHasError = false;
-  bool _confirmPasswordHasError = false;
-  String _validationErrorMessage = '';
+  // Inline Validation States
+  String? _passwordError;
+  String? _confirmPasswordError;
 
   @override
   void initState() {
@@ -57,77 +53,142 @@ class _NewPasswordState extends State<NewPassword> {
     final session = supabase.auth.currentSession;
     
     if (session != null) {
-      _currentUserEmail = session.user?.email;
+      _currentUserEmail = session.user.email;
     }
     
-    setState(() {
-      _sessionChecked = true;
-    });
+    if (mounted) {
+      setState(() {
+        _sessionChecked = true;
+      });
+    }
   }
 
-  void _showErrorDialog(String title, String message) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: cardBackground,
-          title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: primaryTextDark)),
-          content: Text(message, style: const TextStyle(color: primaryTextDark)),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text("OK", style: TextStyle(color: dfDeepTeal)),
-            ),
-          ],
-        ),
-      );
-    });
-  }
-
-  void _showSuccessDialog(String message) {
-    showDialog(
+  // --- MINIMALIST BLURRED SPRING DIALOG ---
+  Future<bool?> _showSpringDialog({
+    required String title, 
+    required String message, 
+    bool isError = true, 
+    String confirmText = 'OK', 
+    String? cancelText,
+    IconData? customIcon,
+  }) {
+    return showGeneralDialog<bool>(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: cardBackground,
-        title: const Text('Success', style: TextStyle(fontWeight: FontWeight.bold, color: primaryTextDark)),
-        content: Text(message, style: const TextStyle(color: primaryTextDark)),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pushNamedAndRemoveUntil('/tabs', (route) => false);
-            },
-            child: const Text("OK", style: TextStyle(color: dfDeepTeal)),
+      barrierDismissible: true,
+      barrierLabel: '',
+      barrierColor: Colors.transparent, // Background handled by BackdropFilter
+      transitionDuration: const Duration(milliseconds: 400),
+      pageBuilder: (context, anim1, anim2) {
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Stronger Frosted Glass Background Blur
+              BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+                child: Container(
+                  color: dfNavyIndigo.withOpacity(0.2),
+                ),
+              ),
+              Center(
+                child: Container(
+                  width: MediaQuery.of(context).size.width * 0.85,
+                  padding: const EdgeInsets.all(32.0),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(32),
+                    boxShadow: [
+                      BoxShadow(color: dfNavyIndigo.withOpacity(0.15), blurRadius: 40, spreadRadius: 5),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Clean Icon (No ugly tinted background)
+                      Icon(
+                        customIcon ?? (isError ? Icons.error_outline_rounded : Icons.check_circle_outline_rounded), 
+                        color: isError ? errorIndicatorRed : dfNavyIndigo, 
+                        size: 64
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        title, 
+                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: dfNavyIndigo, letterSpacing: -0.5), 
+                        textAlign: TextAlign.center
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        message, 
+                        textAlign: TextAlign.center, 
+                        style: const TextStyle(color: secondaryTextGrey, fontSize: 15, height: 1.5)
+                      ),
+                      const SizedBox(height: 36),
+                      Row(
+                        children: [
+                          if (cancelText != null)
+                            Expanded(
+                              child: _InteractivePill(
+                                onTap: () => Navigator.pop(context, false),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 18),
+                                  decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(20)),
+                                  child: Center(child: Text(cancelText, style: const TextStyle(color: secondaryTextGrey, fontWeight: FontWeight.bold, fontSize: 16))),
+                                ),
+                              ),
+                            ),
+                          if (cancelText != null) const SizedBox(width: 16),
+                          Expanded(
+                            child: _InteractivePill(
+                              onTap: () => Navigator.pop(context, true),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 18),
+                                decoration: BoxDecoration(
+                                  color: dfNavyIndigo, // Always Navy
+                                  borderRadius: BorderRadius.circular(20), 
+                                  boxShadow: [BoxShadow(color: dfNavyIndigo.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))]
+                                ),
+                                child: Center(child: Text(confirmText, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 0.5))),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
+      transitionBuilder: (context, anim, secondaryAnim, child) {
+        return Transform.scale(scale: Curves.easeOutBack.transform(anim.value), child: Opacity(opacity: anim.value, child: child));
+      },
     );
   }
 
-  void _goBackToLogin() {
+  void _showSuccessDialog(String message) async {
+    await _showSpringDialog(title: 'Success', message: message, isError: false, confirmText: 'Continue');
+    if (mounted) {
+      Navigator.of(context).pushNamedAndRemoveUntil('/tabs', (route) => false);
+    }
+  }
+
+  void _goBackToLogin() async {
     if (_newPasswordController.text.isNotEmpty || _confirmPasswordController.text.isNotEmpty) {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: cardBackground,
-          title: const Text('Cancel Reset?', style: TextStyle(fontWeight: FontWeight.bold, color: primaryTextDark)),
-          content: const Text('Are you sure you want to cancel? Your progress will be lost.', style: TextStyle(color: primaryTextDark)),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Continue', style: TextStyle(color: secondaryTextGrey)),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _navigateToLogin();
-              },
-              child: const Text('Cancel', style: TextStyle(color: dfDeepTeal)),
-            ),
-          ],
-        ),
+      final shouldCancel = await _showSpringDialog(
+        title: 'Cancel Reset?',
+        message: 'Are you sure you want to cancel? Your progress will be lost.',
+        isError: true, 
+        confirmText: 'Cancel Reset',
+        cancelText: 'Continue',
+        customIcon: Icons.warning_amber_rounded,
       );
+      
+      if (shouldCancel == true) {
+        _navigateToLogin();
+      }
     } else {
       _navigateToLogin();
     }
@@ -137,7 +198,6 @@ class _NewPasswordState extends State<NewPassword> {
     Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
   }
 
-  // Helper to validate password
   String? _validatePasswordRequirements(String password) {
     if (password.length < 8) return "Must be at least 8 characters.";
     if (!RegExp(r'[A-Z]').hasMatch(password)) return "Must contain an uppercase letter.";
@@ -150,41 +210,41 @@ class _NewPasswordState extends State<NewPassword> {
   Future<void> _updatePassword() async {
     final session = supabase.auth.currentSession;
     if (session == null) {
-      _showErrorDialog("Session Error", "No valid session found. Please request a new link.");
+      _showSpringDialog(title: "Session Error", message: "No valid session found. Please request a new link.", isError: true);
       return;
     }
 
     final newPassword = _newPasswordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
 
-    // Reset errors
     setState(() {
-      _passwordHasError = false;
-      _confirmPasswordHasError = false;
-      _validationErrorMessage = '';
+      _passwordError = null;
+      _confirmPasswordError = null;
     });
 
-    if (newPassword.isEmpty || confirmPassword.isEmpty) {
-      _showErrorDialog("Missing Info", "Please fill in both password fields.");
-      return;
+    bool hasValidationErrors = false;
+
+    if (newPassword.isEmpty) {
+      _passwordError = "Password is required.";
+      hasValidationErrors = true;
+    } else {
+      String? reqError = _validatePasswordRequirements(newPassword);
+      if (reqError != null) {
+        _passwordError = reqError;
+        hasValidationErrors = true;
+      }
     }
 
-    if (newPassword != confirmPassword) {
-      setState(() {
-        _passwordHasError = true;
-        _confirmPasswordHasError = true;
-        _validationErrorMessage = "Passwords do not match.";
-      });
-      return;
+    if (confirmPassword.isEmpty) {
+      _confirmPasswordError = "Please confirm your password.";
+      hasValidationErrors = true;
+    } else if (newPassword != confirmPassword) {
+      _confirmPasswordError = "Passwords do not match.";
+      hasValidationErrors = true;
     }
 
-    // Check requirements
-    String? requirementError = _validatePasswordRequirements(newPassword);
-    if (requirementError != null) {
-      setState(() {
-        _passwordHasError = true;
-        _validationErrorMessage = requirementError;
-      });
+    if (hasValidationErrors) {
+      setState(() {});
       return;
     }
 
@@ -202,15 +262,16 @@ class _NewPasswordState extends State<NewPassword> {
     } on sb.AuthException catch (e) {
       if (!mounted) return;
       
-      if (e.message.contains('password should be different') || 
-          e.message.contains('same as old')) {
-        _showErrorDialog("Password Error", "Please choose a different password from your current one.");
+      if (e.message.contains('password should be different') || e.message.contains('same as old')) {
+        setState(() {
+          _passwordError = "Please choose a different password from your current one.";
+        });
       } else {
-        _showErrorDialog("Update Error", "Error updating password: ${e.message}");
+        _showSpringDialog(title: "Update Error", message: e.message, isError: true);
       }
     } catch (e) {
       if (!mounted) return;
-      _showErrorDialog("Update Error", "An unexpected error occurred.");
+      _showSpringDialog(title: "Update Error", message: "An unexpected error occurred.", isError: true);
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -218,42 +279,77 @@ class _NewPasswordState extends State<NewPassword> {
     }
   }
 
-  Widget _buildTextInput({
+  // --- GLASSMORPHIC INPUT FIELD WITH NO RED BORDERS ---
+  Widget _buildGlassInput({
     required TextEditingController controller,
     required String hintText,
+    required IconData icon,
     required bool obscureText,
     required VoidCallback onToggleVisibility,
-    bool hasError = false,
+    String? errorText,
   }) {
-    return TextField(
-      controller: controller,
-      obscureText: obscureText,
-      cursorColor: dfDeepTeal,
-      style: const TextStyle(fontSize: 16, color: primaryTextDark),
-      decoration: InputDecoration(
-        hintText: hintText,
-        hintStyle: const TextStyle(color: secondaryTextGrey),
-        contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-        enabledBorder: UnderlineInputBorder(
-          borderSide: BorderSide(
-            color: hasError ? errorIndicatorRed : secondaryTextGrey,
-            width: hasError ? 2.0 : 1.0,
+    final bool hasError = errorText != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          margin: const EdgeInsets.only(bottom: 4), 
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.6), 
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white, width: 2), 
+            boxShadow: subtleShadow,
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: hasError ? errorIndicatorRed : secondaryTextGrey.withOpacity(0.7), size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  obscureText: obscureText,
+                  autocorrect: false,
+                  cursorColor: dfTealCyan,
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: dfNavyIndigo),
+                  decoration: InputDecoration(
+                    hintText: hintText,
+                    hintStyle: TextStyle(color: secondaryTextGrey.withOpacity(0.6), fontWeight: FontWeight.w500),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                  ),
+                  onChanged: (val) {
+                    if (hasError) {
+                      setState(() {
+                        if (controller == _newPasswordController) _passwordError = null;
+                        if (controller == _confirmPasswordController) _confirmPasswordError = null;
+                      });
+                    }
+                  },
+                ),
+              ),
+              IconButton(
+                icon: Icon(obscureText ? Icons.visibility_off_rounded : Icons.visibility_rounded, color: secondaryTextGrey.withOpacity(0.7), size: 20),
+                onPressed: onToggleVisibility,
+                splashColor: Colors.transparent,
+                highlightColor: Colors.transparent,
+              ),
+            ],
           ),
         ),
-        focusedBorder: UnderlineInputBorder(
-          borderSide: BorderSide(
-            color: hasError ? errorIndicatorRed : dfDeepTeal,
-            width: 2,
+        AnimatedOpacity(
+          opacity: hasError ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 200),
+          child: Container(
+            height: 22, 
+            padding: const EdgeInsets.only(left: 16),
+            child: Text(errorText ?? '', style: const TextStyle(color: errorIndicatorRed, fontSize: 12, fontWeight: FontWeight.w600)),
           ),
         ),
-        suffixIcon: IconButton(
-          icon: Icon(
-            obscureText ? Icons.visibility : Icons.visibility_off,
-            color: hasError ? errorIndicatorRed : secondaryTextGrey,
-          ),
-          onPressed: onToggleVisibility,
-        ),
-      ),
+      ],
     );
   }
 
@@ -273,12 +369,9 @@ class _NewPasswordState extends State<NewPassword> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(color: dfDeepTeal),
+              CircularProgressIndicator(color: dfTealCyan),
               SizedBox(height: 20),
-              Text(
-                'Setting up password reset...',
-                style: TextStyle(fontSize: 16, color: secondaryTextGrey),
-              ),
+              Text('Verifying secure session...', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: secondaryTextGrey)),
             ],
           ),
         ),
@@ -287,129 +380,155 @@ class _NewPasswordState extends State<NewPassword> {
 
     return Scaffold(
       backgroundColor: primaryBackground,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              Align(
-                alignment: Alignment.centerLeft,
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_back, color: dfDeepTeal),
-                  onPressed: _goBackToLogin,
+      body: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                colors: [Color(0xFFF4F7F9), Color(0xFFE5ECEF)],
+              )
+            ),
+          ),
+
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 16,
+            left: 20,
+            child: _InteractivePill(
+              onTap: _goBackToLogin,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.8),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 1.5),
+                  boxShadow: subtleShadow,
                 ),
+                child: const Icon(Icons.arrow_back_rounded, color: dfNavyIndigo, size: 24),
               ),
-              
-              const SizedBox(height: 20),
+            ),
+          ),
 
-              Image.asset(
-                "assets/images/RikazLogo.png",
-                height: 120,
-                width: 120,
-              ),
-              const SizedBox(height: 16),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 40.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Hero(
+                      tag: 'rikaz_logo',
+                      child: Image.asset(
+                        "assets/images/RikazLogo.png",
+                        height: 120,
+                        width: 120,
+                      ),
+                    ),
+                    const SizedBox(height: 32),
 
-              const Text(
-                'Create New Password',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: primaryTextDark,
-                ),
-              ),
-              
-              Text(
-                _currentUserEmail != null 
-                  ? 'Enter a new password for $_currentUserEmail'
-                  : 'Enter a new, secure password for your account',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: secondaryTextGrey,
-                ),
-              ),
-              const SizedBox(height: 32),
+                    const Text('New Password', textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: dfNavyIndigo, letterSpacing: -0.5)),
+                    const SizedBox(height: 12),
+                    Text(
+                      _currentUserEmail != null 
+                        ? 'Enter a new password for $_currentUserEmail'
+                        : 'Enter a new, secure password for your account',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 14, color: secondaryTextGrey, height: 1.4),
+                    ),
+                    const SizedBox(height: 40),
 
-              _buildTextInput(
-                controller: _newPasswordController,
-                hintText: "New Password",
-                obscureText: _obscureNewPassword,
-                hasError: _passwordHasError,
-                onToggleVisibility: () {
-                  setState(() => _obscureNewPassword = !_obscureNewPassword);
-                },
-              ),
-              const SizedBox(height: 16),
-              
-              _buildTextInput(
-                controller: _confirmPasswordController,
-                hintText: "Confirm Password",
-                obscureText: _obscureConfirmPassword,
-                hasError: _confirmPasswordHasError,
-                onToggleVisibility: () {
-                  setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
-                },
-              ),
+                    _buildGlassInput(
+                      controller: _newPasswordController,
+                      hintText: "New Password",
+                      icon: Icons.lock_outline_rounded,
+                      obscureText: _obscureNewPassword,
+                      errorText: _passwordError,
+                      onToggleVisibility: () => setState(() => _obscureNewPassword = !_obscureNewPassword),
+                    ),
+                    
+                    _buildGlassInput(
+                      controller: _confirmPasswordController,
+                      hintText: "Confirm Password",
+                      icon: Icons.lock_reset_rounded,
+                      obscureText: _obscureConfirmPassword,
+                      errorText: _confirmPasswordError,
+                      onToggleVisibility: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                    ),
 
-              if (_validationErrorMessage.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.info_outline, color: errorIndicatorRed, size: 16),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          _validationErrorMessage,
-                          style: const TextStyle(fontSize: 12, color: errorIndicatorRed, fontWeight: FontWeight.w500),
+                    const SizedBox(height: 16),
+
+                    _InteractivePill(
+                      onTap: _isLoading ? () {} : _updatePassword,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        decoration: BoxDecoration(color: dfNavyIndigo, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: dfNavyIndigo.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))]),
+                        child: Center(
+                          child: _isLoading 
+                            ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+                            : const Text("Update Password", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
                         ),
                       ),
-                    ],
-                  ),
-                ),
+                    ),
+                    
+                    const SizedBox(height: 24),
 
-              const SizedBox(height: 32),
-
-              ElevatedButton(
-                onPressed: _isLoading ? null : _updatePassword,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: dfDeepTeal,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8.0),
-                  ),
-                  elevation: 5,
-                ),
-                child: Text(
-                  _isLoading ? "Updating..." : "Update Password",
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                    if (_currentUserEmail == null)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: Colors.orange.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline_rounded, color: Colors.orange.shade700, size: 20),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text('Make sure you clicked the secure reset link directly from your email.', style: TextStyle(fontSize: 12, color: Colors.orange.shade800, fontWeight: FontWeight.w500, height: 1.4)),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 20),
-
-              if (_currentUserEmail == null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Text(
-                    'Note: Make sure you clicked the reset link from your email.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.orange[700],
-                    ),
-                  ),
-                ),
-
-             
-            ],
+            ),
           ),
-        ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// REUSABLE INTERACTIVE SQUISH COMPONENT
+// =============================================================================
+class _InteractivePill extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+
+  const _InteractivePill({required this.child, required this.onTap});
+
+  @override
+  State<_InteractivePill> createState() => _InteractivePillState();
+}
+
+class _InteractivePillState extends State<_InteractivePill> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) {
+        setState(() => _isPressed = false);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _isPressed = false),
+      child: AnimatedScale(
+        scale: _isPressed ? 0.94 : 1.0,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOutCubic,
+        child: widget.child,
       ),
     );
   }
