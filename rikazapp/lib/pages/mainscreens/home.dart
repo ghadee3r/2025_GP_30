@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'dart:async';
-import 'package:rikazapp/pages/subscreens/SetSession.dart';
+import 'dart:ui';
 
 enum ScheduleView { all, rikaz }
 enum CalendarFormatView { list, month }
@@ -57,6 +57,9 @@ const List<String> _scopes = <String>[
   'email',
 ];
 
+// =============================================================================
+// CALENDAR CLIENT
+// =============================================================================
 class CalendarClient {
   final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: _scopes);
   calendar.CalendarApi? calendarApi;
@@ -288,6 +291,10 @@ class CalendarClient {
     }
   }
 }
+
+// =============================================================================
+// MAIN HOME PAGE
+// =============================================================================
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
   @override
@@ -403,9 +410,17 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
 
   void _filterEvents() {
     List<calendar.Event> sourceEvents = _isCalendarConnected ? _events.toList() : [];
+    
     sourceEvents = sourceEvents.where((e) {
       final start = e.start?.dateTime?.toLocal() ?? e.start?.date;
-      return start != null && isSameDay(start, _selectedDay);
+      if (start == null) return false;
+      
+      if (_calendarFormatView == CalendarFormatView.month) {
+        return isSameDay(start, _selectedDay);
+      } else {
+        final endRange = _selectedDay.add(const Duration(days: 7));
+        return (isSameDay(start, _selectedDay) || start.isAfter(_selectedDay)) && start.isBefore(endRange);
+      }
     }).toList();
 
     if (_scheduleView == ScheduleView.rikaz) {
@@ -467,7 +482,16 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
                 children: [
                   Expanded(child: _InteractivePill(onTap: () => Navigator.pop(context, false), child: Container(padding: const EdgeInsets.symmetric(vertical: 16), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(16)), child: const Center(child: Text('Cancel', style: TextStyle(color: secondaryTextGrey, fontWeight: FontWeight.w600, fontSize: 15)))))),
                   const SizedBox(width: 16),
-                  Expanded(child: _InteractivePill(onTap: () => Navigator.pop(context, true), child: Container(padding: const EdgeInsets.symmetric(vertical: 16), decoration: BoxDecoration(color: errorIndicatorRed, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: errorIndicatorRed.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))]), child: const Center(child: Text('Delete', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15)))))),
+                  Expanded(
+                    child: _InteractivePill(
+                      onTap: () => Navigator.pop(context, true), 
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 16), 
+                        decoration: BoxDecoration(color: errorIndicatorRed, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: errorIndicatorRed.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))]), 
+                        child: const Center(child: Text('Delete', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)))
+                      )
+                    )
+                  ),
                 ],
               ),
             ],
@@ -530,10 +554,57 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
     _filterEvents();
   }
 
+  // --- Disconnect Confirmation Dialog ---
+  Future<void> _promptDisconnect() async {
+    final confirm = await _showAnimatedDialog<bool>(
+      child: Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
+        child: Padding(
+          padding: const EdgeInsets.all(28.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: errorIndicatorRed.withOpacity(0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.link_off_rounded, color: errorIndicatorRed, size: 36),
+              ),
+              const SizedBox(height: 20),
+              const Text('Disconnect Calendar?', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: dfNavyIndigo, letterSpacing: -0.5)),
+              const SizedBox(height: 12),
+              const Text("You will no longer see your Google Calendar events in Rikaz.", textAlign: TextAlign.center, style: TextStyle(color: secondaryTextGrey, fontSize: 14, height: 1.4)),
+              const SizedBox(height: 32),
+              Row(
+                children: [
+                  Expanded(child: _InteractivePill(onTap: () => Navigator.pop(context, false), child: Container(padding: const EdgeInsets.symmetric(vertical: 16), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(16)), child: const Center(child: Text('Cancel', style: TextStyle(color: secondaryTextGrey, fontWeight: FontWeight.w600, fontSize: 15)))))),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _InteractivePill(
+                      onTap: () => Navigator.pop(context, true), 
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 16), 
+                        decoration: BoxDecoration(color: errorIndicatorRed, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: errorIndicatorRed.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))]), 
+                        child: const Center(child: Text('Disconnect', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)))
+                      )
+                    )
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (confirm == true) {
+      _handleCalendarSignOut();
+    }
+  }
+
   void handleSetSession() {
     if (selectedModeIndex == null) return;
-    final initialMode = selectedModeIndex == 0 ? SessionMode.pomodoro : SessionMode.custom;
-    Navigator.of(context).pushNamed('/SetSession', arguments: initialMode);
+    Navigator.of(context).pushNamed('/SetSession');
   }
 
   void _showSnackbar(String message, Color color) {
@@ -604,8 +675,19 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
     final uniqueImportanceKeys = eventsOnDay.map((e) => e.extendedProperties?.private?['importance'] ?? 'Default').toSet();
     return uniqueImportanceKeys.map((key) => importanceColors[key] ?? importanceColors['Default']!).toList();
   }
-  Widget _buildGreetingHeader() {
+  
+Widget _buildGreetingHeader() {
     String dateStr = DateFormat('EEE, MMM d').format(DateTime.now()).toUpperCase();
+    
+    // Determine the time of day
+    final hour = DateTime.now().hour;
+    String greeting = 'Good morning';
+    if (hour >= 12 && hour < 17) {
+      greeting = 'Good afternoon';
+    } else if (hour >= 17) {
+      greeting = 'Good evening';
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
       child: Column(
@@ -613,10 +695,13 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
         children: [
           Text(dateStr, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: secondaryTextGrey, letterSpacing: 1.5)),
           const SizedBox(height: 8),
+          
+          // ADDED THE USER'S NAME HERE
           Text(
-            DateTime.now().hour < 12 ? 'Good morning' : (DateTime.now().hour < 17 ? 'Good afternoon' : 'Good evening'),
-            style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w600, color: dfNavyIndigo, letterSpacing: -0.5),
+            '$greeting, $_userName', 
+            style: const TextStyle(fontSize: 30, fontWeight: FontWeight.normal, color: dfNavyIndigo, letterSpacing: -0.5),
           ),
+          
           const SizedBox(height: 4),
           const Text('Reclaim your depth.', style: TextStyle(fontSize: 15, color: secondaryTextGrey, fontWeight: FontWeight.w400)),
         ],
@@ -786,7 +871,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
         ),
       );
     }
-    return Container(decoration: BoxDecoration(color: Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(24)), child: Row(mainAxisSize: MainAxisSize.min, children: [textTab(ScheduleView.all, 'All Calendar'), textTab(ScheduleView.rikaz, 'Rikaz Only')]));
+    return Container(decoration: BoxDecoration(color: Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(24)), child: Row(mainAxisSize: MainAxisSize.min, children: [textTab(ScheduleView.all, 'All Calendar'), textTab(ScheduleView.rikaz, 'Rikaz Sessions')]));
   }
 
   Widget _buildMinimalAddButton() {
@@ -840,8 +925,15 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
         SizedBox(height: screenHeight * 0.03),
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [_buildScheduleToggle(), _buildMinimalAddButton()]),
         SizedBox(height: screenHeight * 0.02),
+        
+        if (_isCalendarConnected)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 12.0),
+            child: Text('Upcoming Sessions', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: dfNavyIndigo)),
+          ),
+        
         _displayedEvents.isEmpty
-          ? Center(child: Padding(padding: EdgeInsets.symmetric(vertical: screenHeight * 0.03), child: const Text('No sessions found for selected date.', style: TextStyle(fontStyle: FontStyle.italic, color: secondaryTextGrey, fontSize: 14))))
+          ? Center(child: Padding(padding: EdgeInsets.symmetric(vertical: screenHeight * 0.03), child: const Text('No sessions found for the next 7 days.', style: TextStyle(fontStyle: FontStyle.italic, color: secondaryTextGrey, fontSize: 14))))
           : ListView.builder(physics: const NeverScrollableScrollPhysics(), shrinkWrap: true, itemCount: _displayedEvents.length, itemBuilder: (context, index) { final event = _displayedEvents[index]; final startTime = event.start?.dateTime?.toLocal() ?? event.start?.date; final endTime = event.end?.dateTime?.toLocal() ?? event.end?.date; if (startTime == null) return const SizedBox.shrink(); return _buildSessionCard(event: event, color: _getEventColor(event), startTime: startTime, endTime: endTime); }),
       ],
     );
@@ -864,7 +956,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
                   children: [
                     Text(event.summary ?? 'Untitled Session', style: const TextStyle(fontWeight: FontWeight.w600, color: dfNavyIndigo, fontSize: 15), overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 4),
-                    Text(endTime != null ? '${DateFormat('h:mm a').format(startTime)} - ${DateFormat('h:mm a').format(endTime)}' : DateFormat('MMM d, yyyy').format(startTime), style: const TextStyle(color: secondaryTextGrey, fontSize: 12, fontWeight: FontWeight.w500)),
+                    Text(
+                      endTime != null 
+                        ? '${DateFormat('EEE, MMM d').format(startTime)}  •  ${DateFormat('h:mm a').format(startTime)} - ${DateFormat('h:mm a').format(endTime)}' 
+                        : '${DateFormat('EEE, MMM d').format(startTime)}  •  ${DateFormat('h:mm a').format(startTime)}', 
+                      style: const TextStyle(color: secondaryTextGrey, fontSize: 12, fontWeight: FontWeight.w500)
+                    ),
                   ],
                 ),
               ),
@@ -877,18 +974,62 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
     );
   }
 
+  // --- CONNECT/DISCONNECT GOOGLE CALENDAR PANEL ---
   Widget _buildGoogleConnectPanel() {
     final isConn = _isCalendarConnected;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(color: Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.4), 
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(children: [Icon(isConn ? Icons.check_circle : Icons.cloud_off, color: isConn ? primaryThemeColor : secondaryTextGrey, size: 16), const SizedBox(width: 8), Text(isConn ? 'Calendar Sync Active' : 'Calendar Disconnected', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: isConn ? dfNavyIndigo : secondaryTextGrey))]),
+          Expanded(
+            child: Row(
+              children: [
+                Icon(
+                  isConn ? Icons.calendar_today_rounded : Icons.event_busy_rounded, 
+                  color: isConn ? primaryThemeColor : secondaryTextGrey, 
+                  size: 20
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    isConn ? 'Google Calendar Connected' : 'Google Calendar Disconnected', 
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: dfNavyIndigo), 
+                    overflow: TextOverflow.ellipsis
+                  )
+                ),
+              ]
+            ),
+          ),
+          const SizedBox(width: 8),
           _InteractivePill(
-            onTap: _isSigningIn ? () {} : (isConn ? _handleCalendarSignOut : _handleCalendarSignin),
-            child: _isSigningIn ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: primaryThemeColor)) : Text(isConn ? 'Disconnect' : 'Connect', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isConn ? secondaryTextGrey : primaryThemeColor)),
+            onTap: _isSigningIn ? () {} : (isConn ? _promptDisconnect : _handleCalendarSignin),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.6), 
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isConn ? errorIndicatorRed.withOpacity(0.8) : dfTealCyan, 
+                  width: 1.5
+                ),
+                boxShadow: subtleShadow,
+              ),
+              child: _isSigningIn 
+                ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: isConn ? errorIndicatorRed : dfTealCyan)) 
+                : Text(
+                    isConn ? 'Disconnect' : 'Connect', 
+                    style: TextStyle(
+                      fontSize: 12, 
+                      fontWeight: FontWeight.w700, 
+                      color: isConn ? errorIndicatorRed : dfTealCyan
+                    )
+                  ),
+            ),
           ),
         ],
       ),
@@ -951,7 +1092,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
           SafeArea(
             bottom: false,
             child: SingleChildScrollView(
-              padding: const EdgeInsets.only(bottom: 100), // Adjusted for floating nav bar
+              padding: const EdgeInsets.only(bottom: 100), 
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -973,6 +1114,11 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
     );
   }
 }
+
+// =============================================================================
+// HELPER WIDGETS
+// =============================================================================
+
 class _DateRibbon extends StatefulWidget {
   final DateTime selectedDay;
   final ValueChanged<DateTime> onDaySelected;
@@ -1070,7 +1216,6 @@ class _EventManagementOverlayState extends State<_EventManagementOverlay> {
   bool _isFormDirty = false;
   String? _masterEventId;
 
-  // Inline Validation States
   String? _titleError;
   String? _timeError;
   String? _dateError;
@@ -1113,7 +1258,6 @@ class _EventManagementOverlayState extends State<_EventManagementOverlay> {
 
   DateTime _combineDateTime(DateTime date, TimeOfDay time) => DateTime(date.year, date.month, date.day, time.hour, time.minute);
 
-  // Still used for Conflict Detection warning
   Future<bool?> _showMinimalDialog({required String title, required String content, String? confirmText, String? cancelText, bool isError = false}) {
     return showGeneralDialog<bool>(
       context: context,
@@ -1132,8 +1276,8 @@ class _EventManagementOverlayState extends State<_EventManagementOverlay> {
               children: [
                 Container(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: (isError ? errorIndicatorRed : dfTealCyan).withOpacity(0.1), shape: BoxShape.circle),
-                  child: Icon(isError ? Icons.error_outline_rounded : Icons.warning_amber_rounded, color: isError ? errorIndicatorRed : dfTealCyan, size: 36),
+                  decoration: BoxDecoration(color: (isError ? errorIndicatorRed : dfNavyIndigo).withOpacity(0.1), shape: BoxShape.circle),
+                  child: Icon(isError ? Icons.error_outline_rounded : Icons.warning_amber_rounded, color: isError ? errorIndicatorRed : dfNavyIndigo, size: 36),
                 ),
                 const SizedBox(height: 20),
                 Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: dfNavyIndigo, letterSpacing: -0.5)),
@@ -1145,7 +1289,20 @@ class _EventManagementOverlayState extends State<_EventManagementOverlay> {
                     if (cancelText != null)
                       Expanded(child: _InteractivePill(onTap: () => Navigator.pop(context, false), child: Container(padding: const EdgeInsets.symmetric(vertical: 16), decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(16)), child: Center(child: Text(cancelText, style: const TextStyle(color: secondaryTextGrey, fontWeight: FontWeight.w600, fontSize: 15)))))),
                     if (cancelText != null) const SizedBox(width: 16),
-                    Expanded(child: _InteractivePill(onTap: () => Navigator.pop(context, true), child: Container(padding: const EdgeInsets.symmetric(vertical: 16), decoration: BoxDecoration(color: isError ? errorIndicatorRed : dfTealCyan, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: (isError ? errorIndicatorRed : dfTealCyan).withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))]), child: Center(child: Text(confirmText ?? 'OK', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15)))))),
+                    Expanded(
+                      child: _InteractivePill(
+                        onTap: () => Navigator.pop(context, true), 
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 16), 
+                          decoration: BoxDecoration(
+                            color: isError ? errorIndicatorRed : dfNavyIndigo, 
+                            borderRadius: BorderRadius.circular(16), 
+                            boxShadow: [BoxShadow(color: (isError ? errorIndicatorRed : dfNavyIndigo).withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))]
+                          ), 
+                          child: Center(child: Text(confirmText ?? 'OK', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15)))
+                        )
+                      )
+                    ),
                   ],
                 ),
               ],
@@ -1162,7 +1319,6 @@ class _EventManagementOverlayState extends State<_EventManagementOverlay> {
   Future<void> _handleSave() async {
     FocusScope.of(context).unfocus();
     
-    // Clear old errors
     setState(() {
       _titleError = null;
       _timeError = null;
@@ -1178,10 +1334,15 @@ class _EventManagementOverlayState extends State<_EventManagementOverlay> {
     }
 
     final startDateTime = _combineDateTime(_startDate, _startTime);
-    final endDateTime = _combineDateTime(_startDate, _endTime);
+    DateTime endDateTime = _combineDateTime(_startDate, _endTime);
 
-    if (endDateTime.isBefore(startDateTime) || endDateTime.isAtSameMomentAs(startDateTime)) {
-      _timeError = 'End time must be after the start time.';
+    // Midnight crossover fix 
+    if (endDateTime.isBefore(startDateTime)) {
+      endDateTime = endDateTime.add(const Duration(days: 1));
+    }
+
+    if (endDateTime.isAtSameMomentAs(startDateTime)) {
+      _timeError = 'Session duration cannot be zero.';
       hasValidationErrors = true;
     }
 
@@ -1195,7 +1356,6 @@ class _EventManagementOverlayState extends State<_EventManagementOverlay> {
       return;
     }
 
-    // CONFLICT DETECTION
     final conflicts = await widget.client.checkForConflicts(
       startTime: startDateTime,
       endTime: endDateTime,
@@ -1227,7 +1387,6 @@ class _EventManagementOverlayState extends State<_EventManagementOverlay> {
     setState(() => _isLoading = false);
   }
 
-  // --- Glassmorphic Input Row Builder with Inline Error Support ---
   Widget _buildFormRow({required IconData icon, required String label, required Widget child, Color? iconColor, bool hasError = false, String? errorText}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1272,17 +1431,18 @@ class _EventManagementOverlayState extends State<_EventManagementOverlay> {
               Center(child: Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)))),
               const SizedBox(height: 24),
               
-              // Title Input with Native Error Handling
               TextFormField(
                 initialValue: isEditing ? _title : null,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: dfNavyIndigo, letterSpacing: -0.5),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: dfNavyIndigo, letterSpacing: -0.5),
+                textCapitalization: TextCapitalization.sentences,
                 decoration: InputDecoration(
                   hintText: 'Session Title', 
-                  hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 20, fontWeight: FontWeight.w600, letterSpacing: -0.5), 
+                  hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 18, fontWeight: FontWeight.w600, letterSpacing: -0.5), 
                   border: InputBorder.none, enabledBorder: InputBorder.none, focusedBorder: InputBorder.none, errorBorder: InputBorder.none, focusedErrorBorder: InputBorder.none,
                   errorText: _titleError,
                   errorStyle: const TextStyle(color: errorIndicatorRed, fontSize: 12, fontWeight: FontWeight.w600),
-                  filled: false, contentPadding: EdgeInsets.zero
+                  filled: false, 
+                  contentPadding: const EdgeInsets.symmetric(vertical: 8)
                 ),
                 onChanged: (val) {
                   _title = val;
@@ -1293,7 +1453,6 @@ class _EventManagementOverlayState extends State<_EventManagementOverlay> {
               ),
               const SizedBox(height: 16),
 
-              // Date Selector
               _InteractivePill(
                 onTap: () async {
                   final picked = await showDatePicker(context: context, initialDate: _startDate, firstDate: DateTime.now().subtract(const Duration(days: 365)), lastDate: DateTime.now().add(const Duration(days: 365 * 5)));
@@ -1306,7 +1465,6 @@ class _EventManagementOverlayState extends State<_EventManagementOverlay> {
                 ),
               ),
 
-              // Time Selectors
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1326,7 +1484,16 @@ class _EventManagementOverlayState extends State<_EventManagementOverlay> {
                         final picked = await showTimePicker(context: context, initialTime: _endTime);
                         if (picked != null) setState(() { _endTime = picked; _timeError = null; _markDirty(); });
                       },
-                      child: _buildFormRow(icon: Icons.timer_rounded, label: 'END', iconColor: customModeColor, hasError: _timeError != null, child: Text(_endTime.format(context), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: _timeError != null ? errorIndicatorRed : dfNavyIndigo))),
+                      child: _buildFormRow(
+                        icon: Icons.timer_rounded, 
+                        label: 'END', 
+                        iconColor: customModeColor, 
+                        hasError: _timeError != null, 
+                        child: Text(
+                          _endTime.format(context), 
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: _timeError != null ? errorIndicatorRed : dfNavyIndigo)
+                        )
+                      ),
                     ),
                   ),
                 ],
@@ -1337,7 +1504,6 @@ class _EventManagementOverlayState extends State<_EventManagementOverlay> {
                   child: Text(_timeError!, style: const TextStyle(color: errorIndicatorRed, fontSize: 12, fontWeight: FontWeight.w600)),
                 ),
 
-              // Importance Dropdown
               _buildFormRow(
                 icon: Icons.flag_rounded, label: 'PRIORITY', iconColor: importanceColors[_selectedImportance],
                 child: DropdownButtonHideUnderline(
@@ -1358,7 +1524,6 @@ class _EventManagementOverlayState extends State<_EventManagementOverlay> {
                 ),
               ),
 
-              // Recurrence Dropdown
               _buildFormRow(
                 icon: Icons.repeat_rounded, label: 'RECURRENCE', iconColor: Colors.orange,
                 child: DropdownButtonHideUnderline(
@@ -1370,7 +1535,6 @@ class _EventManagementOverlayState extends State<_EventManagementOverlay> {
                 ),
               ),
 
-              // Conditional "Ends On" Row
               if (_selectedRecurrence != null)
                 _InteractivePill(
                   onTap: () async {
@@ -1395,15 +1559,24 @@ class _EventManagementOverlayState extends State<_EventManagementOverlay> {
 
               const SizedBox(height: 8),
 
-              // Save Button
               _isLoading
-                ? const Center(child: CircularProgressIndicator(color: dfTealCyan))
+                ? const Center(child: CircularProgressIndicator(color: dfNavyIndigo))
                 : _InteractivePill(
                     onTap: _handleSave,
                     child: Container(
-                      width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 18),
-                      decoration: BoxDecoration(color: dfTealCyan, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: dfTealCyan.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))]),
-                      child: Center(child: Text(isEditing ? 'Save Changes' : 'Create Session', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: 0.5))),
+                      width: double.infinity, 
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      decoration: BoxDecoration(
+                        color: dfNavyIndigo, 
+                        borderRadius: BorderRadius.circular(24), 
+                        boxShadow: [BoxShadow(color: dfNavyIndigo.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))]
+                      ),
+                      child: Center(
+                        child: Text(
+                          isEditing ? 'Save Changes' : 'Create Session', 
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5)
+                        )
+                      ),
                     ),
                   ),
             ],

@@ -99,7 +99,7 @@ class _GamesScreenState extends State<GamesScreen> {
                     'Mini Games',
                     style: TextStyle(
                       fontSize: adaptiveFontSize(context, 0.08),
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.normal, // <--- CHANGED TO NORMAL HERE
                       color: dfNavyIndigo,
                       letterSpacing: -0.5,
                     ),

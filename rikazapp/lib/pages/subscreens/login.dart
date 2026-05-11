@@ -162,6 +162,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     bool hasValidationError = false;
 
+    // Check if email is empty or badly formatted
     if (email.isEmpty) {
       _emailError = "Please enter your email address.";
       hasValidationError = true;
@@ -170,15 +171,14 @@ class _LoginScreenState extends State<LoginScreen> {
       hasValidationError = true;
     }
 
+    // Check ONLY if password is empty. No length rules!
     if (password.isEmpty) {
       _passwordError = "Please enter your password.";
-      hasValidationError = true;
-    } else if (password.length < 6) {
-      _passwordError = "Password must be at least 6 characters.";
       hasValidationError = true;
     }
 
     if (hasValidationError) {
+      setState(() {}); 
       return; 
     }
 
@@ -201,7 +201,11 @@ class _LoginScreenState extends State<LoginScreen> {
     } on sb.AuthException catch (e) {
       debugPrint("Supabase Login Error: ${e.message}");
       if (mounted) {
-        setState(() => _passwordError = "Incorrect email or password.");
+        setState(() {
+          // Highlight BOTH fields for a generic credential error
+          _emailError = "Incorrect email or password.";
+          _passwordError = "Incorrect email or password.";
+        });
       }
     } catch (e) {
       debugPrint("Generic Login Error: $e");
@@ -235,7 +239,8 @@ class _LoginScreenState extends State<LoginScreen> {
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.6), 
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white, width: 2), // ALWAYS WHITE, NO GLOW
+            // Border turns red on error, white otherwise
+            border: Border.all(color: hasError ? errorIndicatorRed.withOpacity(0.8) : Colors.white, width: 2),
             boxShadow: subtleShadow,
           ),
           child: Row(
@@ -258,12 +263,16 @@ class _LoginScreenState extends State<LoginScreen> {
                     focusedBorder: InputBorder.none,
                   ),
                   onChanged: (val) {
-                    if (hasError) {
-                      setState(() {
+                    setState(() {
+                      // If typing after a credential error, clear both fields at the same time
+                      if (_emailError == "Incorrect email or password." || _passwordError == "Incorrect email or password.") {
+                        _emailError = null;
+                        _passwordError = null;
+                      } else {
                         if (controller == _emailController) _emailError = null;
                         if (controller == _passwordController) _passwordError = null;
-                      });
-                    }
+                      }
+                    });
                   },
                 ),
               ),
