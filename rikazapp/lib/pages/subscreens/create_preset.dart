@@ -317,7 +317,7 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
                       children: [
                         _SensitivityCard(
                           label: 'Low',
-                          subtitle: '',
+                          subtitle: 'Minimal alerts',
                           barCount: 1,
                           isSelected: _sensitivityLevel == 'Low',
                           onTap: () =>
@@ -326,7 +326,7 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
                         const SizedBox(width: 10),
                         _SensitivityCard(
                           label: 'Medium',
-                          subtitle: '',
+                          subtitle: 'Recommended',
                           barCount: 2,
                           isSelected: _sensitivityLevel == 'Medium',
                           onTap: () =>
@@ -335,7 +335,7 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
                         const SizedBox(width: 10),
                         _SensitivityCard(
                           label: 'High',
-                          subtitle: '',
+                          subtitle: 'Max clarity',
                           barCount: 3,
                           isSelected: _sensitivityLevel == 'High',
                           onTap: () =>
@@ -352,7 +352,7 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Notification Settings',
+                    const Text('ALERT STYLE',
                         style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
@@ -363,7 +363,7 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
                       children: [
                         _AlertStyleCard(
                           label: 'Light',
-                          subtitle: '',
+                          subtitle: 'Visual + vibrate',
                           icon: Icons.lightbulb_outline,
                           isSelected: _notificationLight,
                           onTap: () =>
@@ -372,7 +372,7 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
                         const SizedBox(width: 10),
                         _AlertStyleCard(
                           label: 'Sound',
-                          subtitle: '',
+                          subtitle: 'Audio chime',
                           icon: Icons.volume_up,
                           isSelected: _notificationSound,
                           onTap: () =>
