@@ -479,7 +479,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 20),
-                  const Text('Profile', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w600, color: dfNavyIndigo, letterSpacing: -0.5)),
+                  const Text('Profile', style: TextStyle(fontSize: 30, fontWeight: FontWeight.normal, color: dfNavyIndigo, letterSpacing: -0.5)),
                   const SizedBox(height: 4),
                   const Text('Manage your account and settings', style: TextStyle(fontSize: 15, color: secondaryTextGrey, fontWeight: FontWeight.w400)),
                   const SizedBox(height: 32),
@@ -617,7 +617,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   // ---------------------------------------------------------------
                   // Settings Section
                   // ---------------------------------------------------------------
-                  const Text('Settings', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: dfNavyIndigo, letterSpacing: -0.5)),
+                  const Text('Settings', style: TextStyle(fontSize: 20, fontWeight: FontWeight.normal, color: dfNavyIndigo, letterSpacing: -0.5)),
                   const SizedBox(height: 16),
                   
                   // Google Calendar

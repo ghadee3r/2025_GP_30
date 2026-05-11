@@ -1115,7 +1115,7 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 20),
-                  const Text('Your Progress', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w600, color: dfNavyIndigo, letterSpacing: -0.5)),
+                  const Text('Your Progress', style: TextStyle(fontSize: 30, fontWeight: FontWeight.normal, color: dfNavyIndigo, letterSpacing: -0.5)),
                   const SizedBox(height: 4),
                   const Text('Track your productivity history', style: TextStyle(fontSize: 15, color: secondaryTextGrey, fontWeight: FontWeight.w400)),
                   const SizedBox(height: 24),
