@@ -3,38 +3,44 @@ import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/calendar/v3.dart' as calendar;
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
-import '../subscreens/create_preset.dart'; // Make sure this is imported!
+import '../subscreens/create_preset.dart'; 
 
 // =============================================================================
-// THEME DEFINITIONS
+// THEME DEFINITIONS (Synchronized with Progress Page)
 // =============================================================================
-const Color dfDeepTeal = Color(0xFF175B73); 
-const Color dfTealCyan = Color(0xFF287C85); 
-const Color dfLightSeafoam = Color(0xFF87ACA3); 
-const Color dfDeepBlue = Color(0xFF162893); 
-const Color dfNavyIndigo = Color(0xFF0C1446); 
+const Color dfDeepBlue = Color(0xFF7E84D4);
+const Color dfDeepTeal = Color(0xFF1B2536); 
+const Color dfTealCyan = Color(0xFF68C29D); 
+const Color customModeColor = Color(0xFF7E84D4); 
+const Color dfLightSeafoam = Color(0xFFE8F1EC);
+const Color dfNavyIndigo = Color(0xFF1B2536); 
 
-const Color primaryThemeColor = dfDeepTeal;
-const Color accentThemeColor = dfTealCyan;
+const Color primaryThemeColor = dfTealCyan;
+const Color accentThemeColor = customModeColor;
 const Color lightestAccentColor = dfLightSeafoam;
 
-const Color primaryBackground = Color(0xFFF7F7F7);
+const Color primaryBackground = Color(0xFFF2F6F9);
 const Color cardBackground = Color(0xFFFFFFFF);
 const Color primaryTextDark = dfNavyIndigo;
-const Color secondaryTextGrey = Color(0xFF6B6B78);
+const Color secondaryTextGrey = Color(0xFF8B95A5);
 const Color errorIndicatorRed = Color(0xFFE57373);
 
-const double cardBorderRadius = 16.0;
+const double cardBorderRadius = 24.0;
 
 List<BoxShadow> get subtleShadow => [
-      BoxShadow(color: dfNavyIndigo.withOpacity(0.08), blurRadius: 10, offset: const Offset(0, 5)),
+      BoxShadow(
+        color: dfNavyIndigo.withOpacity(0.04),
+        blurRadius: 30,
+        offset: const Offset(0, 10),
+      ),
     ];
 
 double adaptiveFontSize(BuildContext context, double baseScreenWidthMultiplier) {
   final screenWidth = MediaQuery.of(context).size.width;
   final baseSize = screenWidth * baseScreenWidthMultiplier;
-  final textScaleFactor = MediaQuery.of(context).textScaleFactor;
-  return baseSize / (1.0 + (textScaleFactor - 1.0) * 0.9);
+  final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+  const mitigationFactor = 0.9;
+  return baseSize / (1.0 + (textScale - 1.0) * mitigationFactor);
 }
 
 // =============================================================================
@@ -80,8 +86,6 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   String userName = 'Loading...';
   String userEmail = '';
-  bool isEditingName = false;
-  final TextEditingController _nameController = TextEditingController();
   
   final CalendarClient _client = CalendarClient();
   bool _isCalendarConnected = false;
@@ -98,12 +102,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadUserProfile();
     _initializeGoogleCalendar();
     _loadPresets();
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    super.dispose();
   }
 
   // ===========================================================================
@@ -138,7 +136,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         setState(() {
           userEmail = user.email ?? 'No Email';
           userName = formattedName;
-          _nameController.text = formattedName;
         });
       }
     }
@@ -167,14 +164,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Preset?'),
-        content: const Text('Are you sure you want to delete this preset?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Delete Preset?', style: TextStyle(color: dfNavyIndigo, fontWeight: FontWeight.bold)),
+        content: const Text('Are you sure you want to delete this preset?', style: TextStyle(color: secondaryTextGrey)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel', style: TextStyle(color: secondaryTextGrey))),
           TextButton(
             onPressed: () => Navigator.pop(context, true), 
             style: TextButton.styleFrom(foregroundColor: errorIndicatorRed),
-            child: const Text('Delete')
+            child: const Text('Delete', style: TextStyle(fontWeight: FontWeight.bold))
           ),
         ],
       ),
@@ -184,53 +182,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
       try {
         await supabase.from('Preset').delete().eq('Preset_id', presetId);
         _showSuccessSnackBar('Preset deleted');
-        _loadPresets(); // Refresh the list
+        _loadPresets(); 
       } catch (e) {
         _showErrorSnackBar('Failed to delete preset: $e');
       }
     }
   }
 
-  Future<void> _saveUserName() async {
-    final newName = _nameController.text.trim();
-    if (newName.isEmpty) {
-      _showErrorSnackBar('Name cannot be empty');
-      return;
-    }
-    try {
-      await supabase.auth.updateUser(sb.UserAttributes(data: {'full_name': newName}));
-      if (mounted) {
-        setState(() {
-          userName = newName;
-          isEditingName = false;
-        });
-        _showSuccessSnackBar('Name updated successfully');
-      }
-    } catch (e) {
-      _showErrorSnackBar('Failed to update name: $e');
-    }
-  }
-
-  // ... (Keep _showErrorSnackBar, _showSuccessSnackBar, handleSignOut, _handleCalendarSignIn, _handleCalendarSignOut, _buildThemedDialog, _buildSettingsItem from your previous code)
-  
-  // Show error snackbar
   void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Row(children: [const Icon(Icons.error_outline, color: Colors.white), const SizedBox(width: 12), Expanded(child: Text(message))]), backgroundColor: errorIndicatorRed, behavior: SnackBarBehavior.floating));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Row(children: [const Icon(Icons.error_outline, color: Colors.white), const SizedBox(width: 12), Expanded(child: Text(message))]), 
+      backgroundColor: errorIndicatorRed, 
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ));
   }
 
   void _showSuccessSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Row(children: [const Icon(Icons.check_circle, color: Colors.white), const SizedBox(width: 12), Expanded(child: Text(message))]), backgroundColor: Colors.green.shade600, behavior: SnackBarBehavior.floating));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Row(children: [const Icon(Icons.check_circle, color: Colors.white), const SizedBox(width: 12), Expanded(child: Text(message))]), 
+      backgroundColor: dfTealCyan, 
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ));
   }
 
   Future<void> handleSignOut() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Sign Out', style: TextStyle(color: primaryTextDark)),
-        content: Text('Are you sure you want to sign out?', style: TextStyle(color: secondaryTextGrey)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Sign Out', style: TextStyle(color: dfNavyIndigo, fontWeight: FontWeight.bold)),
+        content: const Text('Are you sure you want to sign out?', style: TextStyle(color: secondaryTextGrey)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancel', style: TextStyle(color: secondaryTextGrey))),
-          TextButton(onPressed: () => Navigator.pop(context, true), style: TextButton.styleFrom(foregroundColor: errorIndicatorRed), child: const Text('Sign Out')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel', style: TextStyle(color: secondaryTextGrey))),
+          TextButton(onPressed: () => Navigator.pop(context, true), style: TextButton.styleFrom(foregroundColor: errorIndicatorRed), child: const Text('Sign Out', style: TextStyle(fontWeight: FontWeight.bold))),
         ],
       ),
     );
@@ -258,11 +244,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Disconnect Google Calendar?'),
-        content: const Text('Your calendar events will no longer sync with the app.'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Disconnect Calendar?', style: TextStyle(color: dfNavyIndigo, fontWeight: FontWeight.bold)),
+        content: const Text('Your calendar events will no longer sync with the app.', style: TextStyle(color: secondaryTextGrey)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), style: TextButton.styleFrom(foregroundColor: errorIndicatorRed), child: const Text('Disconnect')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel', style: TextStyle(color: secondaryTextGrey))),
+          TextButton(onPressed: () => Navigator.pop(context, true), style: TextButton.styleFrom(foregroundColor: errorIndicatorRed), child: const Text('Disconnect', style: TextStyle(fontWeight: FontWeight.bold))),
         ],
       )
     );
@@ -274,25 +261,163 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Widget _buildSettingsItem({required IconData icon, required String label, required VoidCallback onTap, Color? textColor}) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: EdgeInsets.all(screenWidth * 0.04),
-        decoration: BoxDecoration(color: cardBackground, borderRadius: BorderRadius.circular(cardBorderRadius), boxShadow: subtleShadow),
-        child: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(screenWidth * 0.025),
-              decoration: BoxDecoration(color: (textColor ?? accentThemeColor).withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
-              child: Icon(icon, color: textColor ?? accentThemeColor, size: adaptiveFontSize(context, 0.05)),
+  // ===========================================================================
+  // BOTTOM SHEETS
+  // ===========================================================================
+
+  void _showPrivacyBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
             ),
-            SizedBox(width: screenWidth * 0.03),
-            Expanded(child: Text(label, style: TextStyle(fontSize: adaptiveFontSize(context, 0.04), fontWeight: FontWeight.w600, color: textColor ?? primaryTextDark))),
-            Icon(Icons.chevron_right, color: secondaryTextGrey, size: adaptiveFontSize(context, 0.05)),
-          ],
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(child: Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)))),
+                const SizedBox(height: 24),
+                
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(color: accentThemeColor.withOpacity(0.1), shape: BoxShape.circle),
+                      child: const Icon(Icons.security_rounded, color: accentThemeColor, size: 24),
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(child: Text('Privacy Policy', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: dfNavyIndigo))),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                const Text('Camera Monitoring & Your Data', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: dfNavyIndigo)),
+                const SizedBox(height: 12),
+                const Text(
+                  'Your absolute autonomy and privacy are our highest priorities. The camera monitoring feature in Rikaz is built strictly to detect physical distractions during your focus sessions locally.\n',
+                  style: TextStyle(fontSize: 14, color: secondaryTextGrey, height: 1.5),
+                ),
+                _privacyBullet('Real-Time Processing: ', 'All footage is analyzed instantaneously on your device.'),
+                _privacyBullet('Zero Storage: ', 'Video data is never recorded, saved, or stored.'),
+                _privacyBullet('Zero Sharing: ', 'Footage is completely inaccessible to our servers or any third parties.'),
+                
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: dfNavyIndigo, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Understood', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
+                )
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _privacyBullet(String boldText, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('• ', style: TextStyle(fontSize: 14, color: customModeColor, fontWeight: FontWeight.bold)),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                style: const TextStyle(fontSize: 14, color: secondaryTextGrey, height: 1.5, fontFamily: 'Roboto'),
+                children: [
+                  TextSpan(text: boldText, style: const TextStyle(fontWeight: FontWeight.bold, color: dfNavyIndigo)),
+                  TextSpan(text: text),
+                ]
+              )
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSupportBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(child: Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)))),
+                const SizedBox(height: 24),
+                
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(color: dfTealCyan.withOpacity(0.1), shape: BoxShape.circle),
+                      child: const Icon(Icons.help_outline_rounded, color: dfTealCyan, size: 24),
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(child: Text('Help & Support', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: dfNavyIndigo))),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                const Text(
+                  'Need assistance configuring your routines, encountered a bug, or have suggestions for Rikaz?\n\nReach out directly to our support and development team below.',
+                  style: TextStyle(fontSize: 14, color: secondaryTextGrey, height: 1.5),
+                ),
+                const SizedBox(height: 20),
+                
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(color: primaryBackground, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white, width: 1.5)),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.email_rounded, color: dfTealCyan),
+                      const SizedBox(width: 16),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text('Email Us At', style: TextStyle(fontSize: 12, color: secondaryTextGrey, fontWeight: FontWeight.w600)),
+                          SizedBox(height: 2),
+                          Text('rikaz.gp@gmail.com', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: dfNavyIndigo)),
+                        ],
+                      )
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: dfNavyIndigo, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Close', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
+                )
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -302,225 +427,293 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // UI BUILD
   // ===========================================================================
 
+  Widget _buildSettingsItem({required IconData icon, required String label, required VoidCallback onTap, Color? textColor}) {
+    return _InteractivePill(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.6), 
+          borderRadius: BorderRadius.circular(cardBorderRadius), 
+          border: Border.all(color: Colors.white, width: 1.5),
+          boxShadow: subtleShadow
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: (textColor ?? accentThemeColor).withOpacity(0.1), shape: BoxShape.circle),
+              child: Icon(icon, color: textColor ?? accentThemeColor, size: 22),
+            ),
+            const SizedBox(width: 16),
+            Expanded(child: Text(label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: textColor ?? primaryTextDark))),
+            Icon(Icons.chevron_right_rounded, color: secondaryTextGrey, size: 22),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-    final proportionalHorizontalPadding = screenWidth * 0.05;
-
     return Scaffold(
       backgroundColor: primaryBackground,
-      appBar: AppBar(
-        backgroundColor: primaryBackground,
-        elevation: 0,
-        title: Text('Profile', style: TextStyle(fontSize: adaptiveFontSize(context, 0.045), fontWeight: FontWeight.bold, color: primaryTextDark)),
-        centerTitle: true,
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.only(left: proportionalHorizontalPadding, right: proportionalHorizontalPadding, top: screenHeight * 0.02, bottom: screenHeight * 0.03),
-          child: Column(
-            children: [
-              // ---------------------------------------------------------------
-              // Profile Header 
-              // ---------------------------------------------------------------
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: screenHeight * 0.03),
-                child: Column(
-                  children: [
-                    CircleAvatar(
-                      radius: screenWidth * 0.12,
-                      backgroundColor: accentThemeColor.withOpacity(0.2),
-                      child: Text(userName.isNotEmpty ? userName[0].toUpperCase() : 'U', style: TextStyle(fontSize: adaptiveFontSize(context, 0.08), fontWeight: FontWeight.bold, color: accentThemeColor)),
-                    ),
-                    SizedBox(height: screenHeight * 0.02),
-                    
-                    if (isEditingName)
-                      Column(
-                        children: [
-                          TextField(
-                            controller: _nameController,
-                            textAlign: TextAlign.center,
-                            decoration: InputDecoration(hintText: 'Enter your name', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              TextButton(onPressed: () => setState(() { isEditingName = false; _nameController.text = userName; }), child: const Text('Cancel')),
-                              ElevatedButton(onPressed: _saveUserName, style: ElevatedButton.styleFrom(backgroundColor: primaryThemeColor), child: const Text('Save', style: TextStyle(color: Colors.white))),
-                            ],
-                          ),
-                        ],
-                      )
-                    else
-                      Column(
-                        children: [
-                          Text(userName, style: TextStyle(fontSize: adaptiveFontSize(context, 0.05), fontWeight: FontWeight.bold, color: primaryTextDark)),
-                          SizedBox(height: screenHeight * 0.005),
-                          Text(userEmail, style: TextStyle(fontSize: adaptiveFontSize(context, 0.035), color: secondaryTextGrey)),
-                          SizedBox(height: screenHeight * 0.02),
-                          ElevatedButton.icon(
-                            onPressed: () => setState(() => isEditingName = true),
-                            icon: const Icon(Icons.edit, color: Colors.white, size: 16),
-                            label: const Text('Edit Name', style: TextStyle(color: Colors.white)),
-                            style: ElevatedButton.styleFrom(backgroundColor: accentThemeColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                          ),
-                        ],
-                      ),
-                  ],
-                ),
-              ),
-
-              SizedBox(height: screenHeight * 0.01),
-
-              // ---------------------------------------------------------------
-              // PRESETS DROP-DOWN (ExpansionTile)
-              // ---------------------------------------------------------------
-              Container(
-                decoration: BoxDecoration(
-                  color: cardBackground,
-                  borderRadius: BorderRadius.circular(cardBorderRadius),
-                  boxShadow: subtleShadow,
-                ),
-                child: Theme(
-                  data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                  child: ExpansionTile(
-                    initiallyExpanded: true, // Set to false if you want it closed by default
-                    title: Text(
-                      'My Presets (${_userPresets.length}/$_maxPresetsLimit)',
-                      style: TextStyle(fontSize: adaptiveFontSize(context, 0.045), fontWeight: FontWeight.bold, color: primaryTextDark),
-                    ),
-                    childrenPadding: EdgeInsets.only(left: screenWidth * 0.04, right: screenWidth * 0.04, bottom: screenWidth * 0.04),
-                    children: [
-                      if (_isLoadingPresets)
-                        const Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator(color: accentThemeColor))
-                      else if (_userPresets.isEmpty)
-                        Text('No presets saved yet.', style: TextStyle(color: secondaryTextGrey, fontSize: adaptiveFontSize(context, 0.035)))
-                      else
-                        ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _userPresets.length,
-                          itemBuilder: (context, index) {
-                            final preset = _userPresets[index];
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              decoration: BoxDecoration(
-                                color: primaryBackground,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: secondaryTextGrey.withOpacity(0.1)),
-                              ),
-                              child: ListTile(
-                                leading: Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(color: accentThemeColor.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
-                                  child: const Icon(Icons.tune_rounded, color: accentThemeColor),
-                                ),
-                                title: Text(preset['preset_name'] ?? 'Unnamed', style: const TextStyle(fontWeight: FontWeight.w600)),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.edit_outlined, color: secondaryTextGrey),
-                                      onPressed: () {
-                                        // Navigate to edit page and wait for result
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(builder: (context) => CreatePresetPage(presetToEdit: preset)),
-                                        ).then((shouldRefresh) {
-                                          if (shouldRefresh == true) _loadPresets();
-                                        });
-                                      },
-                                    ),
-                                    IconButton(
-                                      icon: Icon(Icons.delete_outline, color: errorIndicatorRed.withOpacity(0.8)),
-                                     onPressed: () => _deletePreset(preset['Preset_id'].toString()),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      const SizedBox(height: 10),
-                      
-                      // Add New Preset Button
-                      SizedBox(
-                        width: double.infinity,
-                        child: TextButton.icon(
-                          onPressed: _userPresets.length < _maxPresetsLimit
-                              ? () {
-                                  Navigator.push(context, MaterialPageRoute(builder: (context) => const CreatePresetPage())).then((shouldRefresh) {
-                                    if (shouldRefresh == true) _loadPresets();
-                                  });
-                                }
-                              : null,
-                          icon: const Icon(Icons.add_circle_outline),
-                          label: const Text('Add New Preset', style: TextStyle(fontWeight: FontWeight.bold)),
-                          style: TextButton.styleFrom(
-                            foregroundColor: accentThemeColor,
-                            disabledForegroundColor: secondaryTextGrey.withOpacity(0.5),
-                          ),
-                        ),
-                      )
-                    ],
-                  ),
-                ),
-              ),
-
-              SizedBox(height: screenHeight * 0.03),
-
-              // ---------------------------------------------------------------
-              // Settings Section
-              // ---------------------------------------------------------------
-              Column(
+      body: Stack(
+        children: [
+          // Glassmorphic Gradient Background matching progress & home page
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter, 
+                end: Alignment.bottomCenter, 
+                colors: [Color(0xFFF4F7F9), Color(0xFFE5ECEF)]
+              )
+            )
+          ),
+          SafeArea(
+            bottom: false,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Settings', style: TextStyle(fontSize: adaptiveFontSize(context, 0.045), fontWeight: FontWeight.bold, color: primaryTextDark)),
-                  SizedBox(height: screenHeight * 0.015),
+                  const SizedBox(height: 20),
+                  const Text('Profile', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w600, color: dfNavyIndigo, letterSpacing: -0.5)),
+                  const SizedBox(height: 4),
+                  const Text('Manage your account and settings', style: TextStyle(fontSize: 15, color: secondaryTextGrey, fontWeight: FontWeight.w400)),
+                  const SizedBox(height: 32),
+
+                  // ---------------------------------------------------------------
+                  // Sleek Minimalist Header
+                  // ---------------------------------------------------------------
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.6), 
+                      borderRadius: BorderRadius.circular(cardBorderRadius), 
+                      border: Border.all(color: Colors.white, width: 1.5),
+                      boxShadow: subtleShadow
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(userName, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: dfNavyIndigo, letterSpacing: -0.5)),
+                        const SizedBox(height: 4),
+                        Text(userEmail, style: const TextStyle(fontSize: 15, color: secondaryTextGrey, fontWeight: FontWeight.w500)),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // ---------------------------------------------------------------
+                  // PRESETS DROP-DOWN (Glassmorphic)
+                  // ---------------------------------------------------------------
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.6), 
+                      borderRadius: BorderRadius.circular(cardBorderRadius), 
+                      border: Border.all(color: Colors.white, width: 1.5),
+                      boxShadow: subtleShadow
+                    ),
+                    child: Theme(
+                      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                      child: ExpansionTile(
+                        iconColor: dfNavyIndigo,
+                        collapsedIconColor: secondaryTextGrey,
+                        initiallyExpanded: true,
+                        title: Text(
+                          'My Presets (${_userPresets.length}/$_maxPresetsLimit)',
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextDark),
+                        ),
+                        childrenPadding: const EdgeInsets.only(left: 16, right: 16, bottom: 20),
+                        children: [
+                          if (_isLoadingPresets)
+                            const Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator(color: accentThemeColor))
+                          else if (_userPresets.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.only(bottom: 12.0),
+                              child: Text('No presets saved yet.', style: TextStyle(color: secondaryTextGrey, fontSize: 14)),
+                            )
+                          else
+                            ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: _userPresets.length,
+                              itemBuilder: (context, index) {
+                                final preset = _userPresets[index];
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  decoration: BoxDecoration(
+                                    color: primaryBackground,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: Colors.white, width: 1.5),
+                                  ),
+                                  child: ListTile(
+                                    leading: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(color: accentThemeColor.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
+                                      child: const Icon(Icons.tune_rounded, color: accentThemeColor, size: 20),
+                                    ),
+                                    title: Text(preset['preset_name'] ?? 'Unnamed', style: const TextStyle(fontWeight: FontWeight.w600, color: dfNavyIndigo)),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.edit_outlined, color: secondaryTextGrey, size: 20),
+                                          onPressed: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(builder: (context) => CreatePresetPage(presetToEdit: preset)),
+                                            ).then((shouldRefresh) {
+                                              if (shouldRefresh == true) _loadPresets();
+                                            });
+                                          },
+                                        ),
+                                        IconButton(
+                                          icon: Icon(Icons.delete_outline, color: errorIndicatorRed.withOpacity(0.8), size: 20),
+                                         onPressed: () => _deletePreset(preset['Preset_id'].toString()),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          
+                          const SizedBox(height: 8),
+                          
+                          // Add New Preset Button
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: _userPresets.length < _maxPresetsLimit
+                                  ? () {
+                                      Navigator.push(context, MaterialPageRoute(builder: (context) => const CreatePresetPage())).then((shouldRefresh) {
+                                        if (shouldRefresh == true) _loadPresets();
+                                      });
+                                    }
+                                  : null,
+                              icon: const Icon(Icons.add_circle_outline, size: 18),
+                              label: const Text('Add New Preset', style: TextStyle(fontWeight: FontWeight.bold)),
+                              style: ElevatedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                backgroundColor: dfNavyIndigo,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                elevation: 0,
+                              ),
+                            ),
+                          )
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // ---------------------------------------------------------------
+                  // Settings Section
+                  // ---------------------------------------------------------------
+                  const Text('Settings', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: dfNavyIndigo, letterSpacing: -0.5)),
+                  const SizedBox(height: 16),
                   
                   // Google Calendar
-                  GestureDetector(
-                    onTap: _isSigningIn ? null : (_isCalendarConnected ? _handleCalendarSignOut : _handleCalendarSignIn),
+                  _InteractivePill(
+                    onTap: _isSigningIn ? () {} : (_isCalendarConnected ? _handleCalendarSignOut : _handleCalendarSignIn),
                     child: Container(
                       margin: const EdgeInsets.only(bottom: 12),
-                      padding: EdgeInsets.all(screenWidth * 0.04),
-                      decoration: BoxDecoration(color: cardBackground, borderRadius: BorderRadius.circular(cardBorderRadius), boxShadow: subtleShadow),
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.6), 
+                        borderRadius: BorderRadius.circular(cardBorderRadius), 
+                        border: Border.all(color: Colors.white, width: 1.5),
+                        boxShadow: subtleShadow
+                      ),
                       child: Row(
                         children: [
                           Container(
-                            padding: EdgeInsets.all(screenWidth * 0.025),
-                            decoration: BoxDecoration(color: (_isCalendarConnected ? Colors.green.shade600 : secondaryTextGrey).withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(color: (_isCalendarConnected ? Colors.green.shade600 : secondaryTextGrey).withOpacity(0.1), shape: BoxShape.circle),
                             child: _isSigningIn
-                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(accentThemeColor)))
-                              : Icon(_isCalendarConnected ? Icons.cloud_done_rounded : Icons.cloud_off_rounded, color: _isCalendarConnected ? Colors.green.shade600 : secondaryTextGrey),
+                              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(accentThemeColor)))
+                              : Icon(_isCalendarConnected ? Icons.cloud_done_rounded : Icons.cloud_off_rounded, color: _isCalendarConnected ? Colors.green.shade600 : secondaryTextGrey, size: 22),
                           ),
-                          SizedBox(width: screenWidth * 0.03),
+                          const SizedBox(width: 16),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Google Calendar', style: TextStyle(fontSize: adaptiveFontSize(context, 0.04), fontWeight: FontWeight.w600, color: primaryTextDark)),
-                                SizedBox(height: screenHeight * 0.003),
-                                Text(_isCalendarConnected ? 'Connected' : 'Not connected', style: TextStyle(fontSize: adaptiveFontSize(context, 0.03), color: secondaryTextGrey)),
+                                const Text('Google Calendar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: primaryTextDark)),
+                                const SizedBox(height: 4),
+                                Text(_isCalendarConnected ? 'Connected' : 'Not connected', style: const TextStyle(fontSize: 13, color: secondaryTextGrey, fontWeight: FontWeight.w500)),
                               ],
                             ),
                           ),
-                          Icon(Icons.chevron_right, color: secondaryTextGrey),
+                          const Icon(Icons.chevron_right_rounded, color: secondaryTextGrey, size: 22),
                         ],
                       ),
                     ),
                   ),
 
-                  _buildSettingsItem(icon: Icons.security_rounded, label: 'Privacy', onTap: () {}),
-                  _buildSettingsItem(icon: Icons.help_outline_rounded, label: 'Help & Support', onTap: () {}),
-                  _buildSettingsItem(icon: Icons.logout_rounded, label: 'Sign Out', textColor: errorIndicatorRed, onTap: handleSignOut),
+                  _buildSettingsItem(
+                    icon: Icons.security_rounded, 
+                    label: 'Privacy', 
+                    onTap: () => _showPrivacyBottomSheet(context)
+                  ),
+                  _buildSettingsItem(
+                    icon: Icons.help_outline_rounded, 
+                    label: 'Help & Support', 
+                    onTap: () => _showSupportBottomSheet(context)
+                  ),
+                  _buildSettingsItem(
+                    icon: Icons.logout_rounded, 
+                    label: 'Sign Out', 
+                    textColor: errorIndicatorRed, 
+                    onTap: handleSignOut
+                  ),
+                  
+                  const SizedBox(height: 40),
                 ],
               ),
-            ],
+            ),
           ),
-        ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// HELPER CLASSES & COMPONENTS 
+// =============================================================================
+
+class _InteractivePill extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+  const _InteractivePill({required this.child, required this.onTap});
+  
+  @override
+  State<_InteractivePill> createState() => _InteractivePillState();
+}
+
+class _InteractivePillState extends State<_InteractivePill> {
+  bool _isPressed = false;
+  
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) { setState(() => _isPressed = false); widget.onTap(); },
+      onTapCancel: () => setState(() => _isPressed = false),
+      child: AnimatedScale(
+        scale: _isPressed ? 0.96 : 1.0, 
+        duration: const Duration(milliseconds: 150), 
+        curve: Curves.easeOutCubic, 
+        child: widget.child
       ),
     );
   }
