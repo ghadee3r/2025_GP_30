@@ -415,12 +415,9 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
       final start = e.start?.dateTime?.toLocal() ?? e.start?.date;
       if (start == null) return false;
       
-      if (_calendarFormatView == CalendarFormatView.month) {
-        return isSameDay(start, _selectedDay);
-      } else {
-        final endRange = _selectedDay.add(const Duration(days: 7));
-        return (isSameDay(start, _selectedDay) || start.isAfter(_selectedDay)) && start.isBefore(endRange);
-      }
+      // BOTH List and Month views now fetch the next 7 days equally
+      final endRange = _selectedDay.add(const Duration(days: 7));
+      return (isSameDay(start, _selectedDay) || start.isAfter(_selectedDay)) && start.isBefore(endRange);
     }).toList();
 
     if (_scheduleView == ScheduleView.rikaz) {
@@ -676,7 +673,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
     return uniqueImportanceKeys.map((key) => importanceColors[key] ?? importanceColors['Default']!).toList();
   }
   
-Widget _buildGreetingHeader() {
+  Widget _buildGreetingHeader() {
     String dateStr = DateFormat('EEE, MMM d').format(DateTime.now()).toUpperCase();
     
     // Determine the time of day
@@ -695,13 +692,10 @@ Widget _buildGreetingHeader() {
         children: [
           Text(dateStr, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: secondaryTextGrey, letterSpacing: 1.5)),
           const SizedBox(height: 8),
-          
-          // ADDED THE USER'S NAME HERE
           Text(
             '$greeting, $_userName', 
             style: const TextStyle(fontSize: 30, fontWeight: FontWeight.normal, color: dfNavyIndigo, letterSpacing: -0.5),
           ),
-          
           const SizedBox(height: 4),
           const Text('Reclaim your depth.', style: TextStyle(fontSize: 15, color: secondaryTextGrey, fontWeight: FontWeight.w400)),
         ],
@@ -885,8 +879,52 @@ Widget _buildGreetingHeader() {
     );
   }
 
+  // --- SHARED EVENT LIST UI FOR BOTH CALENDAR AND LIST VIEWS ---
+  Widget _buildEventList(double screenHeight) {
+    if (!_isCalendarConnected) {
+      return Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: screenHeight * 0.05), 
+          child: const Text(
+            'Connect Google Calendar to see your upcoming sessions.', 
+            textAlign: TextAlign.center, 
+            style: TextStyle(fontSize: 14, color: secondaryTextGrey)
+          )
+        )
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(bottom: 12.0),
+          child: Text('Upcoming Sessions', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: dfNavyIndigo)),
+        ),
+        _displayedEvents.isEmpty
+          ? Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: screenHeight * 0.03), 
+                child: const Text('No sessions found for the next 7 days.', style: TextStyle(fontStyle: FontStyle.italic, color: secondaryTextGrey, fontSize: 14))
+              )
+            )
+          : ListView.builder(
+              physics: const NeverScrollableScrollPhysics(), 
+              shrinkWrap: true, 
+              itemCount: _displayedEvents.length, 
+              itemBuilder: (context, index) { 
+                final event = _displayedEvents[index]; 
+                final startTime = event.start?.dateTime?.toLocal() ?? event.start?.date; 
+                final endTime = event.end?.dateTime?.toLocal() ?? event.end?.date; 
+                if (startTime == null) return const SizedBox.shrink(); 
+                return _buildSessionCard(event: event, color: _getEventColor(event), startTime: startTime, endTime: endTime); 
+              }
+            ),
+      ],
+    );
+  }
+
   Widget _buildMonthCalendarView(double screenHeight) {
-    if (!_isCalendarConnected) return Padding(padding: EdgeInsets.symmetric(vertical: screenHeight * 0.05), child: const Center(child: Text('Connect Google Calendar to see your schedule.', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: secondaryTextGrey))));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -911,8 +949,8 @@ Widget _buildGreetingHeader() {
         SizedBox(height: screenHeight * 0.02),
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [_buildScheduleToggle(), _buildMinimalAddButton()]),
         SizedBox(height: screenHeight * 0.02),
-        if (_displayedEvents.isNotEmpty) ListView.builder(physics: const NeverScrollableScrollPhysics(), shrinkWrap: true, itemCount: _displayedEvents.length, itemBuilder: (context, index) { final event = _displayedEvents[index]; return _buildSessionCard(event: event, color: _getEventColor(event), startTime: event.start!.dateTime!.toLocal(), endTime: event.end?.dateTime?.toLocal()); })
-        else const Padding(padding: EdgeInsets.all(16.0), child: Center(child: Text('No sessions on this day.', style: TextStyle(color: secondaryTextGrey, fontStyle: FontStyle.italic)))),
+        // Use the unified list
+        _buildEventList(screenHeight),
       ],
     );
   }
@@ -925,16 +963,8 @@ Widget _buildGreetingHeader() {
         SizedBox(height: screenHeight * 0.03),
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [_buildScheduleToggle(), _buildMinimalAddButton()]),
         SizedBox(height: screenHeight * 0.02),
-        
-        if (_isCalendarConnected)
-          const Padding(
-            padding: EdgeInsets.only(bottom: 12.0),
-            child: Text('Upcoming Sessions', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: dfNavyIndigo)),
-          ),
-        
-        _displayedEvents.isEmpty
-          ? Center(child: Padding(padding: EdgeInsets.symmetric(vertical: screenHeight * 0.03), child: const Text('No sessions found for the next 7 days.', style: TextStyle(fontStyle: FontStyle.italic, color: secondaryTextGrey, fontSize: 14))))
-          : ListView.builder(physics: const NeverScrollableScrollPhysics(), shrinkWrap: true, itemCount: _displayedEvents.length, itemBuilder: (context, index) { final event = _displayedEvents[index]; final startTime = event.start?.dateTime?.toLocal() ?? event.start?.date; final endTime = event.end?.dateTime?.toLocal() ?? event.end?.date; if (startTime == null) return const SizedBox.shrink(); return _buildSessionCard(event: event, color: _getEventColor(event), startTime: startTime, endTime: endTime); }),
+        // Use the unified list
+        _buildEventList(screenHeight),
       ],
     );
   }
