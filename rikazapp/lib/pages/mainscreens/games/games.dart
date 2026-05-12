@@ -63,12 +63,11 @@ class _GamesScreenState extends State<GamesScreen> {
   }
 
   Widget _buildMenuContent(BuildContext context, bool isBreakSession) {
-    final screenWidth = MediaQuery.of(context).size.width;
     final screenHeight = MediaQuery.of(context).size.height;
-    final proportionalHorizontalPadding = screenWidth * 0.06;
+    final horizontalPadding = 24.0;
 
     // Extra top padding if the 'X' close button is showing, so they don't overlap
-    final topPadding = isBreakSession ? screenHeight * 0.12 : screenHeight * 0.06;
+    final topPadding = isBreakSession ? screenHeight * 0.12 : 40.0;
 
     return Scaffold(
       backgroundColor: primaryBackground,
@@ -87,28 +86,29 @@ class _GamesScreenState extends State<GamesScreen> {
             bottom: false,
             child: SingleChildScrollView(
               padding: EdgeInsets.only(
-                left: proportionalHorizontalPadding,
-                right: proportionalHorizontalPadding,
+                left: horizontalPadding,
+                right: horizontalPadding,
                 top: topPadding, 
                 bottom: screenHeight * 0.15, // Padding for bottom nav bar
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'Mini Games',
                     style: TextStyle(
-                      fontSize: adaptiveFontSize(context, 0.08),
-                      fontWeight: FontWeight.normal, // <--- CHANGED TO NORMAL HERE
+                      fontSize: 30,
+                      fontWeight: FontWeight.normal,
                       color: dfNavyIndigo,
                       letterSpacing: -0.5,
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
+                  const Text(
                     'Quick mental resets for peak focus.',
                     style: TextStyle(
-                      fontSize: adaptiveFontSize(context, 0.04),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w400,
                       color: secondaryTextGrey,
                     ),
                   ),

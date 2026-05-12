@@ -322,7 +322,6 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
   }
 
   void _showSessionBreakdownDialog(List<Map<String, dynamic>> sessions) {
-    // Removed the early return so it opens even when sessions are 0
     int pomo25Count = sessions.where((s) => s['session_type'] == 'pomodoro' && s['pomodoro_type'] == '25-5').length;
     int pomo50Count = sessions.where((s) => s['session_type'] == 'pomodoro' && s['pomodoro_type'] == '50-10').length;
     int otherPomoCount = sessions.where((s) => s['session_type'] == 'pomodoro' && s['pomodoro_type'] != '25-5' && s['pomodoro_type'] != '50-10').length;
@@ -835,7 +834,6 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
               
               Expanded(
                 child: _InteractivePill(
-                  // Removed the check here so you can click it even if it's 0!
                   onTap: () {
                     _showSessionBreakdownDialog(completedSessions);
                   },
@@ -984,12 +982,35 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
               ),
             ],
           ),
-          const SizedBox(height: 24), 
-          _insightRow(Icons.wb_sunny_rounded, 'Time of Day', primeTime, dfTealCyan),
-          const Divider(color: Colors.white, height: 24, thickness: 1.5),
-          _insightRow(Icons.calendar_today_rounded, 'Day of Week', primeDay, customModeColor),
-          const Divider(color: Colors.white, height: 24, thickness: 1.5),
-          _insightRow(Icons.star_rounded, 'Session Type', primeType, Colors.orangeAccent),
+          
+          if (primeSessions.isEmpty) ...[
+            const SizedBox(height: 32),
+            Center(
+              child: Column(
+                children: [
+                  Icon(Icons.auto_awesome_rounded, color: secondaryTextGrey.withOpacity(0.3), size: 36),
+                  const SizedBox(height: 12),
+                  Text(
+                    _primeFilter == 'Last Week'
+                        ? "You haven't completed any sessions in the past week.\nFocus more to discover your prime patterns!"
+                        : _primeFilter == 'Last Month'
+                            ? "You haven't completed any sessions in the past month.\nFocus more to discover your prime patterns!"
+                            : "You haven't completed any sessions yet.\nComplete your first session to unlock productivity insights!",
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 13, color: secondaryTextGrey, fontWeight: FontWeight.w500, height: 1.5),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: 24), 
+            _insightRow(Icons.wb_sunny_rounded, 'Time of Day', primeTime, dfTealCyan),
+            const Divider(color: Colors.white, height: 24, thickness: 1.5),
+            _insightRow(Icons.calendar_today_rounded, 'Day of Week', primeDay, customModeColor),
+            const Divider(color: Colors.white, height: 24, thickness: 1.5),
+            _insightRow(Icons.star_rounded, 'Session Type', primeType, Colors.orangeAccent),
+          ],
         ],
       ),
     );
@@ -1114,7 +1135,7 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 40),
                   const Text('Your Progress', style: TextStyle(fontSize: 30, fontWeight: FontWeight.normal, color: dfNavyIndigo, letterSpacing: -0.5)),
                   const SizedBox(height: 4),
                   const Text('Track your productivity history', style: TextStyle(fontSize: 15, color: secondaryTextGrey, fontWeight: FontWeight.w400)),

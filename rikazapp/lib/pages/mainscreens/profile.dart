@@ -6,12 +6,13 @@ import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sig
 import '../subscreens/create_preset.dart'; 
 
 // =============================================================================
-// THEME DEFINITIONS (Synchronized with Progress Page)
+// THEME DEFINITIONS (Synchronized with Progress & Home Page)
 // =============================================================================
 const Color dfDeepBlue = Color(0xFF7E84D4);
 const Color dfDeepTeal = Color(0xFF1B2536); 
 const Color dfTealCyan = Color(0xFF68C29D); 
 const Color customModeColor = Color(0xFF7E84D4); 
+const Color dfSoftPink = Color(0xFFF08A8D); 
 const Color dfLightSeafoam = Color(0xFFE8F1EC);
 const Color dfNavyIndigo = Color(0xFF1B2536); 
 
@@ -34,14 +35,6 @@ List<BoxShadow> get subtleShadow => [
         offset: const Offset(0, 10),
       ),
     ];
-
-double adaptiveFontSize(BuildContext context, double baseScreenWidthMultiplier) {
-  final screenWidth = MediaQuery.of(context).size.width;
-  final baseSize = screenWidth * baseScreenWidthMultiplier;
-  final textScale = MediaQuery.textScalerOf(context).scale(1.0);
-  const mitigationFactor = 0.9;
-  return baseSize / (1.0 + (textScale - 1.0) * mitigationFactor);
-}
 
 // =============================================================================
 
@@ -161,31 +154,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _deletePreset(String presetId) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Delete Preset?', style: TextStyle(color: dfNavyIndigo, fontWeight: FontWeight.bold)),
-        content: const Text('Are you sure you want to delete this preset?', style: TextStyle(color: secondaryTextGrey)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel', style: TextStyle(color: secondaryTextGrey))),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true), 
-            style: TextButton.styleFrom(foregroundColor: errorIndicatorRed),
-            child: const Text('Delete', style: TextStyle(fontWeight: FontWeight.bold))
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      try {
-        await supabase.from('Preset').delete().eq('Preset_id', presetId);
-        _showSuccessSnackBar('Preset deleted');
-        _loadPresets(); 
-      } catch (e) {
-        _showErrorSnackBar('Failed to delete preset: $e');
-      }
+    try {
+      await supabase.from('Preset').delete().eq('Preset_id', presetId);
+      _showSuccessSnackBar('Preset deleted');
+      _loadPresets(); 
+    } catch (e) {
+      _showErrorSnackBar('Failed to delete preset: $e');
     }
   }
 
@@ -195,6 +169,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       backgroundColor: errorIndicatorRed, 
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      duration: const Duration(seconds: 4),
     ));
   }
 
@@ -264,6 +239,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // ===========================================================================
   // BOTTOM SHEETS
   // ===========================================================================
+
+  void _showPresetOptionsModal(Map<String, dynamic> preset) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(child: Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)))),
+            const SizedBox(height: 24),
+            Text(preset['preset_name'] ?? 'Preset Options', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: dfNavyIndigo)),
+            const SizedBox(height: 24),
+            _InteractivePill(
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (context) => CreatePresetPage(presetToEdit: preset))).then((shouldRefresh) {
+                  if (shouldRefresh == true) _loadPresets();
+                });
+              },
+              child: Container(
+                padding: const EdgeInsets.all(16), 
+                decoration: BoxDecoration(color: dfTealCyan.withOpacity(0.1), borderRadius: BorderRadius.circular(16)), 
+                child: Row(children: const [Icon(Icons.tune_rounded, color: dfTealCyan), SizedBox(width: 16), Text('Edit Preset', style: TextStyle(color: dfTealCyan, fontWeight: FontWeight.w600, fontSize: 15))])
+              ),
+            ),
+            const SizedBox(height: 12),
+            _InteractivePill(
+              onTap: () {
+                Navigator.pop(context);
+                _deletePreset(preset['Preset_id'].toString());
+              },
+              child: Container(
+                padding: const EdgeInsets.all(16), 
+                decoration: BoxDecoration(color: errorIndicatorRed.withOpacity(0.1), borderRadius: BorderRadius.circular(16)), 
+                child: Row(children: const [Icon(Icons.delete_outline_rounded, color: errorIndicatorRed), SizedBox(width: 16), Text('Delete Preset', style: TextStyle(color: errorIndicatorRed, fontWeight: FontWeight.w600, fontSize: 15))])
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
 
   void _showPrivacyBottomSheet(BuildContext context) {
     showModalBottomSheet(
@@ -427,31 +449,159 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // UI BUILD
   // ===========================================================================
 
-  Widget _buildSettingsItem({required IconData icon, required String label, required VoidCallback onTap, Color? textColor}) {
+  Widget _buildSettingsItem({required IconData icon, required String label, required VoidCallback onTap, Color? iconColor, Color? textColor}) {
     return _InteractivePill(
       onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.6), 
-          borderRadius: BorderRadius.circular(cardBorderRadius), 
-          border: Border.all(color: Colors.white, width: 1.5),
-          boxShadow: subtleShadow
-        ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16.0),
         child: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: (textColor ?? accentThemeColor).withOpacity(0.1), shape: BoxShape.circle),
-              child: Icon(icon, color: textColor ?? accentThemeColor, size: 22),
-            ),
-            const SizedBox(width: 16),
-            Expanded(child: Text(label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: textColor ?? primaryTextDark))),
-            Icon(Icons.chevron_right_rounded, color: secondaryTextGrey, size: 22),
+            Icon(icon, color: iconColor ?? secondaryTextGrey, size: 24),
+            const SizedBox(width: 20),
+            Expanded(child: Text(label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: textColor ?? primaryTextDark))),
+            Icon(Icons.chevron_right_rounded, color: secondaryTextGrey.withOpacity(0.5), size: 20),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildPresetsSection() {
+    bool isMaxReached = _userPresets.length >= _maxPresetsLimit;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                // Thinned out the header font weight!
+                Text('Presets', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w300, color: dfNavyIndigo, letterSpacing: -0.5)),
+                SizedBox(height: 4),
+              ],
+            ),
+            _InteractivePill(
+              onTap: () {
+                if (isMaxReached) {
+                  _showErrorSnackBar('You can only make 5 presets, delete a preset to create a new one, or edit an existing preset.');
+                } else {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const CreatePresetPage())).then((shouldRefresh) {
+                    if (shouldRefresh == true) _loadPresets();
+                  });
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isMaxReached ? Colors.grey.shade200 : dfTealCyan.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: isMaxReached ? Colors.grey.shade300 : dfTealCyan.withOpacity(0.3), width: 1.5),
+                ),
+                child: Text('+ New', style: TextStyle(color: isMaxReached ? secondaryTextGrey : dfTealCyan, fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 0.5)),
+              ),
+            )
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        if (_isLoadingPresets)
+          const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator(color: accentThemeColor)))
+        else if (_userPresets.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40.0),
+              child: Text('No presets saved yet. Create one to get started.', style: TextStyle(color: secondaryTextGrey.withOpacity(0.8), fontSize: 14)),
+            ),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _userPresets.length,
+            itemBuilder: (context, index) {
+              final preset = _userPresets[index];
+              
+              final activeTriggers = <String>[];
+              if (preset['trigger_phone_use'] == true) activeTriggers.add('phone');
+              if (preset['trigger_sleeping'] == true) activeTriggers.add('sleeping');
+              if (preset['trigger_absence'] == true) activeTriggers.add('absence');
+
+              final colors = [dfTealCyan, customModeColor, dfSoftPink];
+              final themeColor = colors[index % colors.length];
+
+              return _InteractivePill(
+                onTap: () => _showPresetOptionsModal(preset),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.85),
+                    borderRadius: BorderRadius.circular(cardBorderRadius),
+                    border: Border.all(color: Colors.white, width: 1.5),
+                    boxShadow: subtleShadow,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 38, height: 38,
+                        decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: themeColor.withOpacity(0.15), width: 1)),
+                        child: Center(
+                          child: Container(
+                            width: 22, height: 22,
+                            decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: themeColor.withOpacity(0.3), width: 1)),
+                            child: Center(
+                              child: Container(
+                                width: 8, height: 8,
+                                decoration: BoxDecoration(shape: BoxShape.circle, color: themeColor),
+                              )
+                            )
+                          )
+                        )
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(preset['preset_name'] ?? 'Unnamed', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: dfNavyIndigo, letterSpacing: -0.3)),
+                            if (activeTriggers.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: activeTriggers.map((t) => Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: dfNavyIndigo.withOpacity(0.06),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(t, style: TextStyle(color: dfNavyIndigo.withOpacity(0.5), fontSize: 10, fontWeight: FontWeight.w700)),
+                                )).toList(),
+                              )
+                            ]
+                          ],
+                        ),
+                      ),
+                      Container(
+                        width: 38, height: 38,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: themeColor.withOpacity(0.2), width: 1.5),
+                          color: themeColor.withOpacity(0.05),
+                        ),
+                        child: Icon(Icons.more_horiz_rounded, color: themeColor, size: 20),
+                      )
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
     );
   }
 
@@ -461,7 +611,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       backgroundColor: primaryBackground,
       body: Stack(
         children: [
-          // Glassmorphic Gradient Background matching progress & home page
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -478,204 +627,110 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 20),
-                  const Text('Profile', style: TextStyle(fontSize: 30, fontWeight: FontWeight.normal, color: dfNavyIndigo, letterSpacing: -0.5)),
-                  const SizedBox(height: 4),
-                  const Text('Manage your account and settings', style: TextStyle(fontSize: 15, color: secondaryTextGrey, fontWeight: FontWeight.w400)),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 40),
 
                   // ---------------------------------------------------------------
-                  // Sleek Minimalist Header
+                  // Minimalist Header (Avatar + Typography)
                   // ---------------------------------------------------------------
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.6), 
-                      borderRadius: BorderRadius.circular(cardBorderRadius), 
-                      border: Border.all(color: Colors.white, width: 1.5),
-                      boxShadow: subtleShadow
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(userName, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: dfNavyIndigo, letterSpacing: -0.5)),
-                        const SizedBox(height: 4),
-                        Text(userEmail, style: const TextStyle(fontSize: 15, color: secondaryTextGrey, fontWeight: FontWeight.w500)),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // ---------------------------------------------------------------
-                  // PRESETS DROP-DOWN (Glassmorphic)
-                  // ---------------------------------------------------------------
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.6), 
-                      borderRadius: BorderRadius.circular(cardBorderRadius), 
-                      border: Border.all(color: Colors.white, width: 1.5),
-                      boxShadow: subtleShadow
-                    ),
-                    child: Theme(
-                      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                      child: ExpansionTile(
-                        iconColor: dfNavyIndigo,
-                        collapsedIconColor: secondaryTextGrey,
-                        initiallyExpanded: true,
-                        title: Text(
-                          'My Presets (${_userPresets.length}/$_maxPresetsLimit)',
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryTextDark),
+                  Row(
+                    children: [
+                      Container(
+                        width: 64, height: 64,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.5), 
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2)
                         ),
-                        childrenPadding: const EdgeInsets.only(left: 16, right: 16, bottom: 20),
-                        children: [
-                          if (_isLoadingPresets)
-                            const Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator(color: accentThemeColor))
-                          else if (_userPresets.isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.only(bottom: 12.0),
-                              child: Text('No presets saved yet.', style: TextStyle(color: secondaryTextGrey, fontSize: 14)),
-                            )
-                          else
-                            ListView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: _userPresets.length,
-                              itemBuilder: (context, index) {
-                                final preset = _userPresets[index];
-                                return Container(
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  decoration: BoxDecoration(
-                                    color: primaryBackground,
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: Colors.white, width: 1.5),
-                                  ),
-                                  child: ListTile(
-                                    leading: Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(color: accentThemeColor.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
-                                      child: const Icon(Icons.tune_rounded, color: accentThemeColor, size: 20),
-                                    ),
-                                    title: Text(preset['preset_name'] ?? 'Unnamed', style: const TextStyle(fontWeight: FontWeight.w600, color: dfNavyIndigo)),
-                                    trailing: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.edit_outlined, color: secondaryTextGrey, size: 20),
-                                          onPressed: () {
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(builder: (context) => CreatePresetPage(presetToEdit: preset)),
-                                            ).then((shouldRefresh) {
-                                              if (shouldRefresh == true) _loadPresets();
-                                            });
-                                          },
-                                        ),
-                                        IconButton(
-                                          icon: Icon(Icons.delete_outline, color: errorIndicatorRed.withOpacity(0.8), size: 20),
-                                         onPressed: () => _deletePreset(preset['Preset_id'].toString()),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          
-                          const SizedBox(height: 8),
-                          
-                          // Add New Preset Button
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: _userPresets.length < _maxPresetsLimit
-                                  ? () {
-                                      Navigator.push(context, MaterialPageRoute(builder: (context) => const CreatePresetPage())).then((shouldRefresh) {
-                                        if (shouldRefresh == true) _loadPresets();
-                                      });
-                                    }
-                                  : null,
-                              icon: const Icon(Icons.add_circle_outline, size: 18),
-                              label: const Text('Add New Preset', style: TextStyle(fontWeight: FontWeight.bold)),
-                              style: ElevatedButton.styleFrom(
-                                foregroundColor: Colors.white,
-                                backgroundColor: dfNavyIndigo,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                elevation: 0,
-                              ),
-                            ),
+                        child: Center(
+                          child: Text(
+                            userName.isNotEmpty ? userName[0].toUpperCase() : 'U', 
+                            style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: dfNavyIndigo)
                           )
-                        ],
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 20),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(userName, style: const TextStyle(fontSize: 30, fontWeight: FontWeight.normal, color: dfNavyIndigo, letterSpacing: -0.5)),
+                            const SizedBox(height: 4),
+                            Text(userEmail, style: const TextStyle(fontSize: 15, color: secondaryTextGrey, fontWeight: FontWeight.w400)),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
 
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 48),
 
                   // ---------------------------------------------------------------
-                  // Settings Section
+                  // PRESETS 
                   // ---------------------------------------------------------------
-                  const Text('Settings', style: TextStyle(fontSize: 20, fontWeight: FontWeight.normal, color: dfNavyIndigo, letterSpacing: -0.5)),
-                  const SizedBox(height: 16),
+                  _buildPresetsSection(),
+
+                  const SizedBox(height: 48),
+
+                  // ---------------------------------------------------------------
+                  // Minimalist Settings Section
+                  // ---------------------------------------------------------------
+                  const Text('SETTINGS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: secondaryTextGrey, letterSpacing: 1.5)),
+                  const SizedBox(height: 8),
                   
-                  // Google Calendar
+                  // Google Calendar (Flat style)
                   _InteractivePill(
                     onTap: _isSigningIn ? () {} : (_isCalendarConnected ? _handleCalendarSignOut : _handleCalendarSignIn),
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.6), 
-                        borderRadius: BorderRadius.circular(cardBorderRadius), 
-                        border: Border.all(color: Colors.white, width: 1.5),
-                        boxShadow: subtleShadow
-                      ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16.0),
                       child: Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(color: (_isCalendarConnected ? Colors.green.shade600 : secondaryTextGrey).withOpacity(0.1), shape: BoxShape.circle),
-                            child: _isSigningIn
-                              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(accentThemeColor)))
-                              : Icon(_isCalendarConnected ? Icons.cloud_done_rounded : Icons.cloud_off_rounded, color: _isCalendarConnected ? Colors.green.shade600 : secondaryTextGrey, size: 22),
-                          ),
-                          const SizedBox(width: 16),
+                          _isSigningIn
+                              ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(dfTealCyan)))
+                              : Icon(_isCalendarConnected ? Icons.cloud_done_rounded : Icons.cloud_off_rounded, color: _isCalendarConnected ? dfTealCyan : secondaryTextGrey, size: 24),
+                          const SizedBox(width: 20),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Google Calendar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: primaryTextDark)),
-                                const SizedBox(height: 4),
-                                Text(_isCalendarConnected ? 'Connected' : 'Not connected', style: const TextStyle(fontSize: 13, color: secondaryTextGrey, fontWeight: FontWeight.w500)),
+                                const Text('Google Calendar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: primaryTextDark)),
+                                const SizedBox(height: 2),
+                                Text(_isCalendarConnected ? 'Connected' : 'Not connected', style: TextStyle(fontSize: 13, color: secondaryTextGrey.withOpacity(0.8))),
                               ],
                             ),
                           ),
-                          const Icon(Icons.chevron_right_rounded, color: secondaryTextGrey, size: 22),
+                          Icon(Icons.chevron_right_rounded, color: secondaryTextGrey.withOpacity(0.5), size: 20),
                         ],
                       ),
                     ),
                   ),
+
+                  Divider(color: Colors.black.withOpacity(0.04), height: 1),
 
                   _buildSettingsItem(
                     icon: Icons.security_rounded, 
                     label: 'Privacy', 
                     onTap: () => _showPrivacyBottomSheet(context)
                   ),
+                  
+                  Divider(color: Colors.black.withOpacity(0.04), height: 1),
+
                   _buildSettingsItem(
                     icon: Icons.help_outline_rounded, 
                     label: 'Help & Support', 
                     onTap: () => _showSupportBottomSheet(context)
                   ),
+
+                  Divider(color: Colors.black.withOpacity(0.04), height: 1),
+
                   _buildSettingsItem(
                     icon: Icons.logout_rounded, 
                     label: 'Sign Out', 
+                    iconColor: errorIndicatorRed,
                     textColor: errorIndicatorRed, 
                     onTap: handleSignOut
                   ),
                   
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 60), 
                 ],
               ),
             ),
