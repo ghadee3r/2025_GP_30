@@ -333,7 +333,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
     {
       'title': 'Custom',
       'desc': 'Adaptive duration',
-      'badge': 'Free',
+      'badge': 'Flexible',
       'color': customModeColor,
       'icon': Icons.all_inclusive,
     },
@@ -415,9 +415,12 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
       final start = e.start?.dateTime?.toLocal() ?? e.start?.date;
       if (start == null) return false;
       
-      // BOTH List and Month views now fetch the next 7 days equally
-      final endRange = _selectedDay.add(const Duration(days: 7));
-      return (isSameDay(start, _selectedDay) || start.isAfter(_selectedDay)) && start.isBefore(endRange);
+      if (_calendarFormatView == CalendarFormatView.month) {
+        return isSameDay(start, _selectedDay);
+      } else {
+        final endRange = _selectedDay.add(const Duration(days: 7));
+        return (isSameDay(start, _selectedDay) || start.isAfter(_selectedDay)) && start.isBefore(endRange);
+      }
     }).toList();
 
     if (_scheduleView == ScheduleView.rikaz) {
@@ -602,7 +605,6 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
   void handleSetSession() {
     if (selectedModeIndex == null) return;
     
-    // Pass the selected mode as a route argument so SetSession opens on the chosen mode automatically
     final String modeArg = selectedModeIndex == 0 ? 'pomodoro' : 'custom';
     
     Navigator.of(context).pushNamed(
@@ -800,20 +802,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
                             children: [
                               Text(mode['title'], style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 17, color: dfNavyIndigo)),
                               const SizedBox(width: 8),
-                              // Fixed overflow by placing badge inside a Flexible container using FittedBox
-                              Flexible(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), 
-                                  decoration: BoxDecoration(
-                                    color: color.withOpacity(0.1), 
-                                    borderRadius: BorderRadius.circular(12)
-                                  ), 
-                                  child: FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: Text(mode['badge'], style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color))
-                                  )
-                                ),
-                              ),
+                              Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: Text(mode['badge'], style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color))),
                             ],
                           ),
                           const SizedBox(height: 4),
@@ -967,9 +956,21 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
           ),
         ),
         SizedBox(height: screenHeight * 0.02),
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [_buildScheduleToggle(), _buildMinimalAddButton()]),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween, 
+          children: [
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: _buildScheduleToggle(),
+              ),
+            ),
+            const SizedBox(width: 12),
+            _buildMinimalAddButton()
+          ]
+        ),
         SizedBox(height: screenHeight * 0.02),
-        // Use the unified list
         _buildEventList(screenHeight),
       ],
     );
@@ -981,9 +982,21 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
       children: [
         _DateRibbon(selectedDay: _selectedDay, onDaySelected: (day) => setState(() { _selectedDay = day; _focusedDay = day; _filterEvents(); })),
         SizedBox(height: screenHeight * 0.03),
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [_buildScheduleToggle(), _buildMinimalAddButton()]),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween, 
+          children: [
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: _buildScheduleToggle(),
+              ),
+            ),
+            const SizedBox(width: 12),
+            _buildMinimalAddButton()
+          ]
+        ),
         SizedBox(height: screenHeight * 0.02),
-        // Use the unified list
         _buildEventList(screenHeight),
       ],
     );

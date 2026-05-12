@@ -238,7 +238,7 @@ class _SignupScreenState extends State<SignupScreen> {
         email: email,
         password: password,
         data: {'full_name': name},
-        emailRedirectTo: 'rikazapp://login', 
+        emailRedirectTo: 'rikazapp://login',  
       );
 
       if (!mounted) return;
