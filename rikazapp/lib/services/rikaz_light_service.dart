@@ -1,6 +1,5 @@
 // rikaz_light_service.dart
 //
-// FILE: rikaz_light_service.dart
 // PURPOSE: Bluetooth communication with Rikaz Light device + Camera monitoring
 
 import 'dart:async';
@@ -31,9 +30,7 @@ class RikazLightService {
   // Callbacks
   static Function(String status)? onCameraStatusChanged;
   static Function(int count)? onDistractionDetected;
-  // ─── NEW: fired when a distraction event fully resolves ──────────────────────
   static Function(String type, int durationSeconds)? onDistractionEvent;
-  // ─────────────────────────────────────────────────────────────────────────────
 
   // Rikaz BLE Service UUID
   static final Guid _rikazServiceUuid =
@@ -59,13 +56,16 @@ class RikazLightService {
     if (!allGranted) {
       debugPrint("Permissions denied");
     }
+
     return allGranted;
   }
 
   // Scan for Rikaz devices
-  static Future<List<RikazDevice>> scanForDevices(
-      {Duration timeout = const Duration(seconds: 10)}) async {
+  static Future<List<RikazDevice>> scanForDevices({
+    Duration timeout = const Duration(seconds: 10),
+  }) async {
     List<RikazDevice> foundDevices = [];
+
     try {
       if (await FlutterBluePlus.isSupported == false) {
         debugPrint("X Bluetooth not supported");
@@ -84,42 +84,49 @@ class RikazLightService {
       }
 
       debugPrint("Scanning for Rikaz devices...");
+
       await FlutterBluePlus.startScan(
         timeout: timeout,
         androidUsesFineLocation: true,
       );
 
       await Future.delayed(timeout);
+
       var results = FlutterBluePlus.lastScanResults;
 
       for (ScanResult result in results) {
         String deviceName = result.device.platformName;
-        debugPrint(" Found: $deviceName (${result.rssi} dBm)");
+        debugPrint("Found: $deviceName (${result.rssi} dBm)");
 
         if (deviceName.toLowerCase().contains('rikaz') ||
-            result.advertisementData.serviceUuids
-                .contains(_rikazServiceUuid)) {
-          bool exists = foundDevices
-              .any((d) => d.id == result.device.remoteId.toString());
+            result.advertisementData.serviceUuids.contains(_rikazServiceUuid)) {
+          bool exists = foundDevices.any(
+            (d) => d.id == result.device.remoteId.toString(),
+          );
 
           if (!exists) {
-            foundDevices.add(RikazDevice(
-              id: result.device.remoteId.toString(),
-              name: deviceName.isNotEmpty ? deviceName : "Rikaz Device",
-              rssi: result.rssi,
-              device: result.device,
-            ));
+            foundDevices.add(
+              RikazDevice(
+                id: result.device.remoteId.toString(),
+                name: deviceName.isNotEmpty ? deviceName : "Rikaz Device",
+                rssi: result.rssi,
+                device: result.device,
+              ),
+            );
+
             debugPrint("Added Rikaz device: $deviceName");
           }
         }
       }
 
       await FlutterBluePlus.stopScan();
-      debugPrint(" Scan complete. Found ${foundDevices.length} device(s)");
+
+      debugPrint("Scan complete. Found ${foundDevices.length} device(s)");
 
       if (foundDevices.isEmpty) {
         debugPrint("Tip: Device should be named 'Rikaz-Light'");
       }
+
       return foundDevices;
     } catch (e) {
       debugPrint("Scan Error: $e");
@@ -131,21 +138,22 @@ class RikazLightService {
   // Connect to device and setup notifications
   static Future<bool> connectToDevice(RikazDevice device) async {
     try {
-      debugPrint(" Connecting to ${device.name}...");
-      await device.device.connect(timeout: const Duration(seconds: 15));
-      _connectedDevice = device.device;
-      debugPrint("✓ Connected to ${device.name}");
+      debugPrint("Connecting to ${device.name}...");
 
-      List<BluetoothService> services =
-          await device.device.discoverServices();
+      await device.device.connect(timeout: const Duration(seconds: 15));
+
+      _connectedDevice = device.device;
+
+      debugPrint("Connected to ${device.name}");
+
+      List<BluetoothService> services = await device.device.discoverServices();
 
       for (BluetoothService service in services) {
         if (service.uuid == _rikazServiceUuid) {
-          for (BluetoothCharacteristic characteristic
-              in service.characteristics) {
+          for (BluetoothCharacteristic characteristic in service.characteristics) {
             if (characteristic.uuid == _rikazCharacteristicUuid) {
               _writeCharacteristic = characteristic;
-              debugPrint(" Found Rikaz characteristic");
+              debugPrint("Found Rikaz characteristic");
 
               await _setupNotifications(characteristic);
               return true;
@@ -154,7 +162,7 @@ class RikazLightService {
         }
       }
 
-      debugPrint(" Rikaz service not found");
+      debugPrint("Rikaz service not found");
       return false;
     } catch (e) {
       debugPrint("X Connection Error: $e");
@@ -163,53 +171,59 @@ class RikazLightService {
   }
 
   static Future<void> _setupNotifications(
-      BluetoothCharacteristic characteristic) async {
+    BluetoothCharacteristic characteristic,
+  ) async {
     try {
       await characteristic.setNotifyValue(true);
-      _notificationSubscription =
-          characteristic.lastValueStream.listen((value) {
-        if (value.isNotEmpty) {
-          try {
-            String message = utf8.decode(value);
-            debugPrint("Notification received: $message");
-            final data = jsonDecode(message);
 
-            if (data.containsKey('cameraStatus')) {
-              String status = data['cameraStatus'];
-              debugPrint(" Camera status: $status");
-              if (onCameraStatusChanged != null) {
-                onCameraStatusChanged!(status);
-              }
+      _notificationSubscription = characteristic.lastValueStream.listen((value) {
+        if (value.isEmpty) return;
+
+        try {
+          String message = utf8.decode(value);
+          debugPrint("Notification received: $message");
+
+          final data = jsonDecode(message);
+
+          if (data.containsKey('cameraStatus')) {
+            String status = data['cameraStatus'];
+            debugPrint("Camera status: $status");
+
+            if (onCameraStatusChanged != null) {
+              onCameraStatusChanged!(status);
             }
-
-            if (data.containsKey('distraction')) {
-              int count = data['count'] ?? 0;
-              debugPrint(" Distraction detected! Count: $count");
-              if (onDistractionDetected != null) {
-                onDistractionDetected!(count);
-              }
-            }
-
-            // ─── NEW: handle distraction-end event from ESP32 ─────────────────
-            if (data.containsKey('distractionEnd') &&
-                data['distractionEnd'] == true) {
-              String type = data['type'] ?? 'unknown';
-              int duration = data['duration'] ?? 0;
-              debugPrint(" Distraction ended — type: $type, duration: ${duration}s");
-              if (onDistractionEvent != null) {
-                onDistractionEvent!(type, duration);
-              }
-            }
-            // ─────────────────────────────────────────────────────────────────
-
-          } catch (e) {
-            debugPrint(" Error parsing notification: $e");
           }
+
+          if (data.containsKey('distraction')) {
+            int count = data['count'] ?? 0;
+            debugPrint("Distraction detected. Count: $count");
+
+            if (onDistractionDetected != null) {
+              onDistractionDetected!(count);
+            }
+          }
+
+          if (data.containsKey('distractionEnd') &&
+              data['distractionEnd'] == true) {
+            String type = data['type'] ?? 'unknown';
+            int duration = data['duration'] ?? 0;
+
+            debugPrint(
+              "Distraction ended — type: $type, duration: ${duration}s",
+            );
+
+            if (onDistractionEvent != null) {
+              onDistractionEvent!(type, duration);
+            }
+          }
+        } catch (e) {
+          debugPrint("Error parsing notification: $e");
         }
       });
-      debugPrint(" Notifications enabled");
+
+      debugPrint("Notifications enabled");
     } catch (e) {
-      debugPrint(" Failed to enable notifications: $e");
+      debugPrint("Failed to enable notifications: $e");
     }
   }
 
@@ -223,12 +237,12 @@ class RikazLightService {
         await _connectedDevice!.disconnect();
         _connectedDevice = null;
         _writeCharacteristic = null;
-        debugPrint(" Disconnected");
+        debugPrint("Disconnected");
       }
 
       onCameraStatusChanged = null;
       onDistractionDetected = null;
-      onDistractionEvent = null; // ─── NEW: clear the new callback too ─────────
+      onDistractionEvent = null;
     } catch (e) {
       debugPrint("X Disconnect Error: $e");
     }
@@ -237,6 +251,7 @@ class RikazLightService {
   // Check connection
   static Future<bool> isConnected() async {
     if (_connectedDevice == null) return false;
+
     try {
       var state = await _connectedDevice!.connectionState.first;
       return state == BluetoothConnectionState.connected;
@@ -255,52 +270,65 @@ class RikazLightService {
     try {
       List<int> bytes = utf8.encode(jsonCommand);
       await _writeCharacteristic!.write(bytes, withoutResponse: false);
-      debugPrint(" Sent: $jsonCommand");
+
+      debugPrint("Sent: $jsonCommand");
+
       return true;
     } on FlutterBluePlusException catch (e) {
       debugPrint("X Write Error: FlutterBluePlusException: $e");
       return false;
     } catch (e) {
-      debugPrint(" Write Error: $e");
+      debugPrint("Write Error: $e");
       return false;
     }
   }
 
-  // === LIGHT CONTROL METHODS ===
+  // LIGHT CONTROL METHODS
   static Future<bool> setFocusLight() async {
     final command = jsonEncode({
       "on": true,
-      "mode": "focus"
+      "mode": "focus",
     });
+
     bool success = await sendCommand(command);
+
     if (success) {
-      debugPrint(" Focus light activated");
+      debugPrint("Focus light activated");
     }
+
     return success;
   }
 
   static Future<bool> setBreakLight() async {
     final command = jsonEncode({
       "on": true,
-      "mode": "break"
+      "mode": "break",
     });
+
     bool success = await sendCommand(command);
+
     if (success) {
-      debugPrint(" Break light activated");
+      debugPrint("Break light activated");
     }
+
     return success;
   }
 
   static Future<bool> turnOff() async {
-    final command = jsonEncode({"on": false});
+    final command = jsonEncode({
+      "on": false,
+    });
+
     bool success = await sendCommand(command);
+
     if (success) {
-      debugPrint(" Light turned off");
+      debugPrint("Light turned off");
     }
+
     return success;
   }
 
-  // === CAMERA CONTROL METHODS ===
+  // CAMERA CONTROL METHODS
   static Future<bool> enableCameraDetection({
     required String sensitivity,
     required String notificationStyle,
@@ -309,6 +337,7 @@ class RikazLightService {
     required bool phoneTrigger,
   }) async {
     final command = jsonEncode({
+      "camera": true,
       "cameraDetection": true,
       "sensitivity": sensitivity,
       "notificationStyle": notificationStyle,
@@ -318,23 +347,34 @@ class RikazLightService {
     });
 
     bool success = await sendCommand(command);
+
     if (success) {
-      debugPrint(" Camera detection enabled");
+      debugPrint("Camera detection enabled");
     }
+
     return success;
   }
 
   static Future<bool> disableCameraDetection() async {
-    final command = jsonEncode({"cameraDetection": false});
+    final command = jsonEncode({
+      "camera": false,
+      "cameraDetection": false,
+    });
+
     bool success = await sendCommand(command);
+
     if (success) {
-      debugPrint(" Camera detection disabled");
+      debugPrint("Camera detection disabled");
     }
+
     return success;
   }
 
   static Future<bool> requestCameraStatus() async {
-    final command = jsonEncode({"requestCameraStatus": true});
+    final command = jsonEncode({
+      "requestCameraStatus": true,
+    });
+
     return await sendCommand(command);
   }
 }

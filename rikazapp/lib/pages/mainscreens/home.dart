@@ -601,7 +601,14 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
 
   void handleSetSession() {
     if (selectedModeIndex == null) return;
-    Navigator.of(context).pushNamed('/SetSession');
+    
+    // Pass the selected mode as a route argument so SetSession opens on the chosen mode automatically
+    final String modeArg = selectedModeIndex == 0 ? 'pomodoro' : 'custom';
+    
+    Navigator.of(context).pushNamed(
+      '/SetSession',
+      arguments: modeArg,
+    );
   }
 
   void _showSnackbar(String message, Color color) {
@@ -793,7 +800,20 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin, Widg
                             children: [
                               Text(mode['title'], style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 17, color: dfNavyIndigo)),
                               const SizedBox(width: 8),
-                              Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: Text(mode['badge'], style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color))),
+                              // Fixed overflow by placing badge inside a Flexible container using FittedBox
+                              Flexible(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), 
+                                  decoration: BoxDecoration(
+                                    color: color.withOpacity(0.1), 
+                                    borderRadius: BorderRadius.circular(12)
+                                  ), 
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(mode['badge'], style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color))
+                                  )
+                                ),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 4),

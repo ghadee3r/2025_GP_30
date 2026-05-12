@@ -112,8 +112,19 @@ class MyApp extends StatelessWidget {
           return MainTabsScreen(initialIndex: idx);
         },
         '/home': (context) => const HomePage(),
-        '/SetSession': (context) {
-          final initialMode = ModalRoute.of(context)!.settings.arguments as SessionMode?;
+'/SetSession': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments;
+          SessionMode? initialMode;
+          
+          // Translate the string from HomePage into the enum SetSession expects
+          if (args == 'pomodoro') {
+            initialMode = SessionMode.pomodoro;
+          } else if (args == 'custom') {
+            initialMode = SessionMode.custom;
+          } else if (args is SessionMode) {
+            initialMode = args; // Fallback in case you pass the enum directly from elsewhere
+          }
+
           return SetSessionPage(initialMode: initialMode);
         },
        '/session': (context) {
