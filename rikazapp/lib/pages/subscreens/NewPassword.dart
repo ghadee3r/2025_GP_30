@@ -415,7 +415,7 @@ class _NewPasswordState extends State<NewPassword> {
           margin: const EdgeInsets.only(bottom: 4),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.6),
+            color: Colors.transparent, // CHANGED FROM Colors.white.withOpacity(0.6)
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: Colors.white, width: 2),
             boxShadow: subtleShadow,
@@ -447,6 +447,7 @@ class _NewPasswordState extends State<NewPassword> {
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
+                    filled: false, // <-- ADDED THIS FIX
                   ),
                   onChanged: (val) {
                     if (hasError) {

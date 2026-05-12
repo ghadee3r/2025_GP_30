@@ -20,7 +20,7 @@ List<BoxShadow> get subtleShadow => [
   ),
 ];
 
-// --- Constants ---
+// ========= Constants =========
 const String loginRoute = "/login"; 
 final supabase = sb.Supabase.instance.client;
 const String supabaseRedirectUrl = 'io.rikaz.app://reset-password'; 
@@ -212,7 +212,7 @@ class ForgotPasswordState extends State<ForgotPassword> {
           margin: const EdgeInsets.only(bottom: 4),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.6), 
+            color: Colors.transparent, // CHANGED FROM Colors.white.withOpacity(0.6)
             borderRadius: BorderRadius.circular(20),
             // Turns red ONLY if there is a validation error like empty/invalid format
             border: Border.all(color: hasError ? errorIndicatorRed.withOpacity(0.8) : Colors.white, width: 2), 
@@ -235,6 +235,7 @@ class ForgotPasswordState extends State<ForgotPassword> {
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
+                    filled: false, // <-- ADDED THIS FIX
                   ),
                   onChanged: (val) {
                     if (hasError) {

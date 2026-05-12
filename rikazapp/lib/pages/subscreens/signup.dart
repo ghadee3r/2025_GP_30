@@ -304,7 +304,7 @@ class _SignupScreenState extends State<SignupScreen> {
           margin: const EdgeInsets.only(bottom: 4), 
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.6), 
+            color: Colors.transparent, 
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: Colors.white, width: 2), // ALWAYS WHITE
             boxShadow: subtleShadow,
@@ -327,6 +327,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
+                    filled: false, // <-- ADDED THIS
                   ),
                   onChanged: (val) {
                     if (hasError) {

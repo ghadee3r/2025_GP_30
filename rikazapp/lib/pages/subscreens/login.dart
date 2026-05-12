@@ -217,7 +217,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // --- GLASSMORPHIC INPUT FIELD WITH NO "UGLY LIGHT" BORDERS ---
+  // --- GLASSMORPHIC INPUT FIELD ---
   Widget _buildGlassInput({
     required TextEditingController controller,
     required String hintText,
@@ -237,7 +237,7 @@ class _LoginScreenState extends State<LoginScreen> {
           margin: const EdgeInsets.only(bottom: 4), 
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.6), 
+            color: Colors.transparent, // Ensures the outer pill background is transparent
             borderRadius: BorderRadius.circular(20),
             // Border turns red on error, white otherwise
             border: Border.all(color: hasError ? errorIndicatorRed.withOpacity(0.8) : Colors.white, width: 2),
@@ -261,6 +261,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
+                    filled: false, // <-- THIS FIXES THE UGLY WHITE BOX
                   ),
                   onChanged: (val) {
                     setState(() {
