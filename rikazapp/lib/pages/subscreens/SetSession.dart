@@ -57,7 +57,7 @@ class _Constants {
   static const Duration successAnimationDuration = Duration(milliseconds: 600);
   static const Duration connectionCheckInterval = Duration(seconds: 5);
 
-  static const double minCustomDuration = 15;
+  static const double minCustomDuration = 10;
   static const double maxCustomDuration = 120;
 }
 

@@ -97,7 +97,8 @@ class _AddPresetScreenState extends State<AddPresetScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Preset Name
+              // ── FIX 1: Preset Name ──────────────────────────────────────
+              // Reduced font size, tightened padding, vertically centered text
               _CardContainer(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -106,16 +107,52 @@ class _AddPresetScreenState extends State<AddPresetScreen> {
                       'Preset Name',
                       style: TextStyle(fontSize: 12, color: Color(0xFF7A7A7A)),
                     ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: TextEditingController(text: name),
-                      onChanged: (val) => name = val,
-                      decoration: const InputDecoration(
-                        hintText: 'Study Session',
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(vertical: 10),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      height: 40,
+                      child: TextField(
+                        controller: TextEditingController(text: name),
+                        onChanged: (val) => name = val,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF1E1E1E),
+                          height: 1.2,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'e.g., Deep Focus, Light Reading',
+                          hintStyle: const TextStyle(
+                            fontSize: 14,
+                            color: Color(0xFFB0B0B0),
+                            height: 1.2,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFE6E2DC),
+                              width: 1,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFE6E2DC),
+                              width: 1,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF1E1E1E),
+                              width: 1,
+                            ),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          isDense: true,
+                        ),
                       ),
-                      style: const TextStyle(fontSize: 16, color: Color(0xFF1E1E1E)),
                     ),
                   ],
                 ),
@@ -156,7 +193,7 @@ class _AddPresetScreenState extends State<AddPresetScreen> {
                 ),
               ),
 
-              // Sensitivity
+              // ── FIX 2: Sensitivity – subtitle text removed ──────────────
               _CardContainer(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -175,17 +212,17 @@ class _AddPresetScreenState extends State<AddPresetScreen> {
                       child: Row(
                         children: [
                           _SegmentButton(
-                            label: 'Low\n3 min',
+                            label: 'Low',
                             active: sensitivity == 'low',
                             onTap: () => setState(() => sensitivity = 'low'),
                           ),
                           _SegmentButton(
-                            label: 'Medium\n2 min',
+                            label: 'Medium',
                             active: sensitivity == 'medium',
                             onTap: () => setState(() => sensitivity = 'medium'),
                           ),
                           _SegmentButton(
-                            label: 'High\n1 min',
+                            label: 'High',
                             active: sensitivity == 'high',
                             onTap: () => setState(() => sensitivity = 'high'),
                           ),
@@ -201,7 +238,7 @@ class _AddPresetScreenState extends State<AddPresetScreen> {
                 ),
               ),
 
-              // Notification Methods
+              // ── FIX 3: Notification Methods – subtitle text removed ──────
               _CardContainer(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -337,6 +374,7 @@ class _CheckRow extends StatelessWidget {
   }
 }
 
+// ── FIX 2: _SegmentButton – `label` is now a single line (no subtitle) ──────
 class _SegmentButton extends StatelessWidget {
   final String label;
   final bool active;
@@ -366,7 +404,7 @@ class _SegmentButton extends StatelessWidget {
             label,
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 13,
               color: active ? const Color(0xFF1E1E1E) : const Color(0xFF7A7A7A),
               fontWeight: active ? FontWeight.w600 : FontWeight.normal,
             ),
