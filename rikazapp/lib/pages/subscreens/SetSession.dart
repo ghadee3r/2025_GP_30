@@ -1136,6 +1136,34 @@ class _SetSessionPageState extends State<SetSessionPage>
             ),
           ],
         ),
+      const Spacer(), // ADD THIS
+      // ADD THIS BUTTON
+      _Tappable(
+        onTap: _startDemoSession,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.orange.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.orange.withOpacity(0.3)),
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.bug_report_rounded, color: Colors.orange, size: 16),
+              SizedBox(width: 6),
+              Text(
+                'Demo',
+                style: TextStyle(
+                  color: Colors.orange,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
       ],
     );
   }
