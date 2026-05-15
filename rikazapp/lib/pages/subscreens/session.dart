@@ -34,19 +34,16 @@ class SessionPage extends StatefulWidget {
   final String duration;
   final String? numberOfBlocks;
 
-  // Camera / detection settings
   final bool? isCameraDetectionEnabled;
   final double? sensitivity;
   final String? notificationStyle;
 
-  // TRIGGERS & ALERT SETTINGS
   final String? subtleAlertType;
   final bool? sleepTrigger;
   final bool? presenceTrigger;
   final bool? phoneTrigger;
   final String? notificationSoundUrl;
 
-  // Hardware + sound
   final bool? rikazConnected;
   final String? selectedSoundId;
   final String? selectedSoundName;
@@ -90,11 +87,9 @@ class _SessionPageState extends State<SessionPage>
   int _totalFocusSeconds = 0;
   int _sessionDistractionCount = 0;
 
-  // Track whether session ended naturally (complete) or was cancelled
+  // true = timer reached zero naturally → 'complete'
+  // false = user pressed End → 'incomplete'
   bool _sessionCompleted = false;
-
-  // Computed distraction from camera (used when camera is ON)
-  String _cameraDistraction = 'low';
 
   String mode = 'focus';
   String status = 'running';
@@ -112,10 +107,13 @@ class _SessionPageState extends State<SessionPage>
 
   final AudioPlayer _alertPlayer = AudioPlayer();
 
-  // Animation Controllers for Breathing UI & Liquid Background
   late AnimationController pulseController;
   late Animation<double> pulseAnimation;
   late Animation<double> bgShiftAnimation;
+
+  // ============================================================================
+  // INIT & DISPOSE
+  // ============================================================================
 
   @override
   void initState() {
@@ -141,8 +139,6 @@ class _SessionPageState extends State<SessionPage>
     _setupDistractionListener();
 
     startTimer();
-
-    // Insert session into DB immediately when session starts
     _startSessionInDB();
 
     if (_rikazConnected) {
@@ -178,11 +174,20 @@ class _SessionPageState extends State<SessionPage>
     super.dispose();
   }
 
+  // ============================================================================
+  // DISTRACTION LISTENER
+  // ============================================================================
+
   void _setupDistractionListener() {
     RikazLightService.onDistractionDetected = (count) {
       if (!mounted) return;
       setState(() => _sessionDistractionCount = count);
       _triggerAudioAlert();
+    };
+
+    RikazLightService.onDistractionEvent = (String type, int duration) {
+      if (!mounted) return;
+      _insertDistractionEvent(type, duration);
     };
   }
 
@@ -213,8 +218,10 @@ class _SessionPageState extends State<SessionPage>
     }
   }
 
-  // ── FIXED: Insert session immediately on start with session_status = 'active'
-  // Works for both custom and pomodoro sessions
+  // ============================================================================
+  // DATABASE — START
+  // ============================================================================
+
   Future<void> _startSessionInDB() async {
     final supabase = Supabase.instance.client;
     final uid = supabase.auth.currentUser?.id;
@@ -222,41 +229,165 @@ class _SessionPageState extends State<SessionPage>
 
     _sessionStartTime = DateTime.now();
 
-    // Calculate planned_duration based on session type
-    int plannedDuration;
+    String? pomodoroType;
     if (isPomodoro) {
-      plannedDuration = focusMinutes * totalBlocks;
-    } else {
-      plannedDuration = focusMinutes;
+      pomodoroType = focusMinutes == 25 ? '25-5' : '50-10';
     }
 
     try {
-      final res = await supabase.from('Focus_Session').insert({
-        'user_id': uid,
-        'session_type': widget.sessionType,
-        'start_time': _sessionStartTime!.toIso8601String(),
-        'planned_duration': plannedDuration,
-        'camera_monitored': widget.isCameraDetectionEnabled ?? false,
-        'pomodoro_type': _getPomodoroType(),
-        'session_status': 'active',
-        'session_state': 'active',
-      }).select('session_id');
+      final res = await supabase
+          .from('Focus_Session')
+          .insert({
+            'user_id': uid,
+            'session_type': widget.sessionType,
+            'start_time': _sessionStartTime!.toIso8601String(),
+            'planned_duration':
+                isPomodoro ? (focusMinutes * totalBlocks) : focusMinutes,
+            'camera_monitored': widget.isCameraDetectionEnabled ?? false,
+            'session_status': 'active',
+            'pomodoro_type': pomodoroType,
+          })
+          .select('session_id');
 
       if (res.isNotEmpty) {
-        setState(() => _currentSessionId = res.first['session_id'].toString());
+        final sid = res.first['session_id'] as int;
+        setState(() => _currentSessionId = sid.toString());
+
+        await supabase.from('Session_Distraction').insert([
+          {
+            'session_id': sid,
+            'distraction_type': 'phone_use',
+            'distraction_count': 0,
+            'total_duration_seconds': 0,
+          },
+          {
+            'session_id': sid,
+            'distraction_type': 'sleeping',
+            'distraction_count': 0,
+            'total_duration_seconds': 0,
+          },
+          {
+            'session_id': sid,
+            'distraction_type': 'absence',
+            'distraction_count': 0,
+            'total_duration_seconds': 0,
+          },
+        ]);
+
+        debugPrint('✅ Session + 3 distraction rows created: $sid');
       }
     } catch (e) {
-      debugPrint('DB Insert Error: $e');
+      debugPrint('❌ _startSessionInDB error: $e');
     }
   }
 
-  // Helper to get pomodoro_type value
-  String? _getPomodoroType() {
-    if (!isPomodoro) return 'custom';
-    if (focusMinutes == 25) return '25/5';
-    if (focusMinutes == 50) return '50/10';
-    return null;
+  // ============================================================================
+  // DATABASE — DISTRACTION EVENT
+  // ============================================================================
+
+  Future<void> _insertDistractionEvent(
+      String type, int durationSeconds) async {
+    debugPrint(
+        '_insertDistractionEvent — sessionId: $_currentSessionId, type: $type, duration: $durationSeconds');
+    if (_currentSessionId == null) {
+      debugPrint('SKIPPED — _currentSessionId is null');
+      return;
+    }
+
+    final sid = int.parse(_currentSessionId!);
+    try {
+      final existing = await Supabase.instance.client
+          .from('Session_Distraction')
+          .select('distraction_count, total_duration_seconds')
+          .eq('session_id', sid)
+          .eq('distraction_type', type)
+          .single();
+
+      await Supabase.instance.client
+          .from('Session_Distraction')
+          .update({
+            'distraction_count': (existing['distraction_count'] as int) + 1,
+            'total_duration_seconds':
+                (existing['total_duration_seconds'] as int) + durationSeconds,
+          })
+          .eq('session_id', sid)
+          .eq('distraction_type', type);
+
+      debugPrint('✅ Session_Distraction updated: $type +1, +${durationSeconds}s');
+    } catch (e) {
+      debugPrint('❌ Session_Distraction error: $e');
+    }
   }
+
+  // ============================================================================
+  // DATABASE — END
+  // ============================================================================
+
+  Future<void> _endSessionInDB({
+    String? progress,
+    String? distraction,
+    String? overrideStatus,
+  }) async {
+    if (_completionHandled) return;
+    final supabase = Supabase.instance.client;
+    if (_currentSessionId == null) return;
+
+    final int actual = _totalFocusSeconds ~/ 60;
+
+    if (actual < minimumSessionMinutes) {
+      _completionHandled = true;
+      try {
+        await supabase
+            .from('Focus_Session')
+            .delete()
+            .eq('session_id', _currentSessionId!);
+        debugPrint('🗑️ Session deleted (< $minimumSessionMinutes min)');
+      } catch (e) {
+        debugPrint('❌ DB Delete Error: $e');
+      }
+      return;
+    }
+
+    _completionHandled = true;
+
+    final String finalStatus = overrideStatus ??
+        (_sessionCompleted ? 'complete' : 'incomplete');
+
+    try {
+      await supabase.from('Focus_Session').update({
+        'end_time': DateTime.now().toIso8601String(),
+        'actual_duration': actual,
+        'progress_level': progress,
+        'distraction_level': distraction,
+        'distraction_count': _sessionDistractionCount,
+        'session_status': finalStatus,
+        'pomodoro_type': isPomodoro
+            ? (focusMinutes == 25 ? '25-5' : '50-10')
+            : null,
+      }).eq('session_id', _currentSessionId!);
+      debugPrint('✅ Session saved: $finalStatus | ${actual}min');
+    } catch (e) {
+      debugPrint('❌ DB Update Error: $e');
+    }
+  }
+
+  // ============================================================================
+  // AUTO DISTRACTION CALC FOR CAMERA
+  // كاميرا شغّالة: يحسب الـ distraction تلقائياً من عدد مرات التشتت
+  // ============================================================================
+
+  String _calculateDistractionLevel() {
+    final double minutes = _totalFocusSeconds / 60.0;
+    final double rate =
+        minutes < 0.1 ? 0.0 : (_sessionDistractionCount / minutes) * 10.0;
+    if (rate < 1.0) return 'low';
+    if (rate < 2.0) return 'medium';
+    return 'high';
+  }
+
+  // ============================================================================
+  // TIMER
+  // ============================================================================
 
   void startTimer() {
     _timer?.cancel();
@@ -277,6 +408,10 @@ class _SessionPageState extends State<SessionPage>
     });
   }
 
+  // ============================================================================
+  // PHASE END
+  // ============================================================================
+
   void onPhaseEnd() async {
     if (!mounted || _completionHandled) return;
 
@@ -290,12 +425,34 @@ class _SessionPageState extends State<SessionPage>
         await _debouncedLightOff();
       }
 
-      // Session ended naturally = completed
       _sessionCompleted = true;
-      await _handleSessionEnd();
+
+      final bool cameraOn = widget.isCameraDetectionEnabled ?? false;
+
+      String? p;
+      String d;
+
+      if (cameraOn) {
+        // كاميرا شغّالة: يسأل عن البروقرس يدوياً، يحسب الديستراكشن تلقائياً
+        p = await _showProgressLevelDialog();
+        d = _calculateDistractionLevel();
+      } else {
+        // كاميرا مطفية: يسأل عن كليهما يدوياً
+        p = await _showProgressLevelDialog();
+        d = await _showDistractionDialog();
+      }
+
+      await _endSessionInDB(progress: p, distraction: d);
+
+      if (mounted) {
+        await _showSummaryDialog(d, p ?? 'partially',
+            cameraCalculated: cameraOn);
+        _showMotivationalPopup(d, p ?? 'partially');
+      }
       return;
     }
 
+    // Pomodoro: switch focus ↔ break
     if (mode == 'focus') {
       if (!completedBlocks.contains(currentBlock)) {
         completedBlocks.add(currentBlock);
@@ -317,81 +474,9 @@ class _SessionPageState extends State<SessionPage>
     startTimer();
   }
 
-  // Unified session-end flow (distraction → progress → update DB → summary → motivational)
-  Future<void> _handleSessionEnd() async {
-    final bool cameraOn = widget.isCameraDetectionEnabled ?? false;
-
-    // Step 1: distraction level
-    String distraction;
-    if (cameraOn) {
-      // camera is ON → use computed value, no dialog
-      distraction = _cameraDistraction;
-    } else {
-      // camera is OFF → ask user
-      distraction = await _showDistractionDialog();
-    }
-
-    // Step 2: always ask progress (regardless of camera on/off, completed/cancelled)
-    String? progress = await _showProgressLevelDialog();
-
-    // Step 3: save/update DB
-    await _endSessionInDB(progress: progress, distraction: distraction);
-
-    // Step 4: show summary
-    if (mounted) {
-      await _showSummaryDialog(distraction, progress ?? 'partially');
-    }
-
-    // Step 5: show motivational popup
-    if (mounted) {
-      _showMotivationalPopup(distraction, progress ?? 'partially');
-    }
-  }
-
-  // ── FIXED: Update session on end, delete if < 10 min, keep if >= 10 min
-  Future<void> _endSessionInDB(
-      {String? progress, String? distraction, bool isCancelled = false}) async {
-    if (_completionHandled) return;
-    final supabase = Supabase.instance.client;
-    if (_currentSessionId == null) return;
-
-    // actual_duration is real elapsed focus seconds converted to minutes
-    final actual = (_totalFocusSeconds ~/ 60);
-
-    // If session is less than 10 minutes, delete it completely from Supabase
-    if (actual < minimumSessionMinutes) {
-      _completionHandled = true;
-      try {
-        await supabase
-            .from('Focus_Session')
-            .delete()
-            .eq('session_id', _currentSessionId!);
-      } catch (e) {
-        debugPrint('DB Delete Error: $e');
-      }
-      return;
-    }
-
-    _completionHandled = true;
-
-    // session_state / session_status logic
-    final sessionState = _sessionCompleted ? 'completed' : 'incomplete';
-
-    try {
-      await supabase.from('Focus_Session').update({
-        'end_time': DateTime.now().toIso8601String(),
-        'actual_duration': actual,
-        'progress_level': progress,
-        'distraction_level': distraction,
-        'distraction_count': _sessionDistractionCount,
-        'session_state': sessionState,
-        'session_status': sessionState,
-        'pomodoro_type': _getPomodoroType(),
-      }).eq('session_id', _currentSessionId!);
-    } catch (e) {
-      debugPrint('DB Update Error: $e');
-    }
-  }
+  // ============================================================================
+  // PAUSE / RESUME
+  // ============================================================================
 
   void onPauseResume() async {
     if (!mounted) return;
@@ -405,6 +490,10 @@ class _SessionPageState extends State<SessionPage>
       _sendTimerUpdateToESP32();
     }
   }
+
+  // ============================================================================
+  // QUIT
+  // ============================================================================
 
   void onQuit() {
     final prev = status;
@@ -476,25 +565,44 @@ class _SessionPageState extends State<SessionPage>
                         if (_rikazConnected) await _debouncedLightOff();
                         if (mounted) Navigator.pop(context);
 
-                        final actual = (_totalFocusSeconds ~/ 60);
-
-                        // Cancelled = incomplete
                         _sessionCompleted = false;
 
+                        final int actual = _totalFocusSeconds ~/ 60;
+
                         if (actual < minimumSessionMinutes) {
-                          // Less than 10 min → delete from DB, go home
                           await _endSessionInDB(
-                              progress: 'none',
-                              distraction: 'high',
-                              isCancelled: true);
+                              progress: null,
+                              distraction: null,
+                              overrideStatus: 'incomplete');
                           if (mounted)
                             Navigator.pushNamedAndRemoveUntil(
                                 context, '/tabs', (r) => false);
                           return;
                         }
 
-                        // 10+ minutes → ask questions, save, show summary
-                        await _handleSessionEnd();
+                        // 10+ min
+                        final bool cameraOn =
+                            widget.isCameraDetectionEnabled ?? false;
+                        String? p;
+                        String d;
+
+                        if (cameraOn) {
+                          // كاميرا شغّالة: يسأل عن البروقرس يدوياً، يحسب الديستراكشن تلقائياً
+                          p = await _showProgressLevelDialog();
+                          d = _calculateDistractionLevel();
+                        } else {
+                          // كاميرا مطفية: يسأل عن كليهما يدوياً
+                          p = await _showProgressLevelDialog();
+                          d = await _showDistractionDialog();
+                        }
+
+                        await _endSessionInDB(progress: p, distraction: d);
+
+                        if (mounted) {
+                          await _showSummaryDialog(d, p ?? 'partially',
+                              cameraCalculated: cameraOn);
+                          _showMotivationalPopup(d, p ?? 'partially');
+                        }
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -525,6 +633,10 @@ class _SessionPageState extends State<SessionPage>
     );
   }
 
+  // ============================================================================
+  // BREAK ACTIVITIES
+  // ============================================================================
+
   Future<void> _navigateToBreakActivities() async {
     _timer?.cancel();
     final result = await Navigator.push(
@@ -539,6 +651,10 @@ class _SessionPageState extends State<SessionPage>
     else
       startTimer();
   }
+
+  // ============================================================================
+  // CONNECTION MONITORING
+  // ============================================================================
 
   void _startConnectionMonitoring() {
     _connectionCheckTimer?.cancel();
@@ -611,6 +727,10 @@ class _SessionPageState extends State<SessionPage>
     } catch (_) {}
   }
 
+  // ============================================================================
+  // HELPERS
+  // ============================================================================
+
   String formatTime(int s) {
     final minutes = (s ~/ 60).toString().padLeft(2, '0');
     final seconds = (s % 60).toString().padLeft(2, '0');
@@ -620,7 +740,10 @@ class _SessionPageState extends State<SessionPage>
   double get progressValue =>
       (1 - (timeLeft / max(focusMinutes * 60, 1))).clamp(0, 1);
 
-  // Central function for springy, animated dialogs
+  // ============================================================================
+  // DIALOGS — animated wrapper
+  // ============================================================================
+
   Future<T?> _showAnimatedDialog<T>(
       {required BuildContext context, required Widget child}) {
     return showGeneralDialog<T>(
@@ -637,6 +760,10 @@ class _SessionPageState extends State<SessionPage>
       },
     );
   }
+
+  // ============================================================================
+  // DIALOGS — progress
+  // ============================================================================
 
   Future<String?> _showProgressLevelDialog() async {
     String? selected;
@@ -709,6 +836,10 @@ class _SessionPageState extends State<SessionPage>
     return selected;
   }
 
+  // ============================================================================
+  // DIALOGS — distraction
+  // ============================================================================
+
   Future<String> _showDistractionDialog() async {
     String selected = 'low';
     await _showAnimatedDialog<String>(
@@ -780,7 +911,15 @@ class _SessionPageState extends State<SessionPage>
     return selected;
   }
 
-  Future<void> _showSummaryDialog(String distraction, String progress) async {
+  // ============================================================================
+  // DIALOGS — summary
+  // ============================================================================
+
+  Future<void> _showSummaryDialog(
+    String distraction,
+    String progress, {
+    bool cameraCalculated = false,
+  }) async {
     await _showAnimatedDialog(
       context: context,
       child: Dialog(
@@ -818,8 +957,52 @@ class _SessionPageState extends State<SessionPage>
                     const Padding(
                         padding: EdgeInsets.symmetric(vertical: 14),
                         child: Divider(height: 1, color: Colors.black12)),
-                    _summaryRowUI(Icons.notifications_off_outlined,
-                        'Distractions', distraction.toUpperCase(), breakColor),
+                    // Distraction row with optional Auto badge (كاميرا شغّالة)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                    color: breakColor.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(12)),
+                                child: const Icon(
+                                    Icons.notifications_off_outlined,
+                                    size: 20,
+                                    color: breakColor)),
+                            const SizedBox(width: 14),
+                            const Text('Distractions',
+                                style: TextStyle(
+                                    color: secondaryTextGrey,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 15)),
+                            if (cameraCalculated) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: dfTealCyan.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text('Auto',
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: dfTealCyan)),
+                              ),
+                            ],
+                          ],
+                        ),
+                        Text(distraction.toUpperCase(),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 17,
+                                color: dfNavyIndigo)),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -827,9 +1010,7 @@ class _SessionPageState extends State<SessionPage>
               SizedBox(
                 width: double.infinity,
                 child: _InteractivePill(
-                  onTap: () {
-                    Navigator.pop(context);
-                  },
+                  onTap: () => Navigator.pop(context),
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 18),
                     decoration: BoxDecoration(
@@ -857,6 +1038,10 @@ class _SessionPageState extends State<SessionPage>
       ),
     );
   }
+
+  // ============================================================================
+  // DIALOGS — motivational
+  // ============================================================================
 
   void _showMotivationalPopup(String distraction, String progress) {
     String message =
@@ -951,6 +1136,10 @@ class _SessionPageState extends State<SessionPage>
     );
   }
 
+  // ============================================================================
+  // SHARED CARD WIDGET
+  // ============================================================================
+
   Widget _buildOptionCard(
       {required String title,
       required String subtitle,
@@ -1027,6 +1216,10 @@ class _SessionPageState extends State<SessionPage>
     );
   }
 
+  // ============================================================================
+  // BUILD
+  // ============================================================================
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -1034,9 +1227,8 @@ class _SessionPageState extends State<SessionPage>
     final bool isPaused = status == 'paused';
     final timerDiameter = screenWidth * 0.75;
 
-    Color activeRingColor = isPaused
-        ? pausedColor
-        : (mode == 'break' ? breakColor : dfTealCyan);
+    Color activeRingColor =
+        isPaused ? pausedColor : (mode == 'break' ? breakColor : dfTealCyan);
 
     return Scaffold(
       body: AnimatedBuilder(
@@ -1059,7 +1251,11 @@ class _SessionPageState extends State<SessionPage>
                   gradient: LinearGradient(
                       begin: beginAlign,
                       end: endAlign,
-                      colors: [topColor, primaryBackground, primaryBackground])),
+                      colors: [
+                    topColor,
+                    primaryBackground,
+                    primaryBackground
+                  ])),
               child: SafeArea(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -1172,9 +1368,8 @@ class _SessionPageState extends State<SessionPage>
                                   isPaused
                                       ? Icons.play_arrow_rounded
                                       : Icons.pause_rounded,
-                                  color: isPaused
-                                      ? Colors.white
-                                      : dfNavyIndigo,
+                                  color:
+                                      isPaused ? Colors.white : dfNavyIndigo,
                                   size: 22),
                               const SizedBox(width: 8),
                               Text(isPaused ? 'Resume' : 'Pause',
@@ -1255,7 +1450,10 @@ class _SessionPageState extends State<SessionPage>
   }
 }
 
-// Reusable Highly Interactive Squish Component
+// ============================================================================
+// INTERACTIVE PILL
+// ============================================================================
+
 class _InteractivePill extends StatefulWidget {
   final Widget child;
   final VoidCallback onTap;
@@ -1285,6 +1483,10 @@ class _InteractivePillState extends State<_InteractivePill> {
     );
   }
 }
+
+// ============================================================================
+// SOUND SECTION
+// ============================================================================
 
 class SoundSection extends StatefulWidget {
   final String? preselectedSoundId;
@@ -1401,7 +1603,6 @@ class _SoundSectionState extends State<SoundSection> {
         if (mounted) setState(() => _isSoundPlaying = false);
         return;
       }
-
       await _bgAudioPlayer.play(UrlSource(sound.filePathUrl!));
       if (mounted) setState(() => _isSoundPlaying = true);
     } catch (e) {
@@ -1427,8 +1628,7 @@ class _SoundSectionState extends State<SoundSection> {
         await _bgAudioPlayer.pause();
         if (mounted) setState(() => _isSoundPlaying = false);
       } else {
-        await _bgAudioPlayer
-            .play(UrlSource(_currentSound.filePathUrl!));
+        await _bgAudioPlayer.play(UrlSource(_currentSound.filePathUrl!));
         if (mounted) setState(() => _isSoundPlaying = true);
       }
     } catch (_) {
@@ -1527,6 +1727,10 @@ class _SoundSectionState extends State<SoundSection> {
   }
 }
 
+// ============================================================================
+// SOUND OPTION MODEL
+// ============================================================================
+
 class SoundOption {
   final String id;
   final String name;
@@ -1566,6 +1770,10 @@ class SoundOption {
     return Color(int.parse('FF$h', radix: 16));
   }
 }
+
+// ============================================================================
+// PROGRESS RING PAINTER
+// ============================================================================
 
 class _ProgressRingPainter extends CustomPainter {
   final double progress;
