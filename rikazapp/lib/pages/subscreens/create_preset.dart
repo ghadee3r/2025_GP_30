@@ -218,7 +218,9 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Preset Name ──────────────────────────────────────────────
+              // ── FIX 1: Preset Name ───────────────────────────────────────
+              // font size reduced (16→14), weight lightened (w600→w400),
+              // hint matches same size, field height capped via isDense + padding
               _SectionCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -231,15 +233,19 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
                       controller: _nameController,
                       decoration: const InputDecoration(
                         hintText: 'e.g., Deep Focus, Light Reading',
-                        hintStyle: TextStyle(color: Color(0xFFB0B0B8)),
+                        hintStyle: TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFFB0B0B8),
+                        ),
                         border: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
+                        contentPadding: EdgeInsets.symmetric(vertical: 4),
                         isDense: true,
                       ),
                       style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: primaryTextDark),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                        color: primaryTextDark,
+                      ),
                     ),
                   ],
                 ),
@@ -250,7 +256,6 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ← CHANGED: uppercase label style to match screenshots
                     const Text('DETECTION TRIGGERS',
                         style: TextStyle(
                             fontSize: 11,
@@ -258,7 +263,6 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
                             letterSpacing: 1.1,
                             color: secondaryTextGrey)),
                     const SizedBox(height: 12),
-                    // ← CHANGED: pass `isActive` so tile can tint itself
                     _TriggerTile(
                       label: 'Phone Activity',
                       subtitle: 'Detect when you pick up your phone',
@@ -301,7 +305,7 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
                 ),
               ),
 
-              // ── Detection Sensitivity ─────────────────────────────────────
+              // ── FIX 2: Detection Sensitivity – subtitle removed ───────────
               _SectionCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -317,7 +321,6 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
                       children: [
                         _SensitivityCard(
                           label: 'Low',
-                          subtitle: 'Minimal alerts',
                           barCount: 1,
                           isSelected: _sensitivityLevel == 'Low',
                           onTap: () =>
@@ -326,7 +329,6 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
                         const SizedBox(width: 10),
                         _SensitivityCard(
                           label: 'Medium',
-                          subtitle: 'Recommended',
                           barCount: 2,
                           isSelected: _sensitivityLevel == 'Medium',
                           onTap: () =>
@@ -335,7 +337,6 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
                         const SizedBox(width: 10),
                         _SensitivityCard(
                           label: 'High',
-                          subtitle: 'Max clarity',
                           barCount: 3,
                           isSelected: _sensitivityLevel == 'High',
                           onTap: () =>
@@ -347,7 +348,7 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
                 ),
               ),
 
-              // ── Notification Settings ─────────────────────────────────────
+              // ── FIX 3: Alert Style – subtitle removed ────────────────────
               _SectionCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -363,7 +364,6 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
                       children: [
                         _AlertStyleCard(
                           label: 'Light',
-                          subtitle: 'Visual + vibrate',
                           icon: Icons.lightbulb_outline,
                           isSelected: _notificationLight,
                           onTap: () =>
@@ -372,7 +372,6 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
                         const SizedBox(width: 10),
                         _AlertStyleCard(
                           label: 'Sound',
-                          subtitle: 'Audio chime',
                           icon: Icons.volume_up,
                           isSelected: _notificationSound,
                           onTap: () =>
@@ -386,7 +385,7 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
 
               const SizedBox(height: 8),
 
-              // ── Save Button ── CHANGED: green with checkmark icon ─────────
+              // ── Save Button ───────────────────────────────────────────────
               SizedBox(
                 width: double.infinity,
                 height: 54,
@@ -409,7 +408,6 @@ class _CreatePresetPageState extends State<CreatePresetPage> {
                               color: Colors.white),
                         ),
                   style: ElevatedButton.styleFrom(
-                    // ← CHANGED: green to match image 2
                     backgroundColor: const Color(0xFF2ECC8E),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),
@@ -474,7 +472,7 @@ class _SectionCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Trigger tile — CHANGED: tinted background + border when active
+// Trigger tile
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _TriggerTile extends StatelessWidget {
@@ -484,7 +482,6 @@ class _TriggerTile extends StatelessWidget {
   final Color iconBgColor;
   final Color iconColor;
   final Color activeTrackColor;
-  // ← NEW: two extra colours for the active tile state
   final Color activeTileColor;
   final Color activeBorderColor;
   final bool value;
@@ -505,7 +502,6 @@ class _TriggerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ← CHANGED: background and border react to toggle state
     final Color tileBg =
         value ? activeTileColor : const Color(0xFFF8FAFB);
     final Color tileBorder =
@@ -523,24 +519,20 @@ class _TriggerTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Coloured icon bubble — always tinted, same as before
           Container(
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              // ← CHANGED: when OFF, icon bg goes neutral grey
               color: value ? iconBgColor : const Color(0xFFF0F2F3),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
               icon,
-              // ← CHANGED: when OFF, icon itself goes grey
               color: value ? iconColor : const Color(0xFFB0B8BC),
               size: 22,
             ),
           ),
           const SizedBox(width: 12),
-          // Label + subtitle
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -557,7 +549,6 @@ class _TriggerTile extends StatelessWidget {
               ],
             ),
           ),
-          // Toggle with custom active colour
           Transform.scale(
             scale: 0.85,
             child: Switch(
@@ -576,19 +567,17 @@ class _TriggerTile extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sensitivity card  (square tile with bar-chart icon that "pops" on select)
+// FIX 2: Sensitivity card – subtitle parameter removed
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _SensitivityCard extends StatelessWidget {
   final String label;
-  final String subtitle;
   final int barCount; // 1=Low, 2=Medium, 3=High
   final bool isSelected;
   final VoidCallback onTap;
 
   const _SensitivityCard({
     required this.label,
-    required this.subtitle,
     required this.barCount,
     required this.isSelected,
     required this.onTap,
@@ -636,12 +625,7 @@ class _SensitivityCard extends StatelessWidget {
                   color: isSelected ? accent : primaryTextDark,
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 10, color: secondaryTextGrey),
-              ),
+              // subtitle removed
             ],
           ),
         ),
@@ -683,19 +667,17 @@ class _MiniBarChart extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Alert style card  (square selectable tile — Light / Sound)
+// FIX 3: Alert style card – subtitle parameter removed
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _AlertStyleCard extends StatelessWidget {
   final String label;
-  final String subtitle;
   final IconData icon;
   final bool isSelected;
   final VoidCallback onTap;
 
   const _AlertStyleCard({
     required this.label,
-    required this.subtitle,
     required this.icon,
     required this.isSelected,
     required this.onTap,
@@ -747,12 +729,7 @@ class _AlertStyleCard extends StatelessWidget {
                   color: isSelected ? accent : primaryTextDark,
                 ),
               ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 11, color: secondaryTextGrey),
-              ),
+              // subtitle removed
             ],
           ),
         ),
