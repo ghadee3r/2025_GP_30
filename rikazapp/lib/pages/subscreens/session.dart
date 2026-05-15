@@ -87,8 +87,8 @@ class _SessionPageState extends State<SessionPage>
   int _totalFocusSeconds = 0;
   int _sessionDistractionCount = 0;
 
-  // true = timer reached zero naturally → 'complete'
-  // false = user pressed End → 'incomplete'
+  // true = timer reached zero naturally → 'completed'
+  // false = user pressed End → 'cancelled'
   bool _sessionCompleted = false;
 
   String mode = 'focus';
@@ -351,7 +351,7 @@ class _SessionPageState extends State<SessionPage>
     _completionHandled = true;
 
     final String finalStatus = overrideStatus ??
-        (_sessionCompleted ? 'complete' : 'incomplete');
+        (_sessionCompleted ? 'completed' : 'cancelled');
 
     try {
       await supabase.from('Focus_Session').update({
@@ -573,7 +573,7 @@ class _SessionPageState extends State<SessionPage>
                           await _endSessionInDB(
                               progress: null,
                               distraction: null,
-                              overrideStatus: 'incomplete');
+                              overrideStatus: 'cancelled');
                           if (mounted)
                             Navigator.pushNamedAndRemoveUntil(
                                 context, '/tabs', (r) => false);
