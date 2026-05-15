@@ -1064,7 +1064,7 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('${session['actual_duration'] ?? 0} mins • ${isCompleted ? "Completed" : "Incomplete"}', style: const TextStyle(fontWeight: FontWeight.w600, color: dfNavyIndigo, fontSize: 15)),
+                        Text('${session['actual_duration'] ?? 0} mins • ${isCompleted ? "Completed" : "Cancelled"}', style: const TextStyle(fontWeight: FontWeight.w600, color: dfNavyIndigo, fontSize: 15)),
                         const SizedBox(height: 4),
                         Text(DateFormat('MMM d, h:mm a').format(start), style: const TextStyle(color: secondaryTextGrey, fontSize: 12, fontWeight: FontWeight.w500)),
                       ],
