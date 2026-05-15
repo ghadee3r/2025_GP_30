@@ -100,7 +100,8 @@ class _SessionPageState extends State<SessionPage>
   Timer? _timer;
   Timer? _connectionCheckTimer;
   bool _completionHandled = false;
-
+final ValueNotifier<int> _breakTimerNotifier = ValueNotifier<int>(0);
+bool _breakActivityOpen = false;
   DateTime? _lastLightOffTime;
   static const Duration _lightDebounceDelay = Duration(seconds: 2);
   static const int minimumSessionMinutes = 10;
@@ -168,10 +169,12 @@ class _SessionPageState extends State<SessionPage>
   void dispose() {
     _timer?.cancel();
     _connectionCheckTimer?.cancel();
+    _breakTimerNotifier.dispose();
     pulseController.dispose();
     _alertPlayer.stop();
     _alertPlayer.dispose();
     super.dispose();
+    
   }
 
   // ============================================================================
@@ -398,11 +401,19 @@ class _SessionPageState extends State<SessionPage>
         return;
       }
       setState(() {
-        if (timeLeft > 0) {
-          timeLeft--;
-          if (mode == 'focus') _totalFocusSeconds++;
-        }
-      });
+  if (timeLeft > 0) {
+    timeLeft--;
+
+    if (mode == 'focus') {
+      _totalFocusSeconds++;
+    }
+  }
+});
+
+if (mode == 'break') {
+  _breakTimerNotifier.value = timeLeft;
+}
+
       _sendTimerUpdateToESP32();
       if (timeLeft <= 0) onPhaseEnd();
     });
@@ -458,19 +469,27 @@ class _SessionPageState extends State<SessionPage>
         completedBlocks.add(currentBlock);
         _sendMotivationalMessage();
       }
-      setState(() {
-        mode = 'break';
-        timeLeft = breakMinutes * 60;
-      });
+setState(() {
+  mode = 'break';
+  timeLeft = breakMinutes * 60;
+  _breakTimerNotifier.value = timeLeft;
+});
       if (_rikazConnected) await RikazLightService.setBreakLight();
     } else {
-      setState(() {
-        currentBlock++;
-        mode = 'focus';
-        timeLeft = focusMinutes * 60;
-      });
-      if (_rikazConnected) await RikazLightService.setFocusLight();
-    }
+  if (_breakActivityOpen && Navigator.of(context).canPop()) {
+    Navigator.of(context).pop(0);
+    _breakActivityOpen = false;
+  }
+
+  setState(() {
+    currentBlock++;
+    mode = 'focus';
+    timeLeft = focusMinutes * 60;
+    _breakTimerNotifier.value = 0;
+  });
+
+  if (_rikazConnected) await RikazLightService.setFocusLight();
+}
     startTimer();
   }
 
@@ -637,20 +656,25 @@ class _SessionPageState extends State<SessionPage>
   // BREAK ACTIVITIES
   // ============================================================================
 
-  Future<void> _navigateToBreakActivities() async {
-    _timer?.cancel();
-    final result = await Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (context) =>
-                GamesScreen(breakSecondsRemaining: timeLeft)));
-    if (!mounted) return;
-    if (result is int) setState(() => timeLeft = result);
-    if (timeLeft <= 0 && mode == 'break')
-      onPhaseEnd();
-    else
-      startTimer();
-  }
+Future<void> _navigateToBreakActivities() async {
+  if (!mounted || mode != 'break') return;
+
+  _breakActivityOpen = true;
+
+  await Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => GamesScreen(
+        breakTimerListenable: _breakTimerNotifier,
+      ),
+    ),
+  );
+
+  _breakActivityOpen = false;
+
+  if (!mounted) return;
+  _sendTimerUpdateToESP32();
+}
 
   // ============================================================================
   // CONNECTION MONITORING
@@ -737,8 +761,14 @@ class _SessionPageState extends State<SessionPage>
     return '$minutes:$seconds';
   }
 
-  double get progressValue =>
-      (1 - (timeLeft / max(focusMinutes * 60, 1))).clamp(0, 1);
+double get progressValue {
+  final int totalPhaseSeconds =
+      mode == 'break' ? breakMinutes * 60 : focusMinutes * 60;
+
+  if (totalPhaseSeconds <= 0) return 0;
+
+  return (timeLeft / totalPhaseSeconds).clamp(0.0, 1.0);
+}
 
   // ============================================================================
   // DIALOGS — animated wrapper
@@ -1337,67 +1367,72 @@ class _SessionPageState extends State<SessionPage>
                     ),
                     SizedBox(height: screenHeight * 0.08),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _InteractivePill(
-                          onTap: onPauseResume,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 32, vertical: 16),
-                            decoration: BoxDecoration(
-                                color: isPaused
-                                    ? activeRingColor
-                                    : Colors.white.withOpacity(0.6),
-                                borderRadius: BorderRadius.circular(30),
-                                border: Border.all(
-                                    color: isPaused
-                                        ? Colors.transparent
-                                        : Colors.white,
-                                    width: 1.5),
-                                boxShadow: isPaused
-                                    ? [
-                                        BoxShadow(
-                                            color: activeRingColor
-                                                .withOpacity(0.3),
-                                            blurRadius: 20,
-                                            offset: const Offset(0, 8))
-                                      ]
-                                    : subtleShadow),
-                            child: Row(children: [
-                              Icon(
-                                  isPaused
-                                      ? Icons.play_arrow_rounded
-                                      : Icons.pause_rounded,
-                                  color:
-                                      isPaused ? Colors.white : dfNavyIndigo,
-                                  size: 22),
-                              const SizedBox(width: 8),
-                              Text(isPaused ? 'Resume' : 'Pause',
-                                  style: TextStyle(
-                                      color: isPaused
-                                          ? Colors.white
-                                          : dfNavyIndigo,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 16))
-                            ]),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        _InteractivePill(
-                          onTap: onQuit,
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.6),
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                    color: Colors.white, width: 1.5)),
-                            child: const Icon(Icons.stop_rounded,
-                                color: dfNavyIndigo, size: 22),
-                          ),
-                        ),
-                      ],
-                    ),
+  mainAxisAlignment: MainAxisAlignment.center,
+  children: [
+    if (mode != 'break') ...[
+      _InteractivePill(
+        onTap: onPauseResume,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          decoration: BoxDecoration(
+            color: isPaused ? activeRingColor : Colors.white.withOpacity(0.6),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(
+              color: isPaused ? Colors.transparent : Colors.white,
+              width: 1.5,
+            ),
+            boxShadow: isPaused
+                ? [
+                    BoxShadow(
+                      color: activeRingColor.withOpacity(0.3),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    )
+                  ]
+                : subtleShadow,
+          ),
+          child: Row(
+            children: [
+              Icon(
+                isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                color: isPaused ? Colors.white : dfNavyIndigo,
+                size: 22,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                isPaused ? 'Resume' : 'Pause',
+                style: TextStyle(
+                  color: isPaused ? Colors.white : dfNavyIndigo,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      const SizedBox(width: 16),
+    ],
+
+    _InteractivePill(
+      onTap: onQuit,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.6),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 1.5),
+        ),
+        child: const Icon(
+          Icons.stop_rounded,
+          color: dfNavyIndigo,
+          size: 22,
+        ),
+      ),
+    ),
+  ],
+),
+                    
                     if (mode == 'break') ...[
                       const SizedBox(height: 20),
                       _InteractivePill(

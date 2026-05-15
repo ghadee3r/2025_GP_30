@@ -3,7 +3,7 @@ import 'game_wrapper.dart';
 import 'breathing_screen.dart'; 
 import 'pattern_screen.dart'; 
 import 'reflex_screen.dart';
-
+import 'package:flutter/foundation.dart';
 // =============================================================================
 // NEW MINIMALIST THEME COLORS
 // =============================================================================
@@ -32,28 +32,31 @@ double adaptiveFontSize(BuildContext context, double baseScreenWidthMultiplier) 
 }
 
 class GamesScreen extends StatefulWidget {
-  final int? breakSecondsRemaining;
-  const GamesScreen({super.key, this.breakSecondsRemaining});
+  final ValueListenable<int>? breakTimerListenable;
+
+const GamesScreen({
+  super.key,
+  this.breakTimerListenable,
+});
 
   @override
   State<GamesScreen> createState() => _GamesScreenState();
 }
 
 class _GamesScreenState extends State<GamesScreen> {
-  final GlobalKey<GameWrapperState> _wrapperKey = GlobalKey<GameWrapperState>();
 
   @override
   Widget build(BuildContext context) {
-    if (widget.breakSecondsRemaining != null) {
+    if (widget.breakTimerListenable != null) {
       // SCENARIO 1: WE ARE IN A BREAK
       // Wrap the menu in GameWrapper so the Timer and 'X' close button show up.
-      return GameWrapper(
-        key: _wrapperKey,
-        isBreakSession: true,
-        showBackButton: true, 
-        initialSeconds: widget.breakSecondsRemaining,
-        child: _buildMenuContent(context, true),
-      );
+return GameWrapper(
+  isBreakSession: true,
+  showBackButton: true,
+  secondsListenable: widget.breakTimerListenable,
+  confirmOnClose: false,
+  child: _buildMenuContent(context, true),
+);
     } else {
       // SCENARIO 2: NORMAL MAIN MENU
       // Do NOT use GameWrapper at all. This makes it physically impossible 
@@ -150,40 +153,30 @@ class _GamesScreenState extends State<GamesScreen> {
     );
   }
 
-  Future<void> _handleGameNavigation(BuildContext context, Widget gameWidget, bool isBreakSession) async {
-    int? currentTime;
-    
-    if (isBreakSession && _wrapperKey.currentState != null) {
-      currentTime = _wrapperKey.currentState!.getSecondsRemaining();
-      _wrapperKey.currentState!.pauseTimer();
-    }
-
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => GameWrapper(
-          isBreakSession: isBreakSession,
-          initialSeconds: currentTime, 
-          // Always show the back/close button INSIDE the actual games
-          showBackButton: true, 
-          child: gameWidget,
-        ),
+Future<void> _handleGameNavigation(
+  BuildContext context,
+  Widget gameWidget,
+  bool isBreakSession,
+) async {
+  final result = await Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => GameWrapper(
+        isBreakSession: isBreakSession,
+        secondsListenable: widget.breakTimerListenable,
+        showBackButton: true,
+        confirmOnClose: isBreakSession,
+        child: gameWidget,
       ),
-    );
+    ),
+  );
 
-    if (isBreakSession && _wrapperKey.currentState != null) {
-      if (result is int) {
-        if (result <= 0) {
-           Navigator.of(context).pop(0); 
-        } else {
-           _wrapperKey.currentState!.updateSeconds(result);
-           _wrapperKey.currentState!.resumeTimer();
-        }
-      } else {
-        _wrapperKey.currentState!.resumeTimer();
-      }
-    }
+  if (!mounted) return;
+
+  if (isBreakSession && result is int && result <= 0) {
+    Navigator.of(context).pop(0);
   }
+}
 
   Widget _buildGameCard({
     required BuildContext context,
