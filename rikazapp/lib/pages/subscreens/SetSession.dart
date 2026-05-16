@@ -598,17 +598,40 @@ class _SetSessionPageState extends State<SetSessionPage>
     );
   }
 
-  void _startDemoSession() {
+ void _startDemoSession() {
+    // 1. Check if the user selected Pomodoro but forgot to pick the number of blocks
+    if (sessionMode == SessionMode.pomodoro && numberOfBlocks == 0) {
+      setState(() => _blocksFieldError = true);
+
+      if (_blocksCounterKey.currentContext != null) {
+        Scrollable.ensureVisible(
+          _blocksCounterKey.currentContext!,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+          alignment: 0.3,
+        );
+      }
+      return;
+    }
+
     _previewTimer?.cancel();
     _audioPlayer.stop();
+
+    // 2. Read the actual selected mode and blocks from the UI
+    final sessionType =
+        sessionMode == SessionMode.pomodoro ? 'pomodoro' : 'custom';
+
+    final blocks = sessionMode == SessionMode.pomodoro
+        ? numberOfBlocks.toInt().toString()
+        : null;
 
     Navigator.pushNamed(
       context,
       '/session',
       arguments: {
-        'sessionType': 'custom',
-        'duration': '1',
-        'numberOfBlocks': null,
+        'sessionType': sessionType, // Now passes 'pomodoro' if selected
+        'duration': '1', // Hardcoded 1 minute for demo purposes
+        'numberOfBlocks': blocks, // Now passes the correct number of blocks
         'isCameraDetectionEnabled': false,
         'sensitivity': 0.5,
         'notificationStyle': 'subtle',

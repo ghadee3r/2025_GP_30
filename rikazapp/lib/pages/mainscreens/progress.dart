@@ -63,6 +63,13 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
     return DateTime.parse(cleanStr);
   }
 
+  List<dynamic> _extractDistractions(Map<String, dynamic> session) {
+    return session['Session_Distraction'] ??
+           session['session_distraction'] ??
+           session['Session_Distractions'] ??
+           session['session_distractions'] ?? [];
+  }
+
   late TabController _tabController;
   int _selectedTabIndex = 0;
   final List<String> tabs = const ['Daily', 'Weekly', 'Monthly'];
@@ -108,7 +115,7 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
 
       final response = await sb.Supabase.instance.client
           .from('Focus_Session')
-          .select()
+          .select('*, Session_Distraction(*)')
           .eq('user_id', userId)
           .order('start_time', ascending: false);
 
@@ -206,41 +213,71 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
   }
 
   // =============================================================================
-  // INSIGHTS CALCULATIONS (THE PRIME)
+  // INSIGHTS CALCULATIONS (THE PRIME & DISTRACTIONS)
   // =============================================================================
+
+  // Calculates a net productivity score for a session based on duration, distractions, and completion status.
+  double _calculateSessionScore(Map<String, dynamic> session) {
+    double duration = (session['actual_duration'] as num?)?.toDouble() ?? 0.0;
+    
+    double distractionMins = 0;
+    final distractions = _extractDistractions(session);
+    for (var d in distractions) {
+      distractionMins += ((d['total_duration_seconds'] as num?)?.toDouble() ?? 0) / 60.0;
+    }
+    
+    double netMins = duration - distractionMins;
+    if (netMins <= 0) return 0.0; // Distractions overtook productivity
+    
+    // Boost for high progress, penalty for low progress or incomplete
+    String prog = session['progress_level'] ?? '';
+    if (prog == 'fully') netMins *= 1.2;
+    else if (prog == 'barely') netMins *= 0.5;
+
+    if (session['session_status'] != 'completed') netMins *= 0.5;
+
+    return netMins;
+  }
 
   String _getPrimeTimeOfDay(List<Map<String, dynamic>> sessions) {
     if (sessions.isEmpty) return 'N/A';
-    int m = 0, a = 0, e = 0, n = 0;
+    Map<String, double> scores = {'Morning': 0, 'Afternoon': 0, 'Evening': 0, 'Night': 0};
+    
     for (var s in sessions) {
       final start = _parseDbTime(s['start_time']);
-      final mins = (s['actual_duration'] as num?)?.toInt() ?? 0;
-      if (start.hour >= 6 && start.hour < 12) m += mins;
-      else if (start.hour >= 12 && start.hour < 17) a += mins;
-      else if (start.hour >= 17 && start.hour < 22) e += mins;
-      else n += mins;
+      final score = _calculateSessionScore(s);
+      
+      if (start.hour >= 6 && start.hour < 12) scores['Morning'] = scores['Morning']! + score;
+      else if (start.hour >= 12 && start.hour < 17) scores['Afternoon'] = scores['Afternoon']! + score;
+      else if (start.hour >= 17 && start.hour < 22) scores['Evening'] = scores['Evening']! + score;
+      else scores['Night'] = scores['Night']! + score;
     }
-    int maxMins = m; String prime = 'Morning';
-    if (a > maxMins) { maxMins = a; prime = 'Afternoon'; }
-    if (e > maxMins) { maxMins = e; prime = 'Evening'; }
-    if (n > maxMins) { maxMins = n; prime = 'Night'; }
-    return maxMins == 0 ? 'N/A' : prime;
+    
+    double maxScore = 0;
+    String prime = 'N/A';
+    scores.forEach((key, value) {
+      if (value > maxScore) { maxScore = value; prime = key; }
+    });
+    
+    return maxScore == 0 ? 'N/A' : prime;
   }
 
   String _getPrimeDayOfWeek(List<Map<String, dynamic>> sessions) {
     if (sessions.isEmpty) return 'N/A';
-    Map<int, int> days = {1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0};
+    Map<int, double> dayScores = {1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0};
+    
     for (var s in sessions) {
       final start = _parseDbTime(s['start_time']);
-      final mins = (s['actual_duration'] as num?)?.toInt() ?? 0;
-      days[start.weekday] = (days[start.weekday] ?? 0) + mins;
+      dayScores[start.weekday] = (dayScores[start.weekday] ?? 0) + _calculateSessionScore(s);
     }
-    int maxMins = -1;
+    
+    double maxScore = -1;
     int bestDay = 1;
-    days.forEach((key, value) {
-      if (value > maxMins) { maxMins = value; bestDay = key; }
+    dayScores.forEach((key, value) {
+      if (value > maxScore) { maxScore = value; bestDay = key; }
     });
-    if (maxMins <= 0) return 'N/A';
+    
+    if (maxScore <= 0) return 'N/A';
     const dayNames = {1:'Monday', 2:'Tuesday', 3:'Wednesday', 4:'Thursday', 5:'Friday', 6:'Saturday', 7:'Sunday'};
     return dayNames[bestDay] ?? 'N/A';
   }
@@ -248,30 +285,44 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
   String _getPrimeSessionType(List<Map<String, dynamic>> sessions) {
     if (sessions.isEmpty) return 'N/A';
     
-    double getScore(String type) {
-      var filtered = sessions.where((s) => s['session_type'] == type).toList();
-      if (filtered.isEmpty) return -1.0; 
-      
-      double score = 0;
-      for (var s in filtered) {
-        if (s['session_status'] == 'completed') score += 1;
-        if (s['progress_level'] == 'fully') score += 1;
-        if (s['distraction_level'] == 'low') score += 1;
+    double pomoScore = 0;
+    double customScore = 0;
+
+    for (var s in sessions) {
+      if (s['session_type'] == 'pomodoro') {
+        pomoScore += _calculateSessionScore(s);
+      } else if (s['session_type'] == 'custom') {
+        customScore += _calculateSessionScore(s);
       }
-      return score / filtered.length; 
     }
 
-    double pomoScore = getScore('pomodoro');
-    double customScore = getScore('custom');
-
-    if (pomoScore < 0 && customScore < 0) return 'N/A';
-    if (pomoScore > customScore) return 'Pomodoro';
-    if (customScore > pomoScore) return 'Custom';
+    if (pomoScore == 0 && customScore == 0) return 'N/A';
+    if (pomoScore > customScore * 1.2) return 'Pomodoro';
+    if (customScore > pomoScore * 1.2) return 'Custom';
     return 'Balanced';
   }
 
+  List<Map<String, dynamic>> _getFilteredPrimeSessions() {
+    final now = DateTime.now();
+    return _allSessions.where((s) {
+      final startTimeStr = s['start_time'];
+      if (startTimeStr == null) return false;
+      
+      final start = _parseDbTime(startTimeStr);
+
+      if (_primeFilter == 'Day') {
+        return start.year == _viewDate.year && start.month == _viewDate.month && start.day == _viewDate.day;
+      } else if (_primeFilter == 'Last Week') {
+        return start.isAfter(now.subtract(const Duration(days: 7)));
+      } else if (_primeFilter == 'Last Month') {
+        return start.isAfter(now.subtract(const Duration(days: 30)));
+      }
+      return true; 
+    }).toList();
+  }
+
   // =============================================================================
-  // UI DIALOGS
+  // UI DIALOGS & BOTTOM SHEETS
   // =============================================================================
 
   void _showDrillDownBottomSheet(String title, List<Map<String, dynamic>> sessions) {
@@ -324,7 +375,6 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
   void _showSessionBreakdownDialog(List<Map<String, dynamic>> sessions) {
     int pomo25Count = sessions.where((s) => s['session_type'] == 'pomodoro' && s['pomodoro_type'] == '25-5').length;
     int pomo50Count = sessions.where((s) => s['session_type'] == 'pomodoro' && s['pomodoro_type'] == '50-10').length;
-    int otherPomoCount = sessions.where((s) => s['session_type'] == 'pomodoro' && s['pomodoro_type'] != '25-5' && s['pomodoro_type'] != '50-10').length;
     int customCount = sessions.where((s) => s['session_type'] == 'custom').length;
 
     showDialog(
@@ -345,12 +395,6 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
               title: const Text('Pomodoro (50-10)'),
               trailing: Text('$pomo50Count', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             ),
-            if (otherPomoCount > 0)
-              ListTile(
-                leading: const Icon(Icons.timer, color: dfTealCyan),
-                title: const Text('Pomodoro (Other)'),
-                trailing: Text('$otherPomoCount', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              ),
             ListTile(
               leading: const Icon(Icons.tune, color: customModeColor), 
               title: const Text('Custom Sessions'),
@@ -386,6 +430,13 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
     else if (dbProgress == 'barely') { displayProgress = 'Low'; progressColor = Colors.red; }
 
     final bool isCameraMonitored = session['camera_monitored'] == true;
+    
+    final distractions = _extractDistractions(session);
+    final validDistractions = distractions.where((d) {
+      final count = d['distraction_count'] ?? 0;
+      final secs = (d['total_duration_seconds'] as num?)?.toInt() ?? 0;
+      return count > 0 || secs > 0;
+    }).toList();
 
     showModalBottomSheet(
       context: context,
@@ -443,7 +494,44 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
+                
+                const SizedBox(height: 24),
+                const Text('Detected Distractions', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: dfNavyIndigo)),
+                const SizedBox(height: 12),
+                
+                if (validDistractions.isEmpty)
+                  const Text('No distractions recorded. Flawless focus!', style: TextStyle(color: secondaryTextGrey, fontStyle: FontStyle.italic))
+                else
+                  ...validDistractions.map((d) {
+                    final dType = (d['distraction_type'] as String? ?? 'Unknown').replaceAll('_', ' ').toUpperCase();
+                    final count = d['distraction_count'] ?? 0;
+                    final secs = (d['total_duration_seconds'] as num?)?.toInt() ?? 0;
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.05),
+                        border: Border.all(color: Colors.red.withOpacity(0.1)),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded, size: 16, color: Colors.red[300]),
+                              const SizedBox(width: 8),
+                              Text('$count x $dType', style: const TextStyle(fontWeight: FontWeight.w600, color: dfNavyIndigo, fontSize: 13)),
+                            ],
+                          ),
+                          Text(secs >= 60 ? '${secs ~/ 60}m ${secs % 60}s' : '${secs}s', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent)),
+                        ],
+                      ),
+                    );
+                  }),
+
+                const SizedBox(height: 32),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -603,8 +691,11 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
   }
   
   Widget _buildHeatmapCard(BuildContext context) {
+    final firstDayOfMonth = DateTime(_viewDate.year, _viewDate.month, 1);
     final lastDayOfMonth = DateTime(_viewDate.year, _viewDate.month + 1, 0);
     final daysInMonth = lastDayOfMonth.day;
+    
+    int offset = firstDayOfMonth.weekday - 1; 
 
     Map<int, int> dailyMinutes = {};
     Map<int, List<Map<String, dynamic>>> dailySessions = {}; 
@@ -647,6 +738,19 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
             ],
           ),
           const SizedBox(height: 24),
+          
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+                .map((day) => Expanded(
+                      child: Center(
+                        child: Text(day, style: const TextStyle(fontSize: 12, color: secondaryTextGrey, fontWeight: FontWeight.w600)),
+                      ),
+                    ))
+                .toList(),
+          ),
+          const SizedBox(height: 12),
+
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -655,9 +759,13 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
               mainAxisSpacing: 8, 
               crossAxisSpacing: 8
             ),
-            itemCount: daysInMonth, 
+            itemCount: daysInMonth + offset, 
             itemBuilder: (context, index) {
-              final day = index + 1;
+              if (index < offset) {
+                return const SizedBox.shrink(); 
+              }
+
+              final day = index - offset + 1;
               final mins = dailyMinutes[day] ?? 0;
               final sessionsForDay = dailySessions[day] ?? []; 
 
@@ -806,8 +914,7 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
   Widget _buildConsolidatedSummary(List<Map<String, dynamic>> sessions) {
     final String productiveTime = _calculateTotalTime(sessions);
     
-    final completedSessions = sessions.where((s) => s['session_status'] == 'completed').toList();
-    final int completedCount = completedSessions.length;
+    final int totalCount = sessions.length;
     
     final int high = sessions.where((s) => s['progress_level'] == 'fully').length;
     final int med = sessions.where((s) => s['progress_level'] == 'partially').length;
@@ -835,9 +942,9 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
               Expanded(
                 child: _InteractivePill(
                   onTap: () {
-                    _showSessionBreakdownDialog(completedSessions);
+                    _showSessionBreakdownDialog(sessions);
                   },
-                  child: _compactSummaryItem(Icons.check_circle_rounded, 'Completed', '$completedCount', customModeColor),
+                  child: _compactSummaryItem(Icons.layers_rounded, 'Total Sessions', '$totalCount', customModeColor),
                 ),
               ),
             ],
@@ -892,25 +999,36 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
     );
   }
 
-  Widget _buildInsightsSection() {
-    final now = DateTime.now();
-    final primeSessions = _allSessions.where((s) {
-      final startTimeStr = s['start_time'];
-      if (startTimeStr == null) return false;
-      
-      final start = _parseDbTime(startTimeStr);
-
-      if (_primeFilter == 'Last Week') {
-        return start.isAfter(now.subtract(const Duration(days: 7)));
-      } else if (_primeFilter == 'Last Month') {
-        return start.isAfter(now.subtract(const Duration(days: 30)));
-      }
-      return true; 
-    }).toList();
+  // =============================================================================
+  // COMBINED INSIGHTS WIDGET (PRIME & DISTRACTIONS)
+  // =============================================================================
+  Widget _buildCombinedInsightsSection() {
+    final primeSessions = _getFilteredPrimeSessions();
 
     final primeTime = _getPrimeTimeOfDay(primeSessions);
     final primeDay = _getPrimeDayOfWeek(primeSessions);
     final primeType = _getPrimeSessionType(primeSessions);
+
+    int totalSecondsDistracted = 0;
+    Map<String, int> typeSeconds = {};
+
+    for (var s in primeSessions) {
+      final distractions = _extractDistractions(s);
+      for (var d in distractions) {
+        final secs = (d['total_duration_seconds'] as num?)?.toInt() ?? 0;
+        totalSecondsDistracted += secs;
+        final type = d['distraction_type'] as String? ?? 'Unknown';
+        typeSeconds[type] = (typeSeconds[type] ?? 0) + secs;
+      }
+    }
+
+    String topDistraction = 'None';
+    if (typeSeconds.isNotEmpty) {
+      topDistraction = typeSeconds.entries.reduce((a, b) => a.value > b.value ? a : b).key;
+      topDistraction = topDistraction.split('_').map((w) => w.isNotEmpty ? w[0].toUpperCase() + w.substring(1) : '').join(' ');
+    }
+
+    int totalMinsWasted = totalSecondsDistracted ~/ 60;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 24),
@@ -941,7 +1059,7 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('The Prime', style: TextStyle(fontSize: 18, color: dfNavyIndigo, fontWeight: FontWeight.w600)),
+                        const Text('Insights', style: TextStyle(fontSize: 18, color: dfNavyIndigo, fontWeight: FontWeight.w600)),
                         
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -963,7 +1081,7 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
                                   setState(() => _primeFilter = newValue);
                                 }
                               },
-                              items: <String>['Last Week', 'Last Month', 'Overall']
+                              items: <String>['Day', 'Last Week', 'Last Month', 'Overall']
                                   .map<DropdownMenuItem<String>>((String value) {
                                 return DropdownMenuItem<String>(
                                   value: value,
@@ -976,7 +1094,7 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
                       ],
                     ),
                     const SizedBox(height: 4),
-                    const Text('This is when you\'re most productive!', style: TextStyle(fontSize: 12, color: secondaryTextGrey, fontWeight: FontWeight.w500)),
+                    const Text('Your productivity & distraction patterns', style: TextStyle(fontSize: 12, color: secondaryTextGrey, fontWeight: FontWeight.w500)),
                   ],
                 ),
               ),
@@ -991,11 +1109,9 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
                   Icon(Icons.auto_awesome_rounded, color: secondaryTextGrey.withOpacity(0.3), size: 36),
                   const SizedBox(height: 12),
                   Text(
-                    _primeFilter == 'Last Week'
-                        ? "You haven't completed any sessions in the past week.\nFocus more to discover your prime patterns!"
-                        : _primeFilter == 'Last Month'
-                            ? "You haven't completed any sessions in the past month.\nFocus more to discover your prime patterns!"
-                            : "You haven't completed any sessions yet.\nComplete your first session to unlock productivity insights!",
+                    _primeFilter == 'Day'
+                        ? "No sessions on this day.\nFocus more to discover your prime patterns!"
+                        : "Not enough data for this period.\nFocus more to discover your prime patterns!",
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 13, color: secondaryTextGrey, fontWeight: FontWeight.w500, height: 1.5),
                   ),
@@ -1005,11 +1121,42 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
             ),
           ] else ...[
             const SizedBox(height: 24), 
+            
+            // THE PRIME SUB-SECTION
+            const Text('The Prime Settings', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: dfNavyIndigo)),
+            const SizedBox(height: 12),
+            
             _insightRow(Icons.wb_sunny_rounded, 'Time of Day', primeTime, dfTealCyan),
-            const Divider(color: Colors.white, height: 24, thickness: 1.5),
-            _insightRow(Icons.calendar_today_rounded, 'Day of Week', primeDay, customModeColor),
+            
+            if (_primeFilter != 'Day') ...[
+              const Divider(color: Colors.white, height: 24, thickness: 1.5),
+              _insightRow(Icons.calendar_today_rounded, 'Day of Week', primeDay, customModeColor),
+            ],
+
             const Divider(color: Colors.white, height: 24, thickness: 1.5),
             _insightRow(Icons.star_rounded, 'Session Type', primeType, Colors.orangeAccent),
+
+            // DISTRACTIONS SUB-SECTION
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Divider(color: Colors.white, thickness: 2),
+            ),
+            
+            const Text('Distractions Summary', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: dfNavyIndigo)),
+            const SizedBox(height: 12),
+
+            if (totalSecondsDistracted == 0)
+              const Center(
+                child: Text(
+                  "Great focus! No major distractions recorded.",
+                  style: TextStyle(fontSize: 13, color: secondaryTextGrey, fontWeight: FontWeight.w500, fontStyle: FontStyle.italic),
+                ),
+              )
+            else ...[
+              _insightRow(Icons.visibility_off_rounded, 'Top Distraction', topDistraction, Colors.orange),
+              const Divider(color: Colors.white, height: 24, thickness: 1.5),
+              _insightRow(Icons.timer_off_rounded, 'Time Wasted', '${totalMinsWasted}m', Colors.redAccent),
+            ]
           ],
         ],
       ),
@@ -1101,7 +1248,8 @@ class _ProgressScreenState extends State<ProgressScreen> with SingleTickerProvid
           _buildConsolidatedSummary(filteredSessions),
 
           const SizedBox(height: 12),
-          _buildInsightsSection(),
+          
+          _buildCombinedInsightsSection(),
 
           const SizedBox(height: 12),
           const Text('Session History', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: dfNavyIndigo, letterSpacing: -0.5)),

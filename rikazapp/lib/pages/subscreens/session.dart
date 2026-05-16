@@ -81,6 +81,7 @@ class _SessionPageState extends State<SessionPage>
   late int focusMinutes;
   late int breakMinutes;
   late int totalBlocks;
+  late bool isDemo;
 
   String? _currentSessionId;
   DateTime? _sessionStartTime;
@@ -120,15 +121,22 @@ bool _breakActivityOpen = false;
   void initState() {
     super.initState();
 
-    isPomodoro = widget.sessionType == 'pomodoro';
+ isPomodoro = widget.sessionType == 'pomodoro';
+    
+    // Parse the minutes first to detect if it's a demo
+    focusMinutes = int.tryParse(widget.duration.replaceAll(RegExp(r'[^0-9]'), '')) ?? 25;
+    
+    // If the duration is exactly 1 minute, we treat it as a Demo
+    isDemo = focusMinutes == 1;
+
     if (isPomodoro) {
-      focusMinutes =
-          int.tryParse(widget.duration.replaceAll(RegExp(r'[^0-9]'), '')) ?? 25;
-      breakMinutes = (focusMinutes == 25) ? 5 : 10;
-      totalBlocks = int.tryParse(widget.numberOfBlocks ?? '4') ?? 4;
+      if (isDemo) {
+        breakMinutes = 1; // Give a 1-minute break for demo purposes
+      } else {
+        breakMinutes = (focusMinutes == 25) ? 5 : 10;
+      }
+      totalBlocks = int.tryParse(widget.numberOfBlocks ?? '4') ?? 4; 
     } else {
-      focusMinutes =
-          int.tryParse(widget.duration.replaceAll(RegExp(r'[^0-9]'), '')) ?? 10;
       breakMinutes = 0;
       totalBlocks = 1;
     }
@@ -226,6 +234,7 @@ bool _breakActivityOpen = false;
   // ============================================================================
 
   Future<void> _startSessionInDB() async {
+    if (isDemo) return;
     final supabase = Supabase.instance.client;
     final uid = supabase.auth.currentUser?.id;
     if (uid == null) return;
@@ -290,6 +299,7 @@ bool _breakActivityOpen = false;
 
   Future<void> _insertDistractionEvent(
       String type, int durationSeconds) async {
+        if (isDemo) return;
     debugPrint(
         '_insertDistractionEvent — sessionId: $_currentSessionId, type: $type, duration: $durationSeconds');
     if (_currentSessionId == null) {
@@ -332,6 +342,11 @@ bool _breakActivityOpen = false;
     String? overrideStatus,
   }) async {
     if (_completionHandled) return;
+    if (isDemo) {
+      _completionHandled = true;
+      return; 
+    }
+
     final supabase = Supabase.instance.client;
     if (_currentSessionId == null) return;
 
