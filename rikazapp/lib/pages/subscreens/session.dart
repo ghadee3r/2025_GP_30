@@ -234,65 +234,97 @@ bool _breakActivityOpen = false;
   // ============================================================================
 
   Future<void> _startSessionInDB() async {
-    if (isDemo) return;
-    final supabase = Supabase.instance.client;
-    final uid = supabase.auth.currentUser?.id;
-    if (uid == null) return;
+  if (isDemo) return;
 
-    _sessionStartTime = DateTime.now();
+  final supabase = Supabase.instance.client;
+  final uid = supabase.auth.currentUser?.id;
+  if (uid == null) return;
 
-    String? pomodoroType;
-    if (isPomodoro) {
-      pomodoroType = focusMinutes == 25 ? '25-5' : '50-10';
-    }
+  _sessionStartTime = DateTime.now();
 
-    try {
-      final res = await supabase
-          .from('Focus_Session')
-          .insert({
-            'user_id': uid,
-            'session_type': widget.sessionType,
-            'start_time': _sessionStartTime!.toIso8601String(),
-            'planned_duration':
-                isPomodoro ? (focusMinutes * totalBlocks) : focusMinutes,
-            'camera_monitored': widget.isCameraDetectionEnabled ?? false,
-            'session_status': 'active',
-            'pomodoro_type': pomodoroType,
-          })
-          .select('session_id');
+  final bool cameraOn = widget.isCameraDetectionEnabled ?? false;
+  final bool phoneOn = widget.phoneTrigger == true;
+  final bool sleepOn = widget.sleepTrigger == true;
+  final bool presenceOn = widget.presenceTrigger == true;
 
-      if (res.isNotEmpty) {
-        final sid = res.first['session_id'] as int;
+  // Safety check: camera cannot be enabled without at least one active trigger
+  if (cameraOn && !phoneOn && !sleepOn && !presenceOn) {
+    debugPrint(
+      'Invalid session config: camera is enabled but no distraction trigger is selected.',
+    );
+    return;
+  }
+
+  String? pomodoroType;
+  if (isPomodoro) {
+    pomodoroType = focusMinutes == 25 ? '25-5' : '50-10';
+  }
+
+  try {
+    final res = await supabase
+        .from('Focus_Session')
+        .insert({
+          'user_id': uid,
+          'session_type': widget.sessionType,
+          'start_time': _sessionStartTime!.toIso8601String(),
+          'planned_duration':
+              isPomodoro ? (focusMinutes * totalBlocks) : focusMinutes,
+          'camera_monitored': cameraOn,
+          'session_status': 'active',
+          'pomodoro_type': pomodoroType,
+        })
+        .select('session_id');
+
+    if (res.isNotEmpty) {
+      final sid = res.first['session_id'] as int;
+
+      if (mounted) {
         setState(() => _currentSessionId = sid.toString());
+      }
 
-        await supabase.from('Session_Distraction').insert([
-          {
+      if (cameraOn) {
+        final distractionRows = <Map<String, dynamic>>[];
+
+        if (phoneOn) {
+          distractionRows.add({
             'session_id': sid,
             'distraction_type': 'phone_use',
             'distraction_count': 0,
             'total_duration_seconds': 0,
-          },
-          {
+          });
+        }
+
+        if (sleepOn) {
+          distractionRows.add({
             'session_id': sid,
             'distraction_type': 'sleeping',
             'distraction_count': 0,
             'total_duration_seconds': 0,
-          },
-          {
+          });
+        }
+
+        if (presenceOn) {
+          distractionRows.add({
             'session_id': sid,
             'distraction_type': 'absence',
             'distraction_count': 0,
             'total_duration_seconds': 0,
-          },
-        ]);
+          });
+        }
 
-        debugPrint('✅ Session + 3 distraction rows created: $sid');
+        await supabase.from('Session_Distraction').insert(distractionRows);
+
+        debugPrint(
+          'Session created with ${distractionRows.length} active distraction rows: $sid',
+        );
+      } else {
+        debugPrint('Session created with no camera monitoring: $sid');
       }
-    } catch (e) {
-      debugPrint('❌ _startSessionInDB error: $e');
     }
+  } catch (e) {
+    debugPrint('_startSessionInDB error: $e');
   }
-
+}
   // ============================================================================
   // DATABASE — DISTRACTION EVENT
   // ============================================================================
@@ -351,43 +383,53 @@ bool _breakActivityOpen = false;
     if (_currentSessionId == null) return;
 
     final int actual = _totalFocusSeconds ~/ 60;
+    final int sid = int.parse(_currentSessionId!);
 
-    if (actual < minimumSessionMinutes) {
-      _completionHandled = true;
-      try {
-        await supabase
-            .from('Focus_Session')
-            .delete()
-            .eq('session_id', _currentSessionId!);
-        debugPrint('🗑️ Session deleted (< $minimumSessionMinutes min)');
-      } catch (e) {
-        debugPrint('❌ DB Delete Error: $e');
-      }
-      return;
-    }
 
+      if (actual < minimumSessionMinutes) {
     _completionHandled = true;
-
-    final String finalStatus = overrideStatus ??
-        (_sessionCompleted ? 'completed' : 'cancelled');
-
     try {
-      await supabase.from('Focus_Session').update({
-        'end_time': DateTime.now().toIso8601String(),
-        'actual_duration': actual,
-        'progress_level': progress,
-        'distraction_level': distraction,
-        'distraction_count': _sessionDistractionCount,
-        'session_status': finalStatus,
-        'pomodoro_type': isPomodoro
-            ? (focusMinutes == 25 ? '25-5' : '50-10')
-            : null,
-      }).eq('session_id', _currentSessionId!);
-      debugPrint('✅ Session saved: $finalStatus | ${actual}min');
+      // Delete child rows first to avoid foreign key constraint failure
+      await supabase
+          .from('Session_Distraction')
+          .delete()
+          .eq('session_id', sid);
+
+      await supabase
+          .from('Focus_Session')
+          .delete()
+          .eq('session_id', sid);
+
+      debugPrint('🗑️ Session deleted (< $minimumSessionMinutes min)');
     } catch (e) {
-      debugPrint('❌ DB Update Error: $e');
+      debugPrint('❌ DB Delete Error: $e');
     }
+    return;
   }
+
+  _completionHandled = true;
+
+  final String finalStatus = overrideStatus ??
+      (_sessionCompleted ? 'completed' : 'cancelled');
+
+  try {
+    await supabase.from('Focus_Session').update({
+      'end_time': DateTime.now().toIso8601String(),
+      'actual_duration': actual,
+      'progress_level': progress,
+      'distraction_level': distraction,
+      'distraction_count': _sessionDistractionCount,
+      'session_status': finalStatus,
+      'pomodoro_type': isPomodoro
+          ? (focusMinutes == 25 ? '25-5' : '50-10')
+          : null,
+    }).eq('session_id', sid);
+    debugPrint('✅ Session saved: $finalStatus | ${actual}min');
+  } catch (e) {
+    debugPrint('❌ DB Update Error: $e');
+  }
+}
+
 
   // ============================================================================
   // AUTO DISTRACTION CALC FOR CAMERA
